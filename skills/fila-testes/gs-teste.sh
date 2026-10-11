@@ -101,12 +101,21 @@ fi
 # ponytail: entre o rename e a devolução, um terceiro pode criar a trava; janela de milissegundos, aceitável para uma fila de testes.
 # Se o bash do dono morreu à força (Windows: TerminateProcess não roda o trap), o executor segue vivo e rodaria junto com o próximo: encerra a árvore dele.
 # ponytail: fora do Windows só filhos diretos (pkill -P); árvore funda pede setsid + kill do grupo.
-mata_filho() { # arquivo com o pid do executor
-    local f p w
-    f=$(cat "$1" 2>/dev/null); [ -n "$f" ] && kill -0 "$f" 2>/dev/null || return 0
-    w=$(cat "/proc/$f/winpid" 2>/dev/null)
-    if [ -n "$w" ]; then taskkill //F //T //PID "$w" >/dev/null 2>&1
-    else pkill -P "$f" 2>/dev/null; kill "$f" 2>/dev/null; fi
+ident() { # identidade do processo, estável durante a vida dele: winpid (Windows), starttime do /proc (Linux), lstart (macOS)
+    local w
+    w=$(cat "/proc/$1/winpid" 2>/dev/null)
+    if [ -n "$w" ]; then echo "w$w"
+    elif [ -r "/proc/$1/stat" ]; then sed 's/.*) //' "/proc/$1/stat" | awk '{print "s" $20}'
+    else echo "l$(ps -o lstart= -p "$1" 2>/dev/null)"; fi
+}
+mata_filho() { # arquivo com "<pid> <identidade>" do executor; só mata se o pid ainda for o mesmo processo
+    local f i
+    read -r f i < "$1" 2>/dev/null
+    [ -n "$f" ] && [ -n "$i" ] && kill -0 "$f" 2>/dev/null && [ "$(ident "$f")" = "$i" ] || return 0
+    case "$i" in
+        w*) taskkill //F //T //PID "${i#w}" >/dev/null 2>&1 ;;
+        *) pkill -P "$f" 2>/dev/null; kill "$f" 2>/dev/null ;;
+    esac
 }
 remove_morta() { # trava pid_esperado
     local tmp="$1.morta.$$"
@@ -152,9 +161,10 @@ pega_vaga "$trava" "$VAGAS" 1; F=$L
 pega_vaga "$HOME/.cache/gs-teste-teto.lock" "$TETO" 0; T=$L
 # shellcheck disable=SC2086 # runner é uma linha de comando com argumentos
 CI=${CI:-1} $runner "${args[@]}" <&0 &
-echo $! > "$F/filho"
+echo "$! $(ident $!)" > "$F/filho"
 wait $!
 rc=$?
+rm -f "$F/filho"
 # Depois do --parallel, apaga os <banco>_test_N deste worktree: menos tabelas no servidor, information_schema mais leve. O próximo --parallel recria.
 # Só com banco MySQL/MariaDB no host; em container o banco é descartável junto com o ambiente.
 conexao=$(env_testing DB_CONNECTION)

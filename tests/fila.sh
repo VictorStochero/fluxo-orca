@@ -107,7 +107,7 @@ if command -v taskkill >/dev/null 2>&1; then lento=(ping -n 40 127.0.0.1); else 
 (cd "$tmp/c" && GS_TESTE_VAGAS=1 bash "$raiz/skills/fila-testes/gs-teste.sh" -- "${lento[@]}" >/dev/null 2>&1) &
 sleep 3
 dono=$(cat "$HOME/.cache/gs-teste-geral.lock1/pid" 2>/dev/null)
-filho=$(cat "$HOME/.cache/gs-teste-geral.lock1/filho" 2>/dev/null)
+filho=$(cut -d' ' -f1 "$HOME/.cache/gs-teste-geral.lock1/filho" 2>/dev/null)
 if [ -r "/proc/$dono/winpid" ]; then taskkill //F //PID "$(cat "/proc/$dono/winpid")" >/dev/null 2>&1; else kill -9 "$dono"; fi
 sleep 1
 vivo_antes=0; kill -0 "$filho" 2>/dev/null && vivo_antes=1
@@ -132,5 +132,16 @@ chmod +x "$tmp/cota/bin/"*
 cp "$raiz/skills/limites-cota/limites.sh" "$tmp/cota/"
 esc=$(PATH="$tmp/cota/bin:$PATH" bash "$tmp/cota/limites.sh" --escritor 2>/dev/null | tail -1)
 if [ "$esc" = "escritor: pessoal (40% livre)" ]; then ok "escritor: conta ilegível não é candidata"; else ruim "escritor: conta ilegível escolhida ($esc)"; fi
+
+# Pid reciclado: vaga morta cujo filho é um processo alheio vivo (sem identidade conferida) não pode ser morto.
+rm -rf "$HOME/.cache"; mkdir -p "$HOME/.cache/gs-teste-geral.lock1" "$tmp/d"
+sleep 40 & alheio=$!
+true & morto=$!; wait $morto
+printf '%s
+' "$morto" > "$HOME/.cache/gs-teste-geral.lock1/pid"; printf '%s
+' "$alheio" > "$HOME/.cache/gs-teste-geral.lock1/filho"
+(cd "$tmp/d" && GS_TESTE_VAGAS=1 bash "$raiz/skills/fila-testes/gs-teste.sh" -- true >/dev/null 2>&1)
+if kill -0 "$alheio" 2>/dev/null; then ok "pid reciclado: processo alheio preservado"; else ruim "pid reciclado: processo alheio foi morto"; fi
+kill "$alheio" 2>/dev/null
 
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
