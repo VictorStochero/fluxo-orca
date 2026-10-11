@@ -40,9 +40,9 @@ SOLO=0; [ "${1:-}" = "--escritor" ] && SOLO=1
 # escritor: quem tem mais folga (100 - pior entre janela curta e semana) entre team, pessoal e codex; acima de 80% fica de fora. Empate: team, pessoal, codex.
 awk '
   function pior(a, b) { return a > b ? a : b }
-  /^team/ || /^pessoal/ { k = ($0 ~ /^team/) ? "team" : "pessoal"; s = $0; m = 0
-                          while (match(s, /[0-9]+% usado/)) { m = pior(m, substr(s, RSTART, RLENGTH - 7) + 0); s = substr(s, RSTART + RLENGTH) }
-                          uso[k] = m; ordem[++q] = k }
+  /^team/ || /^pessoal/ { k = ($0 ~ /^team/) ? "team" : "pessoal"; s = $0; m = 0; achou = 0
+                          while (match(s, /[0-9]+% usado/)) { achou = 1; m = pior(m, substr(s, RSTART, RLENGTH - 7) + 0); s = substr(s, RSTART + RLENGTH) }
+                          if (achou) { uso[k] = m; ordem[++q] = k } }
   /^codex: 5h/ { match($0, /5h [0-9]+%/); a = substr($0, RSTART + 3, RLENGTH - 3) + 0
                  match($0, /semana [0-9]+%/); b = substr($0, RSTART + 7, RLENGTH - 7) + 0
                  uso["codex"] = pior(a, b); ordem[++q] = "codex" }
