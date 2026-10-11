@@ -13,9 +13,10 @@ cmp -s "$CLAUDE_PLUGIN_ROOT/extras/somente-leitura.json" "$HOME/.claude/agents/s
 # Agentes externos (Codex, agy, Kimi): sem eles, nada abaixo.
 command -v codex >/dev/null 2>&1 || command -v agy >/dev/null 2>&1 || command -v kimi >/dev/null 2>&1 || exit 0
 
-# Windows: Codex e agy chamam o hook por .cmd, que aponta para o bash do Git.
+# Windows: Codex e agy chamam o hook por .cmd. Tem de ser o Git\bin\bash.exe, que monta o PATH do Git;
+# o usr\bin\bash.exe roda sem grep no PATH e libera tudo.
 if command -v cygpath >/dev/null 2>&1; then
-    bash_win=$(cygpath -w "$(command -v bash)"); guarda=$(cygpath -m "$HOME/.cache/guarda-externos.sh")
+    raiz=$(cygpath -w /); bash_win="${raiz%\\}\\bin\\bash.exe"; guarda=$(cygpath -m "$HOME/.cache/guarda-externos.sh")
     for f in codex agy; do
         printf '@echo off\r\n"%s" %s %s\r\n' "$bash_win" "$guarda" "$f" > "$HOME/.cache/guarda-externos-$f.cmd.tmp"
         cmp -s "$HOME/.cache/guarda-externos-$f.cmd.tmp" "$HOME/.cache/guarda-externos-$f.cmd" \

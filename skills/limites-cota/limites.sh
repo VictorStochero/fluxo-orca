@@ -8,8 +8,8 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 claude_linha() { # $1 rótulo; resto = comando
   local r=$1; shift
   "$@" 2>&1 | awk -v r="$r" '
-    /^Current session:/ { sub(/ used.*resets /, " usado, zera "); sub(/^Current session: /, ""); s=$0 }
-    /^Current week \(all models\):/ { sub(/ used.*resets /, " usado, zera "); sub(/^Current week \(all models\): /, ""); w=$0 }
+    /^Current session:/ { sub(/ used.*resets /, " usado, zera "); sub(/ used$/, " usado"); sub(/^Current session: /, ""); s=$0 }
+    /^Current week \(all models\):/ { sub(/ used.*resets /, " usado, zera "); sub(/ used$/, " usado"); sub(/^Current week \(all models\): /, ""); w=$0 }
     END { if (s == "") { print r ": ilegível"; exit }
           printf "%s: sessão %s | semana %s\n", r, s, w }'
 }
