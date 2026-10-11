@@ -20,6 +20,7 @@ bash ~/.cache/orca-espera.sh --run <run_id>     # Bash com run_in_background; ag
 - Disparar a onda independente inteira antes de esperar. Dependência real → `task-create` + `worker-start --task`; ondas paralelas em vez de cadeias longas.
 - `worker-start` com saída diferente de zero: **não relançar** — ler `failedStage`/`residualResources` e carregar `references/recovery-and-cleanup.md`.
 - Toda mensagem processada: `question` → responder (decisão do usuário vai a ele por `AskUserQuestion` e a resposta volta ao worker); `worker_done` → validar contra o esperado, depois verificar (abaixo); worker parado → reaproveitar, reter ou liberar explicitamente.
+- **Worker concluído e verificado fecha na hora**: `bash ~/.cache/orca-libera.sh <dispatch>` — libera o dispatch, fecha a aba do terminal aberto com `orca terminal create` (o `worker-release` sozinho a deixa aberta: `retained/external_terminal`) e solta a vaga do pool. `user_takeover` fica aberto; se a intervenção foi o Enter do coordenador, fechar com o comando que ele imprime. Worktree criado pelo Orca abre uma aba de shell padrão: fechar se ninguém for usá-la.
 - Ler saída: `worker-read --source auto`. Redirecionar ou cobrar o `worker_done` de worker parado: `send --to dispatch:<id>`.
 
 ## Modelos por papel

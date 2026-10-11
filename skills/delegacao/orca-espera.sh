@@ -46,6 +46,7 @@ for m in ms:
     acao = True
     print(f"== {t} | dispatch {p.get('dispatchId') or m.get('to_handle') or '?'} | de {m.get('from_handle')} | id {m.get('id')}")
     if p.get("outcome"): print(f"   outcome: {p['outcome']}")
+    if t == "worker_done" and p.get("dispatchId"): print(f"   depois de verificar: bash ~/.cache/orca-libera.sh {p['dispatchId']}")
     print(f"   assunto: {m.get('subject')}")
     print("   " + str(m.get("body")).replace("\n", "\n   "))
 sys.exit(0 if acao else 1)
