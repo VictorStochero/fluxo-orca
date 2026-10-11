@@ -3,7 +3,7 @@
 mkdir -p "$HOME/.cache"
 for s in skills/fila-testes/gs-teste.sh skills/limites-cota/limites.sh skills/limites-cota/kimi-cota.sh \
          skills/limites-cota/codex-cota.sh skills/worktree-orca/wt-setup.sh skills/worktree-orca/wt-archive.sh \
-         skills/worktree-orca/wt-lib.sh hooks/guarda-externos.sh; do
+         skills/worktree-orca/wt-lib.sh skills/delegacao/orca-espera.sh hooks/guarda-externos.sh hooks/fim-worker.sh; do
     cmp -s "$CLAUDE_PLUGIN_ROOT/$s" "$HOME/.cache/$(basename "$s")" || cp "$CLAUDE_PLUGIN_ROOT/$s" "$HOME/.cache/"
 done
 mkdir -p "$HOME/.claude/agents"
@@ -16,13 +16,15 @@ command -v codex >/dev/null 2>&1 || command -v agy >/dev/null 2>&1 || command -v
 # Windows: Codex e agy chamam o hook por .cmd. Tem de ser o Git\bin\bash.exe, que monta o PATH do Git;
 # o usr\bin\bash.exe roda sem grep no PATH e libera tudo.
 if command -v cygpath >/dev/null 2>&1; then
-    raiz=$(cygpath -w /); bash_win="${raiz%\\}\\bin\\bash.exe"; guarda=$(cygpath -m "$HOME/.cache/guarda-externos.sh")
-    for f in codex agy; do
-        printf '@echo off\r\n"%s" %s %s\r\n' "$bash_win" "$guarda" "$f" > "$HOME/.cache/guarda-externos-$f.cmd.tmp"
-        cmp -s "$HOME/.cache/guarda-externos-$f.cmd.tmp" "$HOME/.cache/guarda-externos-$f.cmd" \
-            && rm "$HOME/.cache/guarda-externos-$f.cmd.tmp" \
-            || mv "$HOME/.cache/guarda-externos-$f.cmd.tmp" "$HOME/.cache/guarda-externos-$f.cmd"
-    done
+    raiz=$(cygpath -w /); bash_win="${raiz%\\}\\bin\\bash.exe"
+    gera_cmd() { # nome.cmd script.sh argumento
+        local alvo="$HOME/.cache/$1"
+        printf '@echo off\r\n"%s" %s %s\r\n' "$bash_win" "$(cygpath -m "$HOME/.cache/$2")" "$3" > "$alvo.tmp"
+        cmp -s "$alvo.tmp" "$alvo" && rm "$alvo.tmp" || mv "$alvo.tmp" "$alvo"
+    }
+    gera_cmd guarda-externos-codex.cmd guarda-externos.sh codex
+    gera_cmd guarda-externos-agy.cmd guarda-externos.sh agy
+    gera_cmd fim-worker-codex.cmd fim-worker.sh codex
 fi
 
 # Cópia das skills do plugin em ~/.agents/skills, que os CLIs externos leem (o cache do plugin muda de caminho a cada versão).

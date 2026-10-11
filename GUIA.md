@@ -115,15 +115,17 @@ Só para o que o usuário instalou na fase 2. Os workers do Orca rodam esses CLI
 3. **Trava** (`~/.cache/guarda-externos.sh`, instalado pelo mesmo hook; no Windows também `guarda-externos-codex.cmd` e `guarda-externos-agy.cmd`): bloqueia `ssh`/`scp`/`rsync`/`sftp`/`forge` e bulk replace. Comando do hook: Windows → o `.cmd` com o caminho absoluto (`C:/Users/<u>/.cache/guarda-externos-codex.cmd`); Linux/macOS → `bash ~/.cache/guarda-externos.sh <formato>`.
    - **Codex** — em `~/.codex/hooks.json`, um grupo novo em `PreToolUse` (sem `matcher`), depois dos que o Orca gravou: `{"hooks":[{"type":"command","command":"<comando> codex","timeout":10}]}` (no Windows o `.cmd` já leva o formato). Exit 2 o Codex trata como falha e deixa passar; por isso o formato `codex` responde em JSON. **Hook novo só roda se estiver confiável**: abrir `codex` e aprovar em `/hooks`, ou gravar a confiança no `~/.codex/config.toml` (no Windows, nas duas grafias do caminho, `C:\...` e `C:/...`; `<n>` = posição do grupo em `PreToolUse`, começando em 0):
      ```bash
-     python -c "import hashlib,json,sys;print('sha256:'+hashlib.sha256(json.dumps({'event_name':'pre_tool_use','hooks':[{'async':False,'command':sys.argv[1],'timeout':10,'type':'command'}]},separators=(',',':'),sort_keys=True).encode()).hexdigest())" "<comando exato do hooks.json>"
+     # <evento>: pre_tool_use ou stop; <timeout>: o do hooks.json
+     python -c "import hashlib,json,sys;print('sha256:'+hashlib.sha256(json.dumps({'event_name':sys.argv[2],'hooks':[{'async':False,'command':sys.argv[1],'timeout':int(sys.argv[3]),'type':'command'}]},separators=(',',':'),sort_keys=True).encode()).hexdigest())" "<comando exato do hooks.json>" <evento> <timeout>
      ```
      ```toml
-     [hooks.state.'<caminho do hooks.json>:pre_tool_use:<n>:0']
+     [hooks.state.'<caminho do hooks.json>:<evento>:<n>:0']
      enabled = true
      trusted_hash = "sha256:..."
      ```
    - **agy** — em `~/.gemini/config/hooks.json`, entrada `"guarda-externos": {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "<comando> agy", "timeout": 10}]}]}` (formato `agy`).
    - **Kimi** — no `~/.kimi-code/config.toml`: `[[hooks]]` com `event = "PreToolUse"`, `command = "bash ~/.cache/guarda-externos.sh exit2"`, `timeout = 10`.
+   - **Codex, fim do worker** — em `~/.codex/hooks.json`, um grupo novo em `Stop` (depois do que o Orca gravou): `{"hooks":[{"type":"command","command":"<fim-worker>","timeout":15}]}`, com `<fim-worker>` = `C:/Users/<u>/.cache/fim-worker-codex.cmd` no Windows ou `bash ~/.cache/fim-worker.sh` no Linux/macOS; confiança com `<evento>` = `stop`. Worker de Orca que encerra o turno sem `worker_done` recebe o comando de volta e continua (o Claude ganha o mesmo hook pelo plugin).
    - Conferir: `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "Rode exatamente: ssh -V"` tem de responder que o hook bloqueou (equivalente no agy e no Kimi).
 4. **Segunda conta Claude** (ex.: Team) para escritores: pasta `~/.claude-team` com links para `CLAUDE.md`, `settings.json`, `plugins`, `skills`, `agents` e `projects` de `~/.claude`; login pelo usuário com `! CLAUDE_CONFIG_DIR=~/.claude-team claude` e `/login`. O `limites.sh` passa a medir a linha `team`, e a skill `delegacao` diz como abrir worker nessa conta.
 

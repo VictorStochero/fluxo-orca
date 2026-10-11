@@ -12,12 +12,15 @@ description: Use antes de despachar qualquer agente (escritor, revisor, levantam
 orca status --json
 orca orchestration run-create --objective "<objetivo>" --json
 orca orchestration worker-start --spec "<prompt autossuficiente>" --worktree <current|new-child|path:...> --agent <claude|codex|antigravity|opencode> --model <id> --effort <nível> --json
-orca orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
+bash ~/.cache/orca-espera.sh --run <run_id>     # Bash com run_in_background; agir quando sair; rearmar
 ```
+- **Esperar só pelo `orca-espera.sh`**, em background: ele grava cada entrega em `~/.cache/orca-entregas/`, imprime as mensagens inteiras e dá ack na hora (sem ack o Orca devolve sempre a entrega antiga e os `worker_done` novos ficam presos atrás dela), ignora heartbeat e, entre esperas, confere o estado real de cada worker ativo — atividade do agente, processo, último commit — e sai também quando um worker parou sem `worker_done`. Nunca `check --wait` em laço próprio, nunca filtrar a saída do `check` com `grep`. Saiu sem nada: rearmar.
+- **Despacho só por `worker-start`**, que injeta o preâmbulo com `Dispatch ID` e o comando de `worker_done`; texto mandado direto ao terminal deixa o worker sem como avisar que terminou. Do lado do worker, o hook `fim-worker` (Stop) não deixa o turno acabar sem `worker_done` no Claude e no Codex.
+- **Antes de despachar para um worktree**, conferir no `worker-list` que nenhum worker ativo está nele.
 - Disparar a onda independente inteira antes de esperar. Dependência real → `task-create` + `worker-start --task`; ondas paralelas em vez de cadeias longas.
 - `worker-start` com saída diferente de zero: **não relançar** — ler `failedStage`/`residualResources` e carregar `references/recovery-and-cleanup.md`.
 - Toda mensagem processada: `question` → responder (decisão do usuário vai a ele por `AskUserQuestion` e a resposta volta ao worker); `worker_done` → validar contra o esperado, depois verificar (abaixo); worker parado → reaproveitar, reter ou liberar explicitamente.
-- Ler saída: `worker-read --source auto`. Redirecionar: `send --to dispatch:<id>`.
+- Ler saída: `worker-read --source auto`. Redirecionar ou cobrar o `worker_done` de worker parado: `send --to dispatch:<id>`.
 
 ## Modelos por papel
 | Papel | Worker | `--model` / `--effort` |
