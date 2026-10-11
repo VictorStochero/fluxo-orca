@@ -57,22 +57,31 @@ EOF
 confere() {
     orca orchestration worker-list "${run[@]}" --json > "$lista" 2>/dev/null
     ORCA_ARQ="$lista" ORCA_PARADO="$parado" "$py" -I - <<'EOF'
-import json, os, subprocess, sys, time
+import json, os, shutil, subprocess, sys, time
+orca = shutil.which("orca") or "orca"  # no Windows o subprocess só acha .exe sem caminho; which respeita o PATHEXT (.cmd)
 sys.stdout.reconfigure(encoding="utf-8")
 try: ws = json.JSONDecoder().raw_decode(open(os.environ["ORCA_ARQ"], encoding="utf-8").read().lstrip())[0]["result"]["workers"]
 except Exception as e:
     print(f"   worker-list ilegível ({type(e).__name__}); estado real não conferido nesta rodada"); sys.exit(1)
 alerta = False
 agora = time.time()
+pasta_estado = os.path.dirname(os.environ["ORCA_ARQ"])
+def grava(arq, estado):
+    temporario = arq + "." + str(os.getpid())
+    with open(temporario, "w", encoding="utf-8") as f: json.dump(estado, f)
+    os.replace(temporario, arq)
 for w in ws:
-    if w.get("dispatchStatus") in ("completed", "failed", "cancelled", "abandoned"): continue
+    estado_arq = os.path.join(pasta_estado, ".estado-" + os.path.basename(w["dispatchId"]) + ".json")
+    if w.get("dispatchStatus") in ("completed", "failed", "cancelled", "abandoned"):
+        try: os.remove(estado_arq)
+        except OSError: pass
+        continue
     p = w.get("projection") or {}; st = p.get("stage") or {}; vida = (p.get("liveness") or {}).get("verdict")
     pasta = (p.get("workspace") or {}).get("id", "").split("::")[-1]
     commit = ""
     if pasta:
         commit = subprocess.run(["git", "-C", pasta, "log", "-1", "--format=%h %cr: %s"], capture_output=True, text=True, encoding="utf-8").stdout.strip()
     atividade = st.get("activity")
-    estado_arq = os.path.join(os.path.dirname(os.environ["ORCA_ARQ"]), ".estado-" + os.path.basename(w["dispatchId"]) + ".json")
     try:
         with open(estado_arq, encoding="utf-8") as f: anterior = json.load(f)
     except (OSError, ValueError): anterior = {}
@@ -85,7 +94,7 @@ for w in ws:
             cursor = anterior.get("cursor")
             timestamp = anterior.get("timestamp")
             while True:
-                args = ["orca", "orchestration", "worker-read", "--dispatch", w["dispatchId"], "--source", "transcript", "--limit", "1000", "--json"]
+                args = [orca, "orchestration", "worker-read", "--dispatch", w["dispatchId"], "--source", "transcript", "--limit", "1000", "--json"]
                 if cursor: args += ["--cursor", cursor]
                 leitura = json.loads(subprocess.run(args, capture_output=True, text=True, encoding="utf-8", check=True).stdout)
                 if leitura.get("ok") is False: raise ValueError("worker-read falhou")
@@ -109,23 +118,22 @@ for w in ws:
     else:
         estado["progresso"] = agora
     estado["atividade"] = atividade
-    temporario = estado_arq + "." + str(os.getpid())
-    with open(temporario, "w", encoding="utf-8") as f: json.dump(estado, f)
-    os.replace(temporario, estado_arq)
     linha = "%s %s/%s vida=%s %s | último commit: %s" % (w["dispatchId"], st.get("worker"), atividade, vida, pasta.split("/")[-1], commit or "-")
-    motivo = ""
+    motivo = ""; avisou = False
     if vida == "exited":
         motivo = "o processo do agente encerrou sem worker_done: recovery (worker-show, worker-stop ou worker-abandon)"
     elif atividade in ("done", "waiting", "blocked"):
         motivo = "agente parado sem worker_done: ler com worker-read e cobrar com send --to dispatch:%s" % w["dispatchId"]
     elif inicio_incerto and agora - estado["inicio_incerto"] >= 120:
-        alerta = True
+        alerta = avisou = True
         print("!! %s não começou: o prompt pode estar no campo sem envio — conferir com orca terminal read e enviar Enter com orca terminal send --terminal %s --enter" % (w["dispatchId"], w.get("agentTerminalHandle") or "?"))
-        continue
+        estado["inicio_incerto"] = agora  # carência: o mesmo alerta só volta depois de outro intervalo
     elif atividade == "working" and agora - estado.get("progresso", agora) >= int(os.environ["ORCA_PARADO"]) * 60:
-        alerta = True
+        alerta = avisou = True
         print("!! %s parado há %d min sem saída: ler com worker-read e cobrar com send --to dispatch:%s" % (w["dispatchId"], (agora - estado["progresso"]) // 60, w["dispatchId"]))
-        continue
+        estado["progresso"] = agora
+    grava(estado_arq, estado)
+    if avisou: continue
     if motivo:
         alerta = True
         print("!! " + linha + "\n   " + motivo)
@@ -135,7 +143,6 @@ sys.exit(0 if alerta else 1)
 EOF
 }
 
-confere && exit 0
 while [ "$(date +%s)" -lt "$fim" ]; do
     restante=$(( fim - $(date +%s) )); espera=60
     [ "$restante" -lt "$espera" ] && espera=$restante

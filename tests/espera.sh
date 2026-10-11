@@ -24,4 +24,31 @@ EOF
 msg='{"ok":true,"result":{"deliveryId":"delivery_t1","messages":[{"type":"worker_done","id":"m1","subject":"pronto","body":"b","payload":{"dispatchId":"ctx_t","outcome":"succeeded"}}]}}'
 caso "dois JSON seguidos" "$msg"$'\n''{"ok":true,"result":{}}' "== worker_done" sim
 caso "entrega ilegível não some" '{"ok":true,"result":{"deliveryId":"delivery_t2","messages":[{"type":' "entrega ilegível" nao
+
+# Carência e limpeza: worker working sem progresso alerta uma vez; a rodada seguinte não repete; estado de dispatch encerrado é apagado.
+h=$(mktemp -d); mkdir -p "$h/bin" "$h/.cache/orca-entregas" "$h/wt"
+git -C "$h/wt" init -q && git -C "$h/wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m t
+wt="$h/wt"; command -v cygpath >/dev/null 2>&1 && wt=$(cygpath -m "$h/wt")
+cat > "$h/bin/orca" <<EOF
+#!/bin/bash
+case "\$*" in
+    *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_p","dispatchStatus":"dispatched","projection":{"stage":{"worker":"ready","activity":"working"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}},{"dispatchId":"ctx_fim","dispatchStatus":"completed","projection":{}}]}}' ;;
+    *worker-read*) echo '{"ok":true,"result":{"transcript":{"messages":[{"timestamp":1}],"limited":false}}}' ;;
+    *check*) sleep 1; echo '{"ok":true,"result":{}}' ;;
+esac
+EOF
+chmod +x "$h/bin/orca"
+# Windows: o Python do script chama o orca pelo PATHEXT; o .cmd repassa ao stub bash.
+command -v cygpath >/dev/null 2>&1 && printf '@"%s" "%s" %%*\r\n' "$(cygpath -w "$(command -v bash)")" "$(cygpath -m "$h/bin/orca")" > "$h/bin/orca.cmd"
+e="$h/.cache/orca-entregas"
+printf '{"progresso": %s, "timestamp": 1, "commit": "%s", "atividade": "working"}' "$(( $(date +%s) - 600 ))" "$(git -C "$h/wt" rev-parse HEAD)" > "$e/.estado-ctx_p.json"
+echo '{}' > "$e/.estado-ctx_fim.json"
+um=$(HOME="$h" PATH="$h/bin:$PATH" ORCA_ESPERA_PARADO_MIN=1 bash "$raiz/skills/delegacao/orca-espera.sh" --max-min 1 2>&1)
+# Rearme logo depois do alerta: as primeiras rodadas não podem repetir (carência de 1 min).
+dois=$(HOME="$h" PATH="$h/bin:$PATH" ORCA_ESPERA_PARADO_MIN=1 timeout 10 bash "$raiz/skills/delegacao/orca-espera.sh" --max-min 1 2>&1)
+if printf '%s' "$um" | grep -q '!! ctx_p parado' && ! printf '%s' "$dois" | grep -q '!!'; then echo "ok   carência: alerta uma vez, sem laço"
+else echo "FALHA carência"; printf '1:\n%s\n2:\n%s\n' "$um" "$dois" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+if [ ! -e "$e/.estado-ctx_fim.json" ]; then echo "ok   estado de dispatch encerrado apagado"; else echo "FALHA limpeza do estado"; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
