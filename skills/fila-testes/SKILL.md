@@ -27,6 +27,7 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
 - Subagente de etapa roda só o teste novo e até 5 arquivos editados, um por chamada; pasta e suíte uma vez na integração.
 - **Falha que surge com a máquina carregada: re-rodar o arquivo isolado antes de investigar.**
 - **Duas execuções no mesmo worktree corrompem uma à outra** (`Duplicate entry '1'`, `Table 'users' already exists`, `Unknown column`, deadlock em `alter table`).
+- Se o `gs-teste.sh` morre à força (timeout da ferramenta), o executor fica órfão; o próximo run encerra a árvore dele (pid em `<vaga>/filho`) antes de liberar a vaga.
 - **Processo morto deixa bancos paralelos em estado misto**: matar os processos órfãos do worktree e dropar os bancos `_test_N`; o primeiro run depois costuma falhar em massa — rodar de novo.
 - Suíte longa passa de 10 min e cai para background: esperar a notificação, sem polling. **Nunca `| tail`** em run que pode estourar: redirecionar para arquivo.
 - Teste que passa por coincidência não protege: **forçar a divergência** entre ids que deveriam diferir.

@@ -53,4 +53,23 @@ else
     ruim "teto=1: sobreposição ou vaga não liberada (fim_a=$fim_a ini_b=$ini_b)"
 fi
 
+# Órfão: bash do gs-teste morto à força deixa o executor vivo; o próximo run encerra o órfão antes de liberar a vaga.
+rm -rf "$HOME/.cache"; mkdir -p "$tmp/c"
+if command -v taskkill >/dev/null 2>&1; then lento=(ping -n 40 127.0.0.1); else lento=(sleep 40); fi
+(cd "$tmp/c" && GS_TESTE_VAGAS=1 bash "$raiz/skills/fila-testes/gs-teste.sh" -- "${lento[@]}" >/dev/null 2>&1) &
+sleep 3
+dono=$(cat "$HOME/.cache/gs-teste-geral.lock1/pid" 2>/dev/null)
+filho=$(cat "$HOME/.cache/gs-teste-geral.lock1/filho" 2>/dev/null)
+if [ -r "/proc/$dono/winpid" ]; then taskkill //F //PID "$(cat "/proc/$dono/winpid")" >/dev/null 2>&1; else kill -9 "$dono"; fi
+sleep 1
+vivo_antes=0; kill -0 "$filho" 2>/dev/null && vivo_antes=1
+(cd "$tmp/c" && GS_TESTE_VAGAS=1 bash "$raiz/skills/fila-testes/gs-teste.sh" -- true >/dev/null 2>&1); rc=$?
+vivo_depois=0; kill -0 "$filho" 2>/dev/null && vivo_depois=1
+if [ -n "$filho" ] && [ $vivo_antes = 1 ] && [ $vivo_depois = 0 ] && [ $rc = 0 ]; then
+    ok "órfão: executor encerrado antes de liberar a vaga"
+else
+    ruim "órfão: filho=$filho vivo_antes=$vivo_antes vivo_depois=$vivo_depois rc=$rc"
+    [ -n "$filho" ] && { w=$(cat "/proc/$filho/winpid" 2>/dev/null); [ -n "$w" ] && taskkill //F //T //PID "$w" >/dev/null 2>&1 || kill "$filho" 2>/dev/null; }
+fi
+
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }

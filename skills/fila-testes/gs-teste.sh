@@ -96,10 +96,19 @@ else
 fi
 # Remove trava morta sem apagar a que outro processo acabou de recriar: renomeia (atômico), confere o pid e devolve se mudou.
 # ponytail: entre o rename e a devolução, um terceiro pode criar a trava; janela de milissegundos, aceitável para uma fila de testes.
+# Se o bash do dono morreu à força (Windows: TerminateProcess não roda o trap), o executor segue vivo e rodaria junto com o próximo: encerra a árvore dele.
+# ponytail: fora do Windows só filhos diretos (pkill -P); árvore funda pede setsid + kill do grupo.
+mata_filho() { # arquivo com o pid do executor
+    local f p w
+    f=$(cat "$1" 2>/dev/null); [ -n "$f" ] && kill -0 "$f" 2>/dev/null || return 0
+    w=$(cat "/proc/$f/winpid" 2>/dev/null)
+    if [ -n "$w" ]; then taskkill //F //T //PID "$w" >/dev/null 2>&1
+    else pkill -P "$f" 2>/dev/null; kill "$f" 2>/dev/null; fi
+}
 remove_morta() { # trava pid_esperado
     local tmp="$1.morta.$$"
     mv "$1" "$tmp" 2>/dev/null || return 0
-    if [ "$(cat "$tmp/pid" 2>/dev/null)" = "$2" ]; then rm -rf "$tmp"; else [ -e "$1" ] || mv "$tmp" "$1" 2>/dev/null; rm -rf "$tmp"; fi
+    if [ "$(cat "$tmp/pid" 2>/dev/null)" = "$2" ]; then mata_filho "$tmp/filho"; rm -rf "$tmp"; else [ -e "$1" ] || mv "$tmp" "$1" 2>/dev/null; rm -rf "$tmp"; fi
 }
 limite=$((SECONDS + 300))
 # Pega uma vaga em <base>1..<n> e põe o caminho em $L. checa_dono=1: espera se este mesmo dono já ocupa vaga da fila.
@@ -135,11 +144,13 @@ pega_vaga() { # base vagas checa_dono
 }
 # Ordem fixa: vaga da fila, depois a do teto global (sem deadlock). Os dois saem no trap.
 F=""; T=""
-trap 'rm -rf "$F" "$T"' EXIT INT TERM
+trap 'mata_filho "$F/filho"; rm -rf "$F" "$T"' EXIT INT TERM
 pega_vaga "$trava" "$VAGAS" 1; F=$L
 pega_vaga "$HOME/.cache/gs-teste-teto.lock" "$TETO" 0; T=$L
 # shellcheck disable=SC2086 # runner é uma linha de comando com argumentos
-CI=${CI:-1} $runner "${args[@]}"
+CI=${CI:-1} $runner "${args[@]}" <&0 &
+echo $! > "$F/filho"
+wait $!
 rc=$?
 # Depois do --parallel, apaga os <banco>_test_N deste worktree: menos tabelas no servidor, information_schema mais leve. O próximo --parallel recria.
 # Só com banco MySQL/MariaDB no host; em container o banco é descartável junto com o ambiente.
