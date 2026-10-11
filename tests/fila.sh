@@ -124,11 +124,13 @@ fi
 mkdir -p "$tmp/cota/bin" "$HOME/.claude-team"
 cat > "$tmp/cota/bin/claude" <<'E'
 #!/bin/bash
-if [ -n "$CLAUDE_CONFIG_DIR" ]; then echo "sem login"; else echo "Current session: 50% used"; echo "Current week (all models): 60% used"; fi
+case "$*" in *haiku*) echo "sem login";; *) echo "Current session: 50% used"; echo "Current week (all models): 60% used";; esac
 E
 printf '#!/bin/bash\nexit 1\n' > "$tmp/cota/bin/agy"; cp "$tmp/cota/bin/agy" "$tmp/cota/bin/codex"
 chmod +x "$tmp/cota/bin/"*
-esc=$(PATH="$tmp/cota/bin:$PATH" bash "$raiz/skills/limites-cota/limites.sh" --escritor 2>/dev/null | tail -1)
+# Cópia isolada: sem codex-cota.sh ao lado, o Codex real não entra na conta.
+cp "$raiz/skills/limites-cota/limites.sh" "$tmp/cota/"
+esc=$(PATH="$tmp/cota/bin:$PATH" bash "$tmp/cota/limites.sh" --escritor 2>/dev/null | tail -1)
 if [ "$esc" = "escritor: pessoal (40% livre)" ]; then ok "escritor: conta ilegível não é candidata"; else ruim "escritor: conta ilegível escolhida ($esc)"; fi
 
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
