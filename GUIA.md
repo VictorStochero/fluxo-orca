@@ -133,6 +133,12 @@ Só para o que o usuário instalou na fase 2. Os workers do Orca rodam esses CLI
 1. **`~/.claude/ambiente.md`** — perfil com o que a fase 1 achou, no formato da skill `ambiente-local` (sistema, shell, quem serve os sites, bancos com porta e origem, contêiner, runtimes, raiz dos projetos e a tabela de projetos com stack, serviço, banco, multi-tenant, board e base). As skills leem este arquivo; mantê-lo verdadeiro.
 2. **`~/.claude/boards.md`** — perguntar quais projetos têm GitHub Project. Para cada um: `gh project list --owner <org>` e `gh project field-list <nº> --owner <org> --format json`; gravar a tabela e os ids de campos/opções no formato da skill `board-github`. Sem board: arquivo com a tabela vazia.
 
+**Migrando de outra máquina** (perguntar na fase 1): o que é pessoal não está no plugin nem no git — pedir ao usuário para trazer e restaurar antes desta fase, mostrando o diff com o que a detecção achou:
+- `~/.claude/ambiente.md` e `~/.claude/boards.md` (armadilhas e regras de board não se detectam de novo); corrigir caminhos, portas e versões que mudaram.
+- Por projeto, fora do git: `.env`/`.env.testing` e `.orca/worktree.conf` (vêm junto se a pasta for copiada; se o projeto for clonado de novo, trazer à parte).
+- Opcional: memórias do Claude por projeto (`~/.claude/projects/*/memory`; o nome da pasta muda se o caminho do projeto mudar).
+- Logins não migram: Claude (e a segunda conta), `gh`, Codex/agy/Kimi e as chaves SSH são refeitos nas fases 3 e 4b.
+
 ## Fase 6 — Por projeto
 Para cada projeto escolhido:
 1. **Orca**: `orca repo add --path <caminho>` e `orca repo set-base-ref --repo path:<caminho> --ref origin/<base>`. O usuário configura na tela do repo no Orca (sem CLI para isso), com o **mesmo texto em todos os repos** — passar os dois prontos para colar: Windows → setup `"%ProgramFiles%\Git\bin\bash.exe" "%USERPROFILE%\.cache\wt-setup.sh"` e archive `"%ProgramFiles%\Git\bin\bash.exe" "%USERPROFILE%\.cache\wt-archive.sh"`; Linux/macOS → `bash ~/.cache/wt-setup.sh` e `bash ~/.cache/wt-archive.sh`. Não usar `orca.yaml` fora do git para isso (skill `worktree-orca`).
@@ -145,7 +151,7 @@ Para cada projeto escolhido:
 ## Fase 7 — Verificação
 Reabrir o Claude Code e conferir, relatando cada item (ok / pendente + motivo):
 1. `claude plugin list`: `fluxo-orca`, `ponytail`, `code-review-anthropics`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp` (+ `laravel-worktree` se houver Laravel) habilitados, **nenhum `superpowers`**; `/skills` mostra `delegacao`, `fila-testes`, `worktree-orca`, `stack-*`, `orca-cli`, `orchestration`.
-2. `~/.cache/gs-teste.sh`, `~/.cache/wt-setup.sh`, `~/.cache/wt-archive.sh`, `~/.cache/wt-lib.sh`, `~/.cache/limites.sh` e `~/.claude/agents/somente-leitura.json` existem (hook de SessionStart).
+2. `~/.cache/gs-teste.sh`, `~/.cache/wt-setup.sh`, `~/.cache/wt-archive.sh`, `~/.cache/wt-lib.sh`, `~/.cache/limites.sh`, `~/.cache/orca-espera.sh`, `~/.cache/fim-worker.sh` e `~/.claude/agents/somente-leitura.json` existem (hook de SessionStart).
 3. Num projeto, o comando de teste direto (`php artisan test`, `pytest`, `pnpm test`…) é **bloqueado** pelo hook com a mensagem da fila; `bash ~/.cache/gs-teste.sh <listagem>` passa.
 4. Um `sed -i` qualquer é bloqueado pelo hook `bloqueia-bulk`.
 5. `bash ~/.cache/limites.sh` imprime ao menos a linha `pessoal`.
