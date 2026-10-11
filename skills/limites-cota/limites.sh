@@ -66,7 +66,7 @@ awk '
 rc=$?
 fi
 [ $SOLO = 1 ] && exit "$rc"
-# alerta: qualquer percentual de uso > 80 (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi/codex: "5h N%", codex também "semana N%")
+# alerta: qualquer percentual de uso > 80 (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi: "5h N%" e "semana-eq N%"; codex: "5h N%" e "semana N%")
 awk '
   /usado/    { match($0, /[0-9]+% usado/); if (RLENGTH > 0) { n = substr($0, RSTART, RLENGTH) + 0; if (n > 80) bad = 1 } }
   /restam/   { match($0, /restam [0-9]+%/); if (RLENGTH > 0) { n = substr($0, RSTART + 6, RLENGTH - 6) + 0; if (100 - n > 80) bad = 1 } }
