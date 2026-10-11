@@ -29,5 +29,5 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
 - **Processo morto deixa bancos paralelos em estado misto**: matar os processos órfãos do worktree e dropar os bancos `_test_N`; o primeiro run depois costuma falhar em massa — rodar de novo.
 - Suíte longa passa de 10 min e cai para background: esperar a notificação, sem polling. **Nunca `| tail`** em run que pode estourar: redirecionar para arquivo.
 - Teste que passa por coincidência não protege: **forçar a divergência** entre ids que deveriam diferir.
-- CLI externo (agy, kimi) não tem o hook: o prompt do worker manda usar a fila explicitamente.
+- CLI externo (Codex, agy, Kimi) tem o mesmo bloqueio, pelo `guarda-externos.sh` (detector `e-teste.sh`, copiado para `~/.cache`); o prompt do worker ainda manda usar a fila.
 - Filas separadas: Laravel no host uma por porta de banco; container uma; Python/JS uma.
