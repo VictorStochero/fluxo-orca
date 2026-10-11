@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pool da máquina: pega <conta> <dispatch>, solta <dispatch>, livres. Zero = ilimitado.
 contas=(team pessoal codex kimi agy)
-declare -A vagas=([team]=1 [pessoal]=0 [codex]=1 [kimi]=1 [agy]=1)
+v_team=1 v_pessoal=0 v_codex=1 v_kimi=1 v_agy=1
 dir="$HOME/.cache/agentes"
 erro() { echo "vaga-agente: $*" >&2; exit 2; }
 valida_dispatch() { [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]] || erro 'dispatch inválido'; }
@@ -10,8 +10,9 @@ if [ -f "$HOME/.claude/agentes.conf" ]; then
         linha=${linha%%#*}; linha=${linha//$'\r'/}
         [[ "$linha" =~ ^[[:space:]]*$ ]] && continue
         [[ "$linha" =~ ^[[:space:]]*(team|pessoal|codex|kimi|agy)=([0-9]+)[[:space:]]*$ ]] || erro "configuração inválida: $linha"
-        vagas[${BASH_REMATCH[1]}]=$((10#${BASH_REMATCH[2]}))
-        [ "${vagas[${BASH_REMATCH[1]}]}" -ge 0 ] || erro 'limite inválido'
+        chave=v_${BASH_REMATCH[1]}
+        printf -v "$chave" '%s' "$((10#${BASH_REMATCH[2]}))"
+        [ "${!chave}" -ge 0 ] || erro 'limite inválido'
     done < "$HOME/.claude/agentes.conf"
 fi
 
@@ -61,7 +62,8 @@ case "${1:-}" in
         conta=$2; dispatch=$3
         [[ " ${contas[*]} " = *" $conta "* ]] || erro 'conta desconhecida'
         valida_dispatch "$dispatch"
-        [ "${vagas[$conta]}" = 0 ] && exit 0
+        chave=v_$conta; total=${!chave}
+        [ "$total" = 0 ] && exit 0
         mkdir -p "$dir" || exit 2
         ocupadas=0
         for v in "$dir/$conta".lock[0-9]*; do
@@ -71,8 +73,8 @@ case "${1:-}" in
             recupera "$v"
             [ -d "$v" ] && ocupadas=$((ocupadas + 1))
         done
-        [ "$ocupadas" -ge "${vagas[$conta]}" ] && { echo "POOL CHEIO: $conta" >&2; exit 75; }
-        for ((i=1; i<=vagas[$conta]; i++)); do
+        [ "$ocupadas" -ge "$total" ] && { echo "POOL CHEIO: $conta" >&2; exit 75; }
+        for ((i=1; i<=total; i++)); do
             v="$dir/$conta.lock$i"
             if mkdir "$v" 2>/dev/null; then
                 if ! { printf '%s\n' "$dispatch" > "$v/dispatch" && date -u +%FT%TZ > "$v/desde"; }; then
@@ -97,7 +99,7 @@ case "${1:-}" in
     livres)
         [ "$#" = 1 ] || erro 'uso: livres'
         for conta in "${contas[@]}"; do
-            total=${vagas[$conta]}; ocupadas=0
+            chave=v_$conta; total=${!chave}; ocupadas=0
             for v in "$dir/$conta".lock[0-9]*; do
                 [ -d "$v" ] || continue
                 [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue

@@ -31,6 +31,23 @@ confere_rc() {
     if [ "$rc" = "$esperado" ]; then ok "$nome"; else ruim "$nome: esperado=$esperado rc=$rc"; cat "$tmp/saida"; fi
 }
 
+# Simula a rejeição de arrays associativos do Bash 3.2, mantendo o script real.
+pool_sem_associativo() {
+    bash -c '
+        declare() {
+            case "$1" in -A*) unset vagas; return 2 ;; esac
+            builtin declare "$@"
+        }
+        source "$1" "${@:2}"
+    ' bash "$raiz/skills/limites-cota/vaga-agente.sh" "$@"
+}
+printf 'team=2\npessoal=0\ncodex=3\nkimi=4\nagy=5\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'pool funciona sem arrays associativos' pool_sem_associativo livres
+for esperado in 'team 2/2' 'pessoal 0/0' 'codex 3/3' 'kimi 4/4' 'agy 5/5'; do
+    grep -qx "$esperado" "$tmp/saida" && ok "limite independente: $esperado" || ruim "limite sem array associativo: $esperado"
+done
+rm "$HOME/.claude/agentes.conf"
+
 confere_rc 0 'pega primeira vaga' pool pega team ctx_1
 [ "$(cat "$HOME/.cache/agentes/team.lock1/dispatch" 2>/dev/null)" = ctx_1 ] \
     && [ -s "$HOME/.cache/agentes/team.lock1/desde" ] && ok 'dono e início gravados' || ruim 'metadados da vaga'
