@@ -14,6 +14,7 @@ Skills em `~/.agents/skills` (cópia das skills do plugin `fluxo-orca`, mantida 
 - Prompt com preâmbulo de Task/Dispatch IDs = worker supervisionado: seguir o preâmbulo, uma tarefa só, `worker_done` uma vez com resumo de 3 frases, hash do commit, divergências e `--outcome succeeded|failed`.
 - **Decisão que cabe ao usuário vai pelo `ask` do preâmbulo** (nunca pergunta local), com o contexto para decidir e a opção recomendada; a sessão principal leva ao usuário.
 - Fora do escopo da tarefa: não fazer — registrar no `worker_done`.
+- Antes de tocar banco, conferir que o setup do worktree terminou com sucesso; se estiver rodando, aguardar. Setup falhou ou sucesso não verificável → `ask` ao coordenador com a saída do setup e aguardar orientação, sem tentar refazer migração por conta própria. O repo no Orca deve estar configurado para aguardar o setup antes de iniciar o agente (`wait-for-setup`).
 
 ## Proibido
 - **Comando remoto** (`ssh`, `scp`, `rsync`, `sftp`, `forge`) — bloqueado por hook (`guarda-externos.sh`). Precisa de servidor → `ask` ao coordenador; a ação roda na sessão principal com aprovação do usuário por comando.

@@ -1,11 +1,11 @@
 ---
 name: fila-testes
-description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manage.py test, vitest, jest, npm/pnpm/yarn/bun test) — fila única da máquina com 2 vagas, para worktrees e agentes em paralelo não derrubarem a máquina nem corromperem bancos de teste.
+description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manage.py test, vitest, jest, npm/pnpm/yarn/bun test) — filas da máquina (2 vagas por recurso e teto global de 3 runs), para worktrees e agentes em paralelo não derrubarem a máquina nem corromperem bancos de teste.
 ---
 
 # Fila de testes da máquina
 
-`~/.cache/gs-teste.sh` (instalado e atualizado pelo hook de SessionStart do plugin) é um semáforo: até **2** runs de teste por vez entre todos os worktrees e sessões. O hook `fila-testes.sh` bloqueia os executores de teste fora dele; listagem (`--list-tests`, `--collect-only`, `vitest list`, `--listTests`) e instalação de pacote passam livres.
+`~/.cache/gs-teste.sh` (instalado e atualizado pelo hook de SessionStart do plugin) é um semáforo: até **2** runs por fila (porta de banco, container ou geral) e, somando todas as filas, no máximo **3** na máquina (teto global), entre todos os worktrees e sessões. O hook `fila-testes.sh` bloqueia os executores de teste fora dele; listagem (`--list-tests`, `--collect-only`, `vitest list`, `--listTests`) e instalação de pacote (`composer install|require` incluso) passam livres. Cobre também `composer test`, `cargo test`, `go test` e `python -m unittest`. O dono da vaga é a raiz do git: rodar de subpasta do mesmo worktree conta como o mesmo dono.
 
 ## Como chamar (no cwd do projeto/worktree)
 - `bash ~/.cache/gs-teste.sh <argumentos>` — detecta o executor:
@@ -15,10 +15,14 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
   | Laravel (`artisan`) | `ddev artisan test` (`.ddev/`), `./vendor/bin/sail artisan test` (Sail), senão `php artisan test` |
   | Python | `uv run pytest`, `poetry run pytest`, `pipenv run pytest`, `.venv/…/pytest` ou `python -m pytest` |
   | JS (`package.json`) | `pnpm test`, `yarn test`, `bun run test` ou `npm test --` (pelo lockfile) |
+  | Rust (`Cargo.toml`) / Go (`go.mod`) | `cargo test` / `go test` (fila geral; Go: passe `./...`) |
 
 - `bash ~/.cache/gs-teste.sh -- <comando completo>` — executor explícito (`-- python manage.py test app`, `-- pnpm vitest run src/x.test.ts`).
+- Preparação do banco de teste também passa pela fila: `bash ~/.cache/gs-teste.sh -- php artisan migrate:fresh --env=testing --force` (idem `migrate:*`, `db:wipe` e `db:seed`). Com `artisan` no cwd, o executor explícito usa a fila Laravel por porta de `.env.testing` (PHP) ou de container, preservando o comando.
+- O detector bloqueia essas operações com `--env=testing` (ou `--env testing`) ou `--database` com token `test`/`testing` no nome da conexão (`test`, `testing`, `mysql_test`, `test_mysql`). Conexão com nome arbitrário precisa de `--env=testing`; sem indicação de teste, operações do banco de desenvolvimento continuam livres.
+- Django: `manage.py migrate|flush` com `--settings=*test*` também exige fila, por exemplo `bash ~/.cache/gs-teste.sh -- python manage.py migrate --settings=app.settings.test`. A opção de teste deve estar no mesmo trecho do comando que a operação de banco.
 - Projeto em container ou com executor próprio: `GS_TESTE_RUNNER="<comando>"` no `.orca/worktree.conf` do principal (ex.: `docker compose exec -T web pytest`) — vale para todos os worktrees.
-- Sem vaga em 5 min → `FILA OCUPADA` (exit 75): rodar de novo. `GS_TESTE_VAGAS` e `GS_TESTE_PROCESSOS` sobrescrevem 2 vagas e 8 processos.
+- Sem vaga em 5 min → `FILA OCUPADA` (exit 75): rodar de novo. `GS_TESTE_VAGAS`, `GS_TESTE_TETO` e `GS_TESTE_PROCESSOS` sobrescrevem 2 vagas, 3 do teto e 8 processos. A vaga do teto vem depois da da fila, no mesmo prazo de 5 min.
 
 ## Regras
 - Laravel, suíte e pasta em paralelo: `bash ~/.cache/gs-teste.sh --parallel --compact <path>` (8 processos; apaga os `<banco>_test_N` ao terminar). **`--parallel` aceita UM path.**
@@ -26,8 +30,9 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
 - Subagente de etapa roda só o teste novo e até 5 arquivos editados, um por chamada; pasta e suíte uma vez na integração.
 - **Falha que surge com a máquina carregada: re-rodar o arquivo isolado antes de investigar.**
 - **Duas execuções no mesmo worktree corrompem uma à outra** (`Duplicate entry '1'`, `Table 'users' already exists`, `Unknown column`, deadlock em `alter table`).
+- Se o `gs-teste.sh` morre à força (timeout da ferramenta), o executor fica órfão; o próximo run encerra a árvore dele (pid em `<vaga>/filho`) antes de liberar a vaga.
 - **Processo morto deixa bancos paralelos em estado misto**: matar os processos órfãos do worktree e dropar os bancos `_test_N`; o primeiro run depois costuma falhar em massa — rodar de novo.
 - Suíte longa passa de 10 min e cai para background: esperar a notificação, sem polling. **Nunca `| tail`** em run que pode estourar: redirecionar para arquivo.
 - Teste que passa por coincidência não protege: **forçar a divergência** entre ids que deveriam diferir.
-- CLI externo (agy, kimi) não tem o hook: o prompt do worker manda usar a fila explicitamente.
+- CLI externo (Codex, agy, Kimi) tem o mesmo bloqueio, pelo `guarda-externos.sh` (detector `e-teste.sh`, copiado para `~/.cache`); o prompt do worker ainda manda usar a fila.
 - Filas separadas: Laravel no host uma por porta de banco; container uma; Python/JS uma.

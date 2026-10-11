@@ -16,7 +16,8 @@ description: Use antes de despachar uma onda de workers ou quando o usuário per
 | `codex` | app-server local do Codex (`codex-cota.sh`, `account/rateLimits/read`), janela 5h e semana | `codex` fora do PATH |
 
 - **Antes de cada onda de workers**: rodar; fornecedor acima de 80% sai da vez.
-- **Ordem de consumo**: agy Gemini / Kimi → agy Claude (limite baixo, só pontual) → Codex → conta secundária → conta principal.
+- **Escritor**: o script termina com `escritor: <team|pessoal|codex> (<folga>% livre)` — o candidato com mais folga (100 − o pior entre sessão/5h e semana; acima de 80% fica de fora). `limites.sh --escritor` imprime só essa linha. Medir antes de cada designação.
+- **Segunda opinião e mecânico** (agy Gemini / Kimi → agy Claude, só pontual) seguem a ordem: agy Gemini / Kimi → agy Claude.
 - Revisão obrigatória continua em Opus mesmo com cota apertada: espera a janela zerar em vez de rebaixar o modelo.
 - Ao relatar ao usuário: a saída do script como tabela (fornecedor · janela · uso · zera às), sem reformular números.
 - Linha `ilegível`: o `/usage` mudou de formato ou a conta não está logada — dizer, não estimar.
