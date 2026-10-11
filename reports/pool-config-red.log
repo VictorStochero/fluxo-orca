@@ -1,0 +1,54 @@
+ok   pega primeira vaga
+ok   dono e início gravados
+ok   pool cheio
+ok   pega do mesmo dispatch é idempotente
+ok   solta dispatch
+ok   vaga liberada pode ser reutilizada
+ok   preserva vaga: pending
+ok   preserva vaga: running
+ok   preserva vaga: offline
+ok   preserva vaga: vazio
+ok   preserva vaga: invalido
+ok   preserva vaga: desconhecido
+ok   preserva vaga: outro_id
+ok   recupera dispatch: completed
+ok   recupera dispatch: failed
+ok   recupera dispatch: stopped
+ok   recupera dispatch: abandoned
+ok   recupera dispatch: inexistente
+ok   trava sem dispatch é preservada
+ok   pessoal ilimitado: primeira reserva
+ok   pessoal ilimitado: segunda reserva
+ok   pessoal não cria trava
+ok   primeira vaga: codex
+ok   limite de uma vaga: codex
+ok   primeira vaga: kimi
+ok   limite de uma vaga: kimi
+ok   primeira vaga: agy
+ok   limite de uma vaga: agy
+ok   config: team primeira
+ok   config: team segunda
+ok   config: team terceira cheia
+ok   config: pessoal limitado
+ok   config: pessoal cheio
+ok   livres conta ocupação
+ok   livres recupera vaga terminal
+FALHA redução de limite respeita vaga antiga fora da faixa: esperado=75 rc=0
+ok   conta desconhecida rejeitada
+ok   dispatch inseguro rejeitado
+ok   config inválida rejeitada
+ok   seleção com vagas
+FALHA maior folga incorreta
+POOL CHEIO: team
+ok   seleção exclui team ocupado
+ok   ignora melhor cota sem vaga
+ok   seleção pessoal ilimitado
+ok   pessoal continua candidato
+ok   seletor retorna 75 com pool cheio
+ok   seletor informa pool cheio
+ok   cota esgotada difere de pool cheio
+ok   cota preserva diagnóstico
+ok   seletor propaga erro do pool
+ok   hook instala scripts em HOME temporário
+ok   script do pool instalado
+2 falha(s)
