@@ -125,6 +125,15 @@ export PATH="$tmp/bin:$PATH"
 seletor() { bash "$tmp/seletor/limites.sh" --escritor; }
 confere_rc 0 'seleção com vagas' seletor
 grep -qx 'escritor: team (90% livre)' "$tmp/saida" && ok 'escolhe maior folga' || ruim 'maior folga incorreta'
+# Kimi entra pelo semana-eq (cota mensal comparada às semanais), não pelo uso bruto do mês.
+mkdir -p "$HOME/.kimi-code/credentials"; : > "$HOME/.kimi-code/credentials/kimi-code-env-t.json"
+echo "echo 'kimi: 5h 2% (zera 23:00) · mês 2% · semana-eq 5%'" > "$tmp/seletor/kimi-cota.sh"
+confere_rc 0 'seleção com Kimi' seletor
+grep -qx 'escritor: kimi (95% livre)' "$tmp/saida" && ok 'Kimi com maior folga é escolhido' || ruim 'Kimi não escolhido'
+echo "echo 'kimi: 5h 2% (zera 23:00) · mês 22% · semana-eq 88%'" > "$tmp/seletor/kimi-cota.sh"
+confere_rc 0 'seleção com Kimi acima do ritmo' seletor
+grep -qx 'escritor: team (90% livre)' "$tmp/saida" && ok 'Kimi acima do ritmo mensal fica fora' || ruim 'Kimi acima do ritmo escolhido'
+rm -rf "$HOME/.kimi-code" "$tmp/seletor/kimi-cota.sh"
 pool pega team ctx_s1
 confere_rc 0 'seleção exclui team ocupado' seletor
 grep -qx 'escritor: codex (80% livre)' "$tmp/saida" && ok 'ignora melhor cota sem vaga' || ruim 'escolheu conta cheia'

@@ -43,7 +43,7 @@ if [ "$rc" != 0 ]; then
   [ $SOLO = 1 ] && exit "$rc"
   echo "AVISO: erro do pool (status $rc); seleção de escritor indisponível" >&2
 else
-# escritor: maior folga entre candidatos com vaga; acima de 80% fica de fora. Empate: team, pessoal, codex.
+# escritor: maior folga entre candidatos com vaga; acima de 80% fica de fora. Empate: team, pessoal, codex, kimi.
 awk '
   FNR == NR { split($2, v, "/"); livre[$1] = (v[2] == 0 || v[1] > 0); next }
   function pior(a, b) { return a > b ? a : b }
@@ -53,8 +53,12 @@ awk '
   /^codex: 5h/ { match($0, /5h [0-9]+%/); a = substr($0, RSTART + 3, RLENGTH - 3) + 0
                  match($0, /semana [0-9]+%/); b = substr($0, RSTART + 7, RLENGTH - 7) + 0
                  uso["codex"] = pior(a, b); ordem[++q] = "codex" }
-  END { melhor = ""; tem_vaga = 0; ordem[1] = "team"; ordem[2] = "pessoal"; ordem[3] = "codex"
-        for (i = 1; i <= 3; i++) { k = ordem[i]; if (!(k in uso) || !livre[k]) continue
+  /^kimi: 5h/ { match($0, /5h [0-9]+%/); a = substr($0, RSTART + 3, RLENGTH - 3) + 0
+                # Cota mensal comparada às semanais pelo semana-eq do kimi-cota.sh (25% do mês por semana do ciclo).
+                match($0, /semana-eq [0-9]+%/); b = substr($0, RSTART + 10, RLENGTH - 10) + 0
+                uso["kimi"] = pior(a, b); ordem[++q] = "kimi" }
+  END { melhor = ""; tem_vaga = 0; ordem[1] = "team"; ordem[2] = "pessoal"; ordem[3] = "codex"; ordem[4] = "kimi"
+        for (i = 1; i <= 4; i++) { k = ordem[i]; if (!(k in uso) || !livre[k]) continue
           tem_vaga = 1; if (uso[k] <= 80 && (melhor == "" || uso[k] < uso[melhor])) melhor = k }
         if (melhor != "") printf "escritor: %s (%d%% livre)\n", melhor, 100 - uso[melhor]
         else if (q > 0 && !tem_vaga) { print "escritor: nenhum (pool cheio)"; exit 75 }
@@ -66,7 +70,8 @@ fi
 awk '
   /usado/    { match($0, /[0-9]+% usado/); if (RLENGTH > 0) { n = substr($0, RSTART, RLENGTH) + 0; if (n > 80) bad = 1 } }
   /restam/   { match($0, /restam [0-9]+%/); if (RLENGTH > 0) { n = substr($0, RSTART + 6, RLENGTH - 6) + 0; if (100 - n > 80) bad = 1 } }
-  /^kimi: 5h/ { match($0, /5h [0-9]+%/); n = substr($0, RSTART + 3, RLENGTH - 3) + 0; if (n > 80) bad = 1 }
+  /^kimi: 5h/ { match($0, /5h [0-9]+%/); n = substr($0, RSTART + 3, RLENGTH - 3) + 0; if (n > 80) bad = 1
+                match($0, /semana-eq [0-9]+%/); n = substr($0, RSTART + 10, RLENGTH - 10) + 0; if (n > 80) bad = 1 }
   /^codex: 5h/ { match($0, /5h [0-9]+%/); n = substr($0, RSTART + 3, RLENGTH - 3) + 0; if (n > 80) bad = 1
                  match($0, /semana [0-9]+%/); n = substr($0, RSTART + 7, RLENGTH - 7) + 0; if (n > 80) bad = 1 }
   END { exit bad ? 3 : 0 }' "$tmp/todas"

@@ -16,7 +16,7 @@ description: Use antes de despachar uma onda de workers ou quando perguntarem so
 | `codex` | app-server local do Codex (`codex-cota.sh`, `account/rateLimits/read`), janela 5h e semana | `codex` fora do PATH |
 
 - **Antes de cada onda de workers**: rodar; fornecedor acima de 80% sai da vez.
-- **Escritor**: o script termina com `escritor: <team|pessoal|codex> (<folga>% livre)` — o candidato com vaga no pool e mais folga (100 − o pior entre sessão/5h e semana; acima de 80% fica de fora). `limites.sh --escritor` imprime só essa linha; pool cheio imprime `escritor: nenhum (pool cheio)` e sai com 75. Medir antes de cada designação.
+- **Escritor**: o script termina com `escritor: <team|pessoal|codex|kimi> (<folga>% livre)` — o candidato com vaga no pool e mais folga (100 − o pior entre sessão/5h e semana; no Kimi, o pior entre 5h e `semana-eq`, a cota mensal convertida a 25% por semana do ciclo; acima de 80% fica de fora). `limites.sh --escritor` imprime só essa linha; pool cheio imprime `escritor: nenhum (pool cheio)` e sai com 75. Medir antes de cada designação.
 - **Pool da máquina**: `vaga-agente.sh pega <conta> <dispatch_id>`, `solta <dispatch_id>` e `livres`. Padrão: team=1, codex=1, kimi=1, agy=1 e pessoal=0 (ilimitado, `0/0`, sem trava). Configuração opcional: linhas `conta=N` em `~/.claude/agentes.conf`. Recuperação somente por estado terminal do dispatch ou `dispatch_not_found` confirmado pelo Orca; erro de conexão conserva a vaga. Fluxo de reserva/liberação na skill `delegacao`.
 - **Segunda opinião e mecânico** (agy Gemini / Kimi → agy Claude, só pontual) seguem a ordem: agy Gemini / Kimi → agy Claude.
 - Revisão obrigatória continua em Opus mesmo com cota apertada: espera a janela zerar em vez de rebaixar o modelo.
@@ -27,4 +27,4 @@ description: Use antes de despachar uma onda de workers ou quando perguntarem so
 
 - `bash ~/.cache/limites.sh` — uso por fornecedor e janela, horário de renovação e escritor escolhido; exit 3 indica algum uso acima de 80%. Apresentar os números como tabela, sem estimar linhas ilegíveis.
 - `bash ~/.cache/vaga-agente.sh livres` — cada linha traz `conta livres/total`; `0/0` significa ilimitado. A consulta pode recuperar vagas de dispatches encerrados; falha de conexão conserva a vaga. A lista do pool não comprova que o fornecedor está instalado.
-- `bash ~/.cache/limites.sh --escritor` — escolhe entre team, pessoal e Codex pela maior folga com vaga; ausentes e uso acima de 80% ficam de fora. Exit 75 indica pool cheio; `todos acima de 80% ou ausentes` distingue falta de cota de falta de vaga.
+- `bash ~/.cache/limites.sh --escritor` — escolhe entre team, pessoal, Codex e Kimi pela maior folga com vaga; ausentes e uso acima de 80% ficam de fora. Exit 75 indica pool cheio; `todos acima de 80% ou ausentes` distingue falta de cota de falta de vaga.

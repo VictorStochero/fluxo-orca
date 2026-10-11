@@ -16,5 +16,9 @@ $j = json_decode(stream_get_contents(STDIN), true);
 if (! isset($j["usages"])) { echo "kimi: cota ilegível (token expirado? rode kimi uma vez)\n"; exit(2); }
 $u = $j["usages"];
 $h = (new DateTime($u["limit_5h"]["reset_time"]))->setTimezone(new DateTimeZone(getenv("TZ") ?: date_default_timezone_get()))->format("H:i");
-printf("kimi: 5h %d%% (zera %s) · mês %d%%\n", $u["limit_5h"]["used_ratio"] * 100, $h, $u["limit_month_total"]["used_ratio"] * 100);
+// Cota mensal contra as semanais: cada semana do ciclo libera 25% do mês (acumulado), então semana-eq = uso / (25% × semana atual).
+$fim = new DateTime($u["limit_month_total"]["reset_time"]); $ini = (clone $fim)->modify("-1 month");
+$sem = min(4, max(1, (int) ceil((time() - $ini->getTimestamp()) / 604800)));
+$mes = $u["limit_month_total"]["used_ratio"] * 100;
+printf("kimi: 5h %d%% (zera %s) · mês %d%% · semana-eq %d%%\n", $u["limit_5h"]["used_ratio"] * 100, $h, $mes, min(100, $mes / (25 * $sem) * 100));
 exit($u["limit_5h"]["used_ratio"] > 0.8 ? 3 : 0);'
