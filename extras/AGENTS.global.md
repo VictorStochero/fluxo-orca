@@ -30,6 +30,7 @@ Skills em `~/.agents/skills` (cópia das skills do plugin `fluxo-orca`, mantida 
 
 ## Testes e validação
 - **Testes só pela fila**: `bash ~/.cache/gs-teste.sh <argumentos>` (exit 75 = `FILA OCUPADA`, rodar de novo). Nunca o comando de teste direto. Um arquivo por chamada.
+- **Relatório e log fora do repo**: evidência vai no `worker_done` e no PR; arquivo de apoio em `~/.cache/handoff/<tarefa>/`, nunca versionado (`reports/`, `*.log`).
 - Nenhuma chamada passa de 10 min: dividir por arquivo e **commitar antes de verificação longa**. Gravar o relatório em arquivo desde o primeiro achado.
 - Após cada etapa: formatador/linter da stack nos arquivos tocados; teste de regressão (sem teste no caminho, criar um mínimo); falhou → não declarar concluído.
 - Mudança de UI: navegador embutido do Orca (skill `orca-cli`, sempre `--page <id>`), perfil real, nunca administrador.
