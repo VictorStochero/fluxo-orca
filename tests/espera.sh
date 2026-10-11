@@ -54,16 +54,20 @@ if [ ! -e "$e/.estado-ctx_fim.json" ]; then echo "ok   estado de dispatch encerr
 rm -rf "$h"
 
 # orca-libera: só fecha terminal criado pelo --cria e que nenhum dispatch ativo do run usa.
-libera() { # nome registrado(sim|nao) outro_ativo(sim|nao) fecha_esperado(sim|nao)
+libera() { # nome registrado(sim|nao) outro_ativo(sim|nao|ilegivel) fecha_esperado(sim|nao)
     local h; h=$(mktemp -d); mkdir -p "$h/bin"
     local outro='' ; [ "$3" = sim ] && outro=',{"dispatchId":"ctx_b","dispatchStatus":"dispatched","agentTerminalHandle":"term_t","projection":{}}'
+    # Indentado como o worker-list real (uma chave por linha).
+    printf '%s' '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_a","dispatchStatus":"completed","agentTerminalHandle":"term_t","projection":{}}'"$outro"']}}' \
+        | python -m json.tool > "$h/lista.json" 2>/dev/null || python3 -m json.tool > "$h/lista.json"
+    [ "$3" = ilegivel ] && echo '{"ok":true,"result":' > "$h/lista.json"
     cat > "$h/bin/orca" <<EOF
 #!/bin/bash
 case "\$*" in
     *"terminal create"*) echo '{"ok":true,"result":{"terminal":{"handle":"term_t"}}}' ;;
     *worker-release*) echo '{"ok":true,"result":{"state":"retained","reason":"external_terminal"}}' ;;
     *worker-show*) echo '{"ok":true,"result":{"dispatch":{"runId":"run_t"},"worker":{"agentTerminalHandle":"term_t"}}}' ;;
-    *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_a","dispatchStatus":"completed","agentTerminalHandle":"term_t","projection":{}}$outro]}}' ;;
+    *worker-list*) cat "$h/lista.json" ;;
     *"terminal close"*) echo fechou >> "$h/fechou"; echo '{"ok":true}' ;;
 esac
 EOF
@@ -77,5 +81,6 @@ EOF
 libera "libera fecha terminal criado e ocioso" sim nao sim
 libera "libera mantém terminal reaproveitado por dispatch ativo" sim sim nao
 libera "libera mantém terminal não criado pelo --cria" nao nao nao
+libera "libera mantém terminal quando o worker-list é ilegível" sim ilegivel nao
 
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }

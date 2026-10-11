@@ -5,6 +5,7 @@
 # worker-release só fecha o terminal que o próprio worker-start criou; o aberto com `orca terminal create` + --terminal
 # volta como retained/external_terminal. Só é fechado aqui o que foi criado pelo --cria e não serve a outro dispatch ativo.
 reg="$HOME/.cache/orca-terminais"
+for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break; done
 handle_de() { grep -o "\"$1\": *\"[^\"]*\"" | head -1 | cut -d'"' -f4; }
 if [ "${1:-}" = --cria ]; then
     shift
@@ -21,20 +22,29 @@ for d in "$@"; do
     estado=$(printf '%s' "$r" | handle_de state)
     motivo=$(printf '%s' "$r" | handle_de reason)
     case "$estado" in
-        released|already_released|release_pending) echo "$d: $estado" ;;
+        released|already_released|release_pending)
+            h=$(orca orchestration worker-show --dispatch "$d" --json 2>/dev/null | handle_de agentTerminalHandle)
+            [ -n "$h" ] && rm -f "$reg/$h"
+            echo "$d: $estado" ;;
         retained)
             show=$(orca orchestration worker-show --dispatch "$d" --json 2>/dev/null)
             h=$(printf '%s' "$show" | handle_de agentTerminalHandle)
             run=$(printf '%s' "$show" | handle_de runId)
-            outro=""
-            # Terminal reaproveitado: algum dispatch não encerrado do mesmo run ainda o usa.
-            if [ -n "$h" ] && [ -n "$run" ]; then
-                # Cada linha do worker-list começa com dispatchId, dispatchStatus e agentTerminalHandle antes do primeiro objeto aninhado.
-                outro=$(orca orchestration worker-list --run "$run" --json 2>/dev/null | tr '{' '\n' | grep -F "\"$h\"" \
-                    | grep -vE '"dispatchStatus": *"(completed|failed|cancelled|abandoned)"' | grep -oE '"dispatchId": *"[^"]*"' | cut -d'"' -f4 | grep -vxF "$d" | head -1)
+            outro="?"
+            # Terminal reaproveitado: algum dispatch não encerrado do mesmo run ainda o usa. Ilegível → "?" (não fecha).
+            if [ -n "$h" ] && [ -n "$run" ] && [ -n "$py" ]; then
+                outro=$(orca orchestration worker-list --run "$run" --json 2>/dev/null | ORCA_H="$h" ORCA_D="$d" "$py" -I -c '
+import json, os, sys
+try: ws = json.JSONDecoder().raw_decode(sys.stdin.read().lstrip())[0]["result"]["workers"]
+except Exception: print("?"); sys.exit()
+fim = ("completed", "failed", "cancelled", "abandoned")
+print(next((w["dispatchId"] for w in ws if w.get("agentTerminalHandle") == os.environ["ORCA_H"]
+            and w.get("dispatchId") != os.environ["ORCA_D"] and w.get("dispatchStatus") not in fim), ""))')
             fi
             if [ "$motivo" = external_terminal ] && [ -n "$h" ] && [ -f "$reg/$h" ] && [ -z "$outro" ] && orca terminal close --terminal "$h" --json >/dev/null 2>&1; then
                 rm -f "$reg/$h"; echo "$d: aba $h fechada"
+            elif [ "$outro" = "?" ]; then
+                echo "$d: retido; não deu para conferir se o terminal ${h:-?} serve a outro dispatch, aba mantida"
             elif [ -n "$outro" ]; then
                 echo "$d: retido; terminal ${h:-?} ainda serve ao dispatch $outro, aba mantida"
             else
