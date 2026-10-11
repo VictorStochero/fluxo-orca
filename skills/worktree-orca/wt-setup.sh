@@ -115,6 +115,10 @@ if [ $stack = laravel ] && [ -f "$raiz/.env" ]; then
     # Redis e cache compartilhados não misturam chaves entre worktrees.
     set_env "$raiz/.env" REDIS_PREFIX "${banco}_"
     set_env "$raiz/.env" CACHE_PREFIX "${banco}_cache_"
+    if [ -f "$raiz/.env.testing" ]; then
+        set_env "$raiz/.env.testing" REDIS_PREFIX "${banco}_test_"
+        set_env "$raiz/.env.testing" CACHE_PREFIX "${banco}_test_cache_"
+    fi
 fi
 for f in $WT_COPIAR; do
     [ -f "$principal/$f" ] && { mkdir -p "$(dirname "$raiz/$f")"; cp "$principal/$f" "$raiz/$f"; }
@@ -206,8 +210,14 @@ if [ $stack = laravel ]; then
         [ -f boost.json ] || printf '{"agents":["claude_code"]}' > boost.json
         criou_conf=0
         [ -f config/boost.php ] || { printf "<?php\n\nreturn ['enforce_tests' => true];\n" > config/boost.php; criou_conf=1; }
+        sujos_antes="$(git diff --name-only)"
         artisan boost:install --guidelines --skills --no-interaction || echo "AVISO: boost:install falhou." >&2
         [ $criou_conf = 1 ] && rm -f config/boost.php
+        # Arquivo versionado que o Boost regravou (AGENTS.md/CLAUDE.md customizados, boost.json com outro fim de linha)
+        # volta ao do projeto: o worktree não pode divergir do que o repo versiona.
+        for f in $(git diff --name-only); do
+            printf '%s\n' "$sujos_antes" | grep -qxF "$f" || git checkout -q -- "$f"
+        done
     fi
 else
     [ -n "${WT_MIGRAR:-}" ] && run bash -c "$WT_MIGRAR"
