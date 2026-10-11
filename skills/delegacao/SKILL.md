@@ -1,6 +1,6 @@
 ---
 name: delegacao
-description: Use antes de despachar qualquer agente (escritor, revisor, levantamento) ou provisionar worktree para tarefa — despacho via Orca orchestration, modelos por papel, ordem de consumo de cota, regras de dispatch, processo tarefa = worktree = worker = PR, gate de revisão e merge.
+description: Use antes de despachar qualquer agente (escritor, revisor, levantamento) ou provisionar worktree para tarefa — despacho via Orca orchestration, modelos por papel, escolha do escritor pela cota que mais sobra, regras de dispatch, processo tarefa = worktree = worker = PR, gate de revisão e merge.
 ---
 
 # Delegação — via Orca orchestration
@@ -37,7 +37,7 @@ bash ~/.cache/orca-espera.sh --run <run_id>     # Bash com run_in_background; ag
 
 - **Orquestrador é a sessão principal**, não um agente à parte. Mudança pequena e localizada (um arquivo, poucas linhas, sem decisão de arquitetura) ela faz direto, roda os testes, e o revisor continua obrigatório antes do merge; etapa com volume ou frentes paralelas vão para escritor.
 - **Papéis = agentes do plugin `fluxo-orca`** (configuração, não persona): `fluxo-orca:escritor` (Sonnet), `fluxo-orca:revisor` e `fluxo-orca:verificador` (Opus, sem Edit/Write). Explorador = `Explore` no Agent tool. No Orca: `orca terminal create --worktree path:<wt> --title <papel> --command "claude --agent fluxo-orca:<papel> [--settings ~/.claude/agents/somente-leitura.json]"` (o settings vai nos papéis só leitura) e então `worker-start --terminal <handle> --worktree path:<wt> --spec ...`.
-- **Conta Claude secundária** (`~/.claude-team`, se existir): mesmo caminho por terminal, com a conta no comando — `orca terminal create --worktree path:<wt> --shell git-bash --title <papel>-team --command "CLAUDE_CONFIG_DIR=~/.claude-team claude --agent fluxo-orca:<papel> --model <id> [--settings ...]"` (Linux/macOS: sem `--shell`) e `worker-start --terminal <handle>`. `--agent claude` no `worker-start` sempre abre a conta principal. Qual conta pega a etapa sai do `limites.sh`: a secundária vem antes da principal na ordem de consumo.
+- **Conta Claude secundária** (`~/.claude-team`, se existir): mesmo caminho por terminal, com a conta no comando — `orca terminal create --worktree path:<wt> --shell git-bash --title <papel>-team --command "CLAUDE_CONFIG_DIR=~/.claude-team claude --agent fluxo-orca:<papel> --model <id> [--settings ...]"` (Linux/macOS: sem `--shell`) e `worker-start --terminal <handle>`. `--agent claude` no `worker-start` sempre abre a conta principal. Qual conta pega a etapa sai do `limites.sh --escritor` (regra em "Cota").
 - **Handoff por arquivo em `~/.cache/handoff/<tarefa>/`**: `mapa.md` (explorador → escritor), `revisao.md` (sessão principal → revisor: objetivo, critério, diff, interfaces), `afirmacoes.md` → verificador; saídas `veredito.md`, `verificacao.md`. Nada colado em prompt que um arquivo resolva.
 - **Escalar em vez de insistir**: etapa que falha duas vezes com Sonnet → Opus na terceira ou volta ao usuário.
 - **Verificação comum é reexecutar teste na sessão principal**, sem agente; o `verificador` entra só em auditoria ou afirmação de alto risco.
@@ -46,7 +46,11 @@ bash ~/.cache/orca-espera.sh --run <run_id>     # Bash com run_in_background; ag
 
 ## Cota
 - **Segunda opinião no agy**: Gemini primeiro (limite folgado); Claude/GPT no agy tem limite baixo — só pontual.
-- **Escritores Claude**: conta secundária antes da principal; a principal fica para coordenação e para o gate Opus.
+- **Escritor = quem tem mais limite sobrando, medido na hora de cada designação** (não ordem fixa): `bash ~/.cache/limites.sh --escritor` imprime `escritor: <team|pessoal|codex> (<folga>% livre)`, escolhendo entre Sonnet na conta team, Sonnet na conta pessoal e Codex pelo pior entre janela curta e semana; candidato ausente ou acima de 80% fica de fora. A principal coordena e faz o gate Opus; entra como escritor só quando tiver mais folga que as outras. Onda com várias frentes: medir antes de cada `worker-start`, a folga muda.
+  - **team** → `orca terminal create --worktree path:<wt> --shell git-bash --title escritor-team --command "CLAUDE_CONFIG_DIR=~/.claude-team claude --agent fluxo-orca:escritor --model claude-sonnet-5-5"` e `worker-start --terminal <handle> --worktree path:<wt> --spec ...`.
+  - **pessoal** → `worker-start --agent claude --model claude-sonnet-5-5 --worktree path:<wt> --spec ...`.
+  - **codex** → `worker-start --agent codex --model gpt-6.1-sol --worktree path:<wt> --spec ...`.
+  - Pasta nova na conta team pede confiança no primeiro uso (`hasTrustDialogAccepted` em `~/.claude-team/.claude.json`); sem ela o despacho falha em `agent_readiness`.
 - **Medir com `bash ~/.cache/limites.sh`** (skill `limites-cota`; exit 3 se algum passar de 80%) antes de cada onda; fornecedor acima de 80% sai da vez.
 - Revisão obrigatória exige Opus 5.5, sem aprovação por modelo menor. Um escritor por tarefa, que escreve E roda os testes até commitar.
 
