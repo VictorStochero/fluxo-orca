@@ -50,6 +50,7 @@ bash ~/.cache/orca-espera.sh --run <run_id>     # Bash com run_in_background; ag
   - **team** → `orca terminal create --worktree path:<wt> --shell git-bash --title escritor-team --command "CLAUDE_CONFIG_DIR=~/.claude-team claude --agent fluxo-orca:escritor --model claude-sonnet-5-5"` e `worker-start --terminal <handle> --worktree path:<wt> --spec ...`.
   - **pessoal** → `worker-start --agent claude --model claude-sonnet-5-5 --worktree path:<wt> --spec ...`.
   - **codex** → `worker-start --agent codex --model gpt-6.1-sol --worktree path:<wt> --spec ...`.
+    - Se o recibo vier com `stage: turn_start_unobserved`, conferir com `orca terminal read --terminal <handle> --screen --json`. Se o spec estiver parado no campo de entrada do agente, enviar apenas Enter com `orca terminal send --terminal <handle> --enter` e conferir a leitura novamente: o Orca cola o prompt e o Enter pode se perder; não reenviar o spec nem abrir outro worker.
   - Pasta nova na conta team pede confiança no primeiro uso (`hasTrustDialogAccepted` em `~/.claude-team/.claude.json`); sem ela o despacho falha em `agent_readiness`.
 - **Medir com `bash ~/.cache/limites.sh`** (skill `limites-cota`; exit 3 se algum passar de 80%) antes de cada onda; fornecedor acima de 80% sai da vez.
 - Revisão obrigatória exige Opus 5.5, sem aprovação por modelo menor. Um escritor por tarefa, que escreve E roda os testes até commitar.

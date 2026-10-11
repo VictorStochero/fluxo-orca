@@ -37,3 +37,11 @@ ok   teto=1: execuções não se sobrepõem e as vagas foram liberadas
 ok   órfão: executor encerrado antes de liberar a vaga
 TUDO OK
 ```
+
+## Documentação e divergências
+
+- Item 8: os cinco textos indicados exigem `wait-for-setup`, confirmação de sucesso antes de tocar banco e `ask` com a saída quando o setup falha, sem refazer migrations por conta própria.
+- Extra: o destino Codex orienta ler o terminal em `turn_start_unobserved` e enviar somente Enter quando o spec estiver parado no campo de entrada; sintaxe conferida no help da CLI instalada.
+- Ampliação autorizada: ajuste mínimo no `gs-teste.sh` para classificar executor explícito em Laravel e usar a fila por porta/container.
+- Alteração opcional no `wt-setup.sh` não realizada pelos motivos descritos acima; `skills/delegacao/orca-espera.sh` permaneceu intocado.
+- Shellcheck indisponível; validações aplicáveis foram sintaxe Bash, diff e a prova completa.
