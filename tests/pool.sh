@@ -137,6 +137,13 @@ grep -qx 'escritor: nenhum (todos acima de 80% ou ausentes)' "$tmp/saida" && ok 
 export POOL_PESSOAL_USO=30
 printf 'pessoal=abc\n' > "$HOME/.claude/agentes.conf"
 confere_rc 2 'seletor propaga erro do pool' seletor
+confere_rc 0 'tabela continua com erro do pool e cota normal' bash "$tmp/seletor/limites.sh"
+grep -q 'pessoal: sessão 30% usado' "$tmp/saida" && ok 'tabela mantém cotas legíveis' || ruim 'tabela perdeu cotas'
+grep -q 'AVISO:.*pool' "$tmp/saida" && ok 'tabela avisa erro do pool' || ruim 'tabela não avisou erro do pool'
+export POOL_PESSOAL_USO=90
+confere_rc 3 'tabela preserva alerta acima de 80% com erro do pool' bash "$tmp/seletor/limites.sh"
+grep -q 'pessoal: sessão 90% usado' "$tmp/saida" && ok 'tabela mostra cota acima de 80%' || ruim 'tabela perdeu cota alta'
+export POOL_PESSOAL_USO=30
 rm "$HOME/.claude/agentes.conf"
 confere_rc 0 'hook instala scripts em HOME temporário' env CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh"
 cmp -s "$raiz/skills/limites-cota/vaga-agente.sh" "$HOME/.cache/vaga-agente.sh" \

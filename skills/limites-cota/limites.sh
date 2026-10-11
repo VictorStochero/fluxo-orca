@@ -38,7 +38,11 @@ SOLO=0; [ "${1:-}" = "--escritor" ] && SOLO=1
 [ $SOLO = 0 ] && cat "$tmp/todas"
 
 bash "$(dirname "$0")/vaga-agente.sh" livres > "$tmp/pool"
-rc=$?; [ "$rc" = 0 ] || exit "$rc"
+rc=$?
+if [ "$rc" != 0 ]; then
+  [ $SOLO = 1 ] && exit "$rc"
+  echo "AVISO: erro do pool (status $rc); seleção de escritor indisponível" >&2
+else
 # escritor: maior folga entre candidatos com vaga; acima de 80% fica de fora. Empate: team, pessoal, codex.
 awk '
   FNR == NR { split($2, v, "/"); livre[$1] = (v[2] == 0 || v[1] > 0); next }
@@ -56,6 +60,7 @@ awk '
         else if (q > 0 && !tem_vaga) { print "escritor: nenhum (pool cheio)"; exit 75 }
         else print "escritor: nenhum (todos acima de 80% ou ausentes)" }' "$tmp/pool" "$tmp/todas"
 rc=$?
+fi
 [ $SOLO = 1 ] && exit "$rc"
 # alerta: qualquer percentual de uso > 80 (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi/codex: "5h N%", codex também "semana N%")
 awk '
