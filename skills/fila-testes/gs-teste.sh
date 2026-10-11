@@ -11,7 +11,7 @@
 #   Rust (Cargo.toml): cargo test; Go (go.mod): go test (sem argumentos, rode ./...)
 # Laravel: --parallel vira --processes=8 e, no fim, apaga os <banco>_test_N do MySQL/MariaDB do host.
 # Fila: Laravel no host = uma por porta de banco (3306 usa gs-teste.lockN, outras gs-teste-<porta>.lockN);
-# container = gs-teste-ctr.lockN; Python/JS = gs-teste-geral.lockN. GS_TESTE_VAGAS e GS_TESTE_PROCESSOS sobrescrevem 2 e 8.
+# container (executor ddev/sail/docker/podman) = gs-teste-ctr.lockN; qualquer outro executor Laravel é host; Python/JS = gs-teste-geral.lockN. GS_TESTE_VAGAS e GS_TESTE_PROCESSOS sobrescrevem 2 e 8.
 # Teto global: além da vaga da fila, no máximo GS_TESTE_TETO (3) runs ao mesmo tempo na máquina (gs-teste-teto.lockN).
 # Espera vaga até 5 min; sem vaga, sai com 75 (rode de novo). Imposto pelo hook fila-testes.sh do plugin fluxo-orca.
 eu="$(git rev-parse --show-toplevel 2>/dev/null || pwd) [$DB_DATABASE]"
@@ -90,7 +90,7 @@ executor=${runner%% *}
 [ -z "$executor" ] && executor=${args[0]:-}
 if [ $stack != laravel ]; then
     trava=$HOME/.cache/gs-teste-geral.lock
-elif [ "$executor" != php ]; then
+elif case "${executor##*/}" in ddev|sail|docker|podman) true ;; *) false ;; esac; then
     trava=$HOME/.cache/gs-teste-ctr.lock
 elif [ "$porta" = 3306 ]; then
     trava=$HOME/.cache/gs-teste.lock

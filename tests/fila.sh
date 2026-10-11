@@ -86,6 +86,12 @@ if [ "$rc" = 0 ] && [ "$(cat "$HOME/executor.log")" = 'artisan db:seed --env=tes
 else
     ruim "executor explícito: fila de container ou argumentos incorretos (rc=$rc)"
 fi
+# Executor de host que não é php (vendor/bin/pest etc.) usa a fila da porta, não a de container.
+cp "$tmp/bin/php" "$tmp/bin/pest"; chmod +x "$tmp/bin/pest"
+printf 'DB_PORT=3306\n' > "$tmp/laravel/.env.testing"
+(cd "$tmp/laravel" && PATH="$tmp/bin:$PATH" FILA_ESPERADA=gs-teste bash "$raiz/skills/fila-testes/gs-teste.sh" -- pest --env=testing)
+rc=$?
+if [ "$rc" = 0 ]; then ok "executor explícito: pest no host usa a fila da porta"; else ruim "executor explícito: pest no host caiu na fila de container (rc=$rc)"; fi
 cat > "$tmp/rodar.sh" <<'E'
 echo "$(date +%s.%N) ini" >> "$2"; bash "$1/skills/fila-testes/gs-teste.sh" -- sleep 3; echo "$(date +%s.%N) fim" >> "$2"
 E
