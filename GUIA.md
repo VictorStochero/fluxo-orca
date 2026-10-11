@@ -67,7 +67,7 @@ claude plugin install laravel-worktree@stochero          # só se houver projeto
 claude plugin marketplace add DietrichGebert/ponytail
 claude plugin install ponytail@ponytail
 
-claude plugin install code-review-anthropics@anthropic-plugin-directory
+claude plugin install code-review@anthropic-plugin-directory
 claude plugin install code-simplifier@anthropic-plugin-directory
 claude plugin install playwright@anthropic-plugin-directory
 claude plugin install claude-md-management@anthropic-plugin-directory
@@ -92,10 +92,12 @@ Se as skills do Orca não aparecerem em `/skills`, ligar `~/.agents/skills/<skil
   "skipDangerousModePermissionPrompt": true,
   "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "0" },
   "model": "opus",
-  "attribution": false
+  "attribution": { "commit": "", "pr": "", "sessionUrl": false }
 }
 ```
 Perguntar sobre `bypassPermissions`: com ele, o Claude roda sem pedir permissão a cada comando e as travas ficam com os hooks do plugin e a lista `ask` (que **continua pedindo** para todo comando remoto). Sem ele, omitir `defaultMode` e `skipDangerousModePermissionPrompt`.
+
+Opcionais (perguntar): `"remoteControlAtStartup": true` e `"agentPushNotifEnabled": true` para acompanhar sessões e workers pelo celular; no Warp, `claude plugin marketplace add warpdotdev/claude-code-warp` e `claude plugin install warp@claude-code-warp`.
 
 **`~/.claude/CLAUDE.md`** — baixar o modelo e **mesclar** com o existente, mostrando o diff:
 ```bash
@@ -127,7 +129,7 @@ Só para o que o usuário instalou na fase 2. Os workers do Orca rodam esses CLI
    - **Kimi** — no `~/.kimi-code/config.toml`: `[[hooks]]` com `event = "PreToolUse"`, `command = "bash ~/.cache/guarda-externos.sh exit2"`, `timeout = 10`.
    - **Codex, fim do worker** — em `~/.codex/hooks.json`, um grupo novo em `Stop` (depois do que o Orca gravou): `{"hooks":[{"type":"command","command":"<fim-worker>","timeout":15}]}`, com `<fim-worker>` = `C:/Users/<u>/.cache/fim-worker-codex.cmd` no Windows ou `bash ~/.cache/fim-worker.sh` no Linux/macOS; confiança com `<evento>` = `stop`. Worker de Orca que encerra o turno sem `worker_done` recebe o comando de volta e continua (o Claude ganha o mesmo hook pelo plugin).
    - Conferir: `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "Rode exatamente: ssh -V"` tem de responder que o hook bloqueou (equivalente no agy e no Kimi).
-4. **Segunda conta Claude** (ex.: Team) para escritores: pasta `~/.claude-team` com links para `CLAUDE.md`, `settings.json`, `plugins`, `skills`, `agents` e `projects` de `~/.claude`; login pelo usuário com `! CLAUDE_CONFIG_DIR=~/.claude-team claude` e `/login`. O `limites.sh` passa a medir a linha `team`, e a skill `delegacao` diz como abrir worker nessa conta.
+4. **Segunda conta Claude** (ex.: Team) para escritores: pasta `~/.claude-team` com links para `CLAUDE.md`, `settings.json`, `plugins`, `skills`, `agents` e `projects` de `~/.claude`; login pelo usuário com `! CLAUDE_CONFIG_DIR=~/.claude-team claude` e `/login`. Atalho no `~/.bashrc` (o `--settings` garante o mesmo settings mesmo se o link quebrar): `claude-team() { CLAUDE_CONFIG_DIR="$HOME/.claude-team" claude --settings "$HOME/.claude/settings.json" "$@"; }`. O `limites.sh` passa a medir a linha `team`, e a skill `delegacao` diz como abrir worker nessa conta.
 
 ## Fase 5 — Perfil da máquina e boards
 1. **`~/.claude/ambiente.md`** — perfil com o que a fase 1 achou, no formato da skill `ambiente-local` (sistema, shell, quem serve os sites, bancos com porta e origem, contêiner, runtimes, raiz dos projetos e a tabela de projetos com stack, serviço, banco, multi-tenant, board e base). As skills leem este arquivo; mantê-lo verdadeiro.
@@ -150,7 +152,7 @@ Para cada projeto escolhido:
 
 ## Fase 7 — Verificação
 Reabrir o Claude Code e conferir, relatando cada item (ok / pendente + motivo):
-1. `claude plugin list`: `fluxo-orca`, `ponytail`, `code-review-anthropics`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp` (+ `laravel-worktree` se houver Laravel) habilitados, **nenhum `superpowers`**; `/skills` mostra `delegacao`, `fila-testes`, `worktree-orca`, `stack-*`, `orca-cli`, `orchestration`.
+1. `claude plugin list`: `fluxo-orca`, `ponytail`, `code-review`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp` (+ `laravel-worktree` se houver Laravel) habilitados, **nenhum `superpowers`**; `/skills` mostra `delegacao`, `fila-testes`, `worktree-orca`, `stack-*`, `orca-cli`, `orchestration`.
 2. `~/.cache/gs-teste.sh`, `~/.cache/wt-setup.sh`, `~/.cache/wt-archive.sh`, `~/.cache/wt-lib.sh`, `~/.cache/limites.sh`, `~/.cache/orca-espera.sh`, `~/.cache/fim-worker.sh` e `~/.claude/agents/somente-leitura.json` existem (hook de SessionStart).
 3. Num projeto, o comando de teste direto (`php artisan test`, `pytest`, `pnpm test`…) é **bloqueado** pelo hook com a mensagem da fila; `bash ~/.cache/gs-teste.sh <listagem>` passa.
 4. Um `sed -i` qualquer é bloqueado pelo hook `bloqueia-bulk`.
