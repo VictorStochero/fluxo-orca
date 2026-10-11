@@ -93,6 +93,8 @@ claude plugin install claude-md-management@anthropic-plugin-directory
 claude plugin marketplace add anthropics/claude-plugins-official
 claude plugin install chrome-devtools-mcp@claude-plugins-official
 ```
+> ⚠️ **Não instalar o plugin `superpowers`** (nem `superpowers@superpowers-dev`, nem `superpowers@anthropic-plugin-directory`). O `fluxo-orca` já traz as 6 skills dele que o fluxo usa, adaptadas: as originais mandam executar plano por `subagent-driven-development` e criar worktree por `using-git-worktrees`, o que conflita com a delegação pelo Orca (o hook `despacho-orca` bloqueia esse caminho) e duplica as skills. Se já estiver instalado: `claude plugin disable superpowers@<marketplace>` (ver o nome em `claude plugin list`).
+
 Se as skills do Orca não aparecerem em `/skills`, ligar `~/.agents/skills/<skill>` em `~/.claude/skills/<skill>` (symlink).
 
 O `fluxo-orca` traz:
@@ -153,7 +155,7 @@ Worktree novo: `/worktree <flag> <contexto>` (plugin `laravel-worktree`). Ajuste
 
 ## 11. Verificação
 Reabrir o Claude Code e conferir, relatando cada item:
-1. `claude plugin list` mostra `fluxo-orca`, `laravel-worktree`, `ponytail`, `code-review-anthropics`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp`; `/skills` mostra `delegacao`, `fila-testes`, `limites-cota`, `orca-cli`, `orchestration`.
+1. `claude plugin list` mostra `fluxo-orca`, `laravel-worktree`, `ponytail`, `code-review-anthropics`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp`, e **nenhum `superpowers` habilitado**; `/skills` mostra `delegacao`, `fila-testes`, `limites-cota`, `orca-cli`, `orchestration`.
 2. `ls ~/.cache/gs-teste.sh ~/.cache/limites.sh ~/.claude/agents/somente-leitura.json` existe (criados pelo hook de SessionStart).
 3. Num projeto Laravel, `php artisan test` é **bloqueado** pelo hook com a mensagem da fila; `bash ~/.cache/gs-teste.sh --list-tests` passa.
 4. Um `sed -i` qualquer é bloqueado pelo hook `bloqueia-bulk`.

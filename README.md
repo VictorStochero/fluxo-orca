@@ -22,4 +22,4 @@ Plugin do Claude Code com um fluxo de trabalho Laravel + Orca em pt-BR, para Win
 
 ## Licença
 
-MIT © Victor Stochero. As skills `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion` e `receiving-code-review` vêm do [obra/superpowers](https://github.com/obra/superpowers) (MIT © Jesse Vincent, ver `skills/LICENSE-superpowers`), com pequenas adaptações.
+MIT © Victor Stochero. As skills `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion` e `receiving-code-review` vêm do [obra/superpowers](https://github.com/obra/superpowers) (MIT © Jesse Vincent, ver `skills/LICENSE-superpowers`), com pequenas adaptações para a delegação pelo Orca. **Não use junto com o plugin `superpowers`**: as skills ficam duplicadas e as originais conflitam com o fluxo.
