@@ -1,25 +1,32 @@
 # fluxo-orca
 
-Plugin do Claude Code com um fluxo de trabalho Laravel + Orca em pt-BR, para Windows + Laravel Herd: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa), todo diff passa por um revisor Opus antes do merge e os testes PHP rodam por uma fila única da máquina. Hooks impõem as regras.
+Plugin do Claude Code (pt-BR) com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), todo diff passa por um revisor Opus antes do merge e os testes rodam por uma fila única da máquina. Hooks impõem as regras.
+
+## Instalar
+
+Instale o Claude Code e mande para ele:
+
+> Siga o instalador https://github.com/VictorStochero/fluxo-orca/blob/main/GUIA.md e configure esta máquina para os meus projetos.
+
+O Claude diagnostica o sistema, as ferramentas e os projetos, instala o que conseguir, pede para você rodar o que exigir privilégio ou login e configura tudo pela sua stack: plugins, `settings.json`, CLAUDE.md global, perfil da máquina, boards, Orca por projeto. Só o plugin:
 
 ```
 /plugin marketplace add VictorStochero/claude-plugins
 /plugin install fluxo-orca@stochero
 ```
 
-**Instalação completa** (pré-requisitos, git, gh, SSH, shims do Git Bash, plugins, `settings.json`, CLAUDE.md global, boards, verificação): [`GUIA.md`](GUIA.md). Para configurar com o Claude, mande para ele:
-
-> Siga o guia https://github.com/VictorStochero/fluxo-orca/blob/main/GUIA.md e configure esta máquina.
-
 ## Conteúdo
 
 | Tipo | Itens |
 |---|---|
-| Skills | `delegacao`, `ambiente-local`, `board-github`, `fila-testes`, `limites-cota`, `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `receiving-code-review` |
+| Fluxo | `delegacao`, `board-github`, `limites-cota`, `fila-testes`, `worktree-orca`, `ambiente-local` (Herd, Laragon, FlyEnv, Lerd, DDEV/Sail/compose com Docker ou Podman, nativo) |
+| Stacks | `stack-laravel`, `stack-python`, `stack-js` |
+| Metodologia | `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `receiving-code-review` |
 | Agentes | `escritor` (Sonnet), `revisor` e `verificador` (Opus, só leitura) |
 | Hooks | `fila-testes`, `bloqueia-bulk`, `despacho-orca`, `guia-laravel`, `instala-scripts` |
+| Scripts (em `~/.cache`) | `gs-teste.sh` (fila), `wt-setup.sh`/`wt-archive.sh`/`wt-lib.sh` (worktree pelo Orca), `limites.sh` (cota) |
 | Extras | `CLAUDE.global.md` (modelo de `~/.claude/CLAUDE.md`), `somente-leitura.json` |
 
 ## Licença
 
-MIT © Victor Stochero. As skills `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion` e `receiving-code-review` vêm do [obra/superpowers](https://github.com/obra/superpowers) (MIT © Jesse Vincent, ver `skills/LICENSE-superpowers`), com pequenas adaptações para a delegação pelo Orca. **Não use junto com o plugin `superpowers`**: as skills ficam duplicadas e as originais conflitam com o fluxo.
+MIT © Victor Stochero. As skills de metodologia vêm do [obra/superpowers](https://github.com/obra/superpowers) (MIT © Jesse Vincent, ver `skills/LICENSE-superpowers`), com pequenas adaptações para a delegação pelo Orca. **Não use junto com o plugin `superpowers`**: as skills ficam duplicadas e as originais conflitam com o fluxo.

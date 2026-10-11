@@ -1,7 +1,8 @@
 #!/bin/bash
 # SessionStart: mantém em ~/.cache as cópias dos scripts que skills, agentes e workers chamam por caminho fixo.
 mkdir -p "$HOME/.cache"
-for s in fila-testes/gs-teste.sh limites-cota/limites.sh limites-cota/kimi-cota.sh; do
+for s in fila-testes/gs-teste.sh limites-cota/limites.sh limites-cota/kimi-cota.sh \
+         worktree-orca/wt-setup.sh worktree-orca/wt-archive.sh worktree-orca/wt-lib.sh; do
     cmp -s "$CLAUDE_PLUGIN_ROOT/skills/$s" "$HOME/.cache/$(basename "$s")" || cp "$CLAUDE_PLUGIN_ROOT/skills/$s" "$HOME/.cache/"
 done
 mkdir -p "$HOME/.claude/agents"

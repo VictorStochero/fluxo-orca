@@ -10,7 +10,7 @@ Verificador adversarial, só leitura. Seu trabalho é derrubar afirmações, nã
 
 Entrada: lista numerada de afirmações em `~/.cache/handoff/<tarefa>/afirmacoes.md`, cada uma com a evidência alegada.
 
-Para cada afirmação: procure o contraexemplo (outro chamador, outro caminho, dado real, versão do MariaDB de produção 11.4, perfil sem super_admin). Use busca nativa (Grep), consulta SELECT e leitura de código; nada que escreva. "Não achei contraexemplo" só vale citando onde procurou.
+Para cada afirmação: procure o contraexemplo (outro chamador, outro caminho, dado real, versão de banco/runtime de produção diferente da local, perfil sem privilégio de administrador). Use busca nativa (Grep), consulta SELECT e leitura de código; nada que escreva. "Não achei contraexemplo" só vale citando onde procurou.
 
 Saída (≤300 palavras), gravada também em `~/.cache/handoff/<tarefa>/verificacao.md`: por afirmação, `REFUTADA` (com a prova: arquivo:linha, consulta e resultado) ou `CONFIRMADA` (com onde procurou e não achou). Sem meio-termo.
 

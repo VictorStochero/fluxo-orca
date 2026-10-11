@@ -1,33 +1,56 @@
 ---
 name: ambiente-local
-description: Use ao rodar testes, montar/consertar worktree, mexer em banco local, Herd, MariaDB, composer/npm/boost:install, ou validar tela no navegador (Orca/Playwright) numa máquina Windows + Herd — fila de testes, bancos por worktree, armadilhas conhecidas.
+description: Use ao rodar comandos de projeto, montar/consertar worktree, mexer em banco local, servir site, instalar runtime ou validar tela no navegador — lê o perfil da máquina em ~/.claude/ambiente.md e a referência da ferramenta local (Herd, Laragon, FlyEnv, Lerd, DDEV/Sail/compose com Docker ou Podman, Linux nativo, macOS).
 ---
 
-# Ambiente local — Windows 11 + Herd Pro
+# Ambiente local
 
-- Código em `%USERPROFILE%\Herd\<repo>` (Git Bash: `~/Herd/<repo>`). Worktrees são pastas irmãs `<repo>-<flag>-<contexto>`. Subpasta de `Herd` vira `https://<pasta>.test`; o setup roda `herd secure`.
-- **PHP, Composer, MariaDB, Redis, Reverb e Mailpit vêm do Herd** — `php artisan`, `composer`, `npm`, `php vendor/bin/pint` sem prefixo. Se a versão do MariaDB de produção for diferente da local, nada pode depender de comportamento exclusivo da versão local.
-- **MariaDB do Herd com `root` sem senha** em `127.0.0.1:3306`. Um projeto que precise de instância própria usa outra porta (`DB_PORT` no `.env`/`.env.testing`) e tem fila de testes própria. Bancos com o nome da pasta: `<pasta com _>` (dev) e `<pasta com _>_test`. **Nunca** apontar a suíte para banco compartilhado. Multi-tenant: `TENANCY_DB_PREFIX` exclusivo de teste.
-- Bash é **Git Bash**. `php.bat` não roda no Git Bash: criar shims `~/bin/php` e `~/bin/composer`. `herd` no Git Bash é `herd.bat`. Symlink sem administrador exige o Modo de Desenvolvedor do Windows.
-- **Orca**: CLI `orca` no PATH (ou `ORCA_CLI_COMMAND`).
+**Primeiro: ler `~/.claude/ambiente.md`** (perfil da máquina, escrito na instalação pelo GUIA do plugin). Ele diz o sistema, o shell, quem serve os sites, onde está cada banco, os runtimes e os projetos com a stack de cada um. Sem o arquivo: montar pelo formato abaixo, perguntando ao usuário o que não der para detectar, e gravar.
 
-## Testes
-- Sempre pela fila da máquina: skill `fila-testes` (`bash ~/.cache/gs-teste.sh <args>`).
-- Worktree novo: plugin `laravel-worktree` (`/worktree <flag> <contexto>`) — banco e `.env.testing` próprios.
+Depois, a referência da ferramenta em uso (nesta pasta):
 
-## Armadilhas
-- **Triggers de schema dump com `DEFINER='root'@'%'`**: o usuário `root@'%'` precisa existir (senha aleatória, `ACCOUNT LOCK`). Herd reinstalado → recriar, senão o seed quebra com `1449 ... definer does not exist`.
-- **Cache do MariaDB**: o Herd lê só `~/.config/herd/bin/services/mariadb/<versão>/my.ini`. Em schema grande, subir `table_definition_cache=20000`, `table_open_cache=20000`, `innodb_buffer_pool_size=4G`, `innodb_flush_log_at_trx_commit=2`, `innodb_log_file_size=512M`. Versão nova do MariaDB cria pasta sem o arquivo — repor e `herd services:stop|start <id>`. Sem isso `information_schema.triggers` leva minutos. Filtrar por `event_object_schema`, nunca `trigger_schema`.
-- **Schema dump é carregado pelo cliente `mariadb`**: script não interativo exporta a pasta `bin` do MariaDB do Herd.
-- **`boost:install` tem timeout de 60 s no `--list-tests`**: em suíte grande, `config/boost.php` temporário com `return ['enforce_tests' => true];`. Roda **sem `--mcp`**; o `.mcp.json` aponta para o `php.exe` do Herd (`~/.config/herd/bin/php84/php.exe artisan boost:mcp`). Boost só existe com `.env` local.
-- **A tool `Grep` respeita o `.gitignore`**: em pasta ignorada (ex.: `docs/superpowers/`) usar `grep -r`.
-- **`composer install`** leva minutos com `vendor/` vazio: foreground, `timeout: 600000`, sem matar. Repo privado: `COMPOSER_AUTH="{\"github-oauth\":{\"github.com\":\"$(gh auth token)\"}}" composer install`.
-- **Setup não pode sujar o git**: `npm ci`; conferir `git status` após `boost:install`; o que for só local vai para `.git/info/exclude`.
-- **Rector**: no worktree de tarefa só em arquivos explícitos (lotes de ~150); completo só na integração.
+| Ferramenta | Arquivo |
+|---|---|
+| Laravel Herd (Windows/macOS) | `ferramentas/herd.md` |
+| Laragon (Windows) | `ferramentas/laragon.md` |
+| FlyEnv (Windows/macOS/Linux) | `ferramentas/flyenv.md` |
+| Lerd (Linux/macOS, Podman) | `ferramentas/lerd.md` |
+| DDEV, Sail, docker/podman compose | `ferramentas/containers.md` |
+| Linux (apt/dnf) ou macOS (brew) sem gerenciador | `ferramentas/nativo.md` |
+| Versões de PHP, Python e Node (pyenv, uv, nvm, fnm, volta) | `ferramentas/runtimes.md` |
+
+Combinações são comuns (ex.: Herd serve o PHP e Laragon o MySQL): o perfil separa **quem serve o site** de **onde está o banco**.
+
+## Regras de qualquer ambiente
+- **Worktrees** são pastas irmãs `<repo>-<flag>-<contexto>`, criadas pelo Orca com `wt-setup.sh` (skill `worktree-orca`); banco próprio por worktree e por suíte de teste. **Nunca** apontar a suíte para banco compartilhado.
+- **Testes sempre pela fila** (skill `fila-testes`).
+- Versão de banco/runtime local diferente da produção: nada pode depender de comportamento exclusivo da versão local.
+- **Setup não pode sujar o git**: conferir `git status` depois de instalar/gerar; o que for só local vai para `.git/info/exclude`.
+- **A tool `Grep` respeita o `.gitignore`**: em pasta ignorada usar `grep -r`.
+- Comando longo (instalação, suíte): foreground com timeout longo, sem matar; o que passar de 10 min vai para background e espera a notificação.
+- Windows: os hooks e scripts do plugin rodam em **Git Bash**; `.bat`/`.cmd` não rodam direto no Git Bash (shims em `~/bin`, ver a ferramenta).
 
 ## Validação de UI
-- **Toda mudança de UI é validada no browser, com perfil real, nunca `super_admin`.**
+- **Toda mudança de UI é validada no browser, com perfil real, nunca administrador.**
 - **Comparação visual com a branch base**: mesmas telas, perfil e largura na base e no worktree; cada diferença classificada como esperada ou regressão.
-- **Padrão: navegador embutido do Orca, um por worktree.** Antes, invocar o skill `orca-cli` e ler `orca skills get orca-cli --reference references/browser.md`. Fluxo: `orca tab create --url https://<pasta>.test/login --json` → `snapshot --page <id>` → `fill`/`click --element @eN` → `wait` → `snapshot` de novo após navegar. **Sempre `--page <browserPageId>`** (sem ele vai para a aba do usuário).
-- **Fallback: Playwright MCP.** Chrome DevTools MCP só para trace, Lighthouse, heap. Nunca matar o navegador de outro agente. Em subagente: `take_screenshot` em vez de `take_snapshot` (a árvore do Filament derruba o agente).
+- **Padrão: navegador embutido do Orca, um por worktree.** Antes, invocar o skill `orca-cli` e ler `orca skills get orca-cli --reference references/browser.md`. Fluxo: `orca tab create --url <url do worktree> --json` → `snapshot --page <id>` → `fill`/`click --element @eN` → `wait` → `snapshot` de novo após navegar. **Sempre `--page <browserPageId>`** (sem ele vai para a aba do usuário).
+- **Fallback: Playwright MCP.** Chrome DevTools MCP só para trace, Lighthouse, heap. Nunca matar o navegador de outro agente. Em subagente: `take_screenshot` em vez de `take_snapshot` em telas com árvore enorme (Filament, grids).
 - Screenshot, trace e `.playwright-mcp/` vão para o worktree de quem gerou ou para o temporário, e não se commitam.
+
+## Formato de `~/.claude/ambiente.md`
+```markdown
+# Ambiente desta máquina
+- Sistema: Windows 11 | Ubuntu 24.04 | Fedora 41 | macOS 15
+- Shell dos hooks: Git Bash | bash | zsh
+- Pacotes: winget | apt | dnf | brew
+- Sites servidos por: Herd | Laragon | FlyEnv | Lerd | DDEV | Sail | compose | nativo
+- Bancos: MariaDB 11.8 em 127.0.0.1:3306 (Herd), root sem senha | Postgres 16 em 5432 (FlyEnv) | por projeto no container
+- Contêiner: Docker | Podman (rootless) | nenhum
+- Runtimes: PHP 8.4 (Herd) | Python 3.12 (uv) | Node 22 (fnm)
+- Raiz dos projetos: ~/Herd | C:/laragon/www | ~/code
+
+## Projetos
+| Projeto | Caminho | Stack | Serve | Banco | Multi-tenant | Board | Base |
+|---|---|---|---|---|---|---|---|
+| app | ~/Herd/app | Laravel | Herd | MariaDB 3306 | não | org/app #1 | develop |
+```
