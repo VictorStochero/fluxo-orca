@@ -69,6 +69,11 @@ done
 pool solta ctx_2
 mkdir -p "$HOME/.cache/agentes/team.lock1"
 confere_rc 75 'trava sem dispatch é preservada' pool pega team ctx_sem_dono
+confere_rc 0 'livres consulta trava sem dono' pool livres
+grep -Fq "$HOME/.cache/agentes/team.lock1" "$tmp/saida" && ok 'livres mostra caminho da trava sem dono' || ruim 'livres omite caminho da trava sem dono'
+grep -qx 'team 0/1' "$tmp/saida" && ok 'trava sem dono ocupa vaga' || ruim 'trava sem dono deixou de ocupar vaga'
+[ -d "$HOME/.cache/agentes/team.lock1" ] && [ ! -e "$HOME/.cache/agentes/team.lock1/dispatch" ] \
+    && ok 'livres preserva trava sem dono' || ruim 'livres alterou trava sem dono'
 rmdir "$HOME/.cache/agentes/team.lock1"
 confere_rc 0 'pessoal ilimitado: primeira reserva' pool pega pessoal ctx_p1
 confere_rc 0 'pessoal ilimitado: segunda reserva' pool pega pessoal ctx_p2

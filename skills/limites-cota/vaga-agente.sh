@@ -104,7 +104,10 @@ case "${1:-}" in
                 [ -d "$v" ] || continue
                 [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
                 recupera "$v"
-                [ -d "$v" ] && ocupadas=$((ocupadas + 1))
+                if [ -d "$v" ]; then
+                    ocupadas=$((ocupadas + 1))
+                    [ -n "$(cat "$v/dispatch" 2>/dev/null)" ] || printf 'AVISO: trava sem dono: %s (remoção manual)\n' "$v" >&2
+                fi
             done
             livres=$((total - ocupadas)); [ "$livres" -ge 0 ] || livres=0
             [ "$total" = 0 ] && livres=0
