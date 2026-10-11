@@ -135,7 +135,7 @@ Só para o que o usuário instalou na fase 2. Os workers do Orca rodam esses CLI
 
 ## Fase 6 — Por projeto
 Para cada projeto escolhido:
-1. **Orca**: `orca repo add --path <caminho>` e `orca repo set-base-ref --repo path:<caminho> --ref origin/<base>`. O usuário configura na tela do repo no Orca (sem CLI para isso): **setup script** `bash ~/.cache/wt-setup.sh` e **archive script** `bash ~/.cache/wt-archive.sh <caminho do projeto>` — passar os dois textos prontos para colar.
+1. **Orca**: `orca repo add --path <caminho>` e `orca repo set-base-ref --repo path:<caminho> --ref origin/<base>`. O usuário configura na tela do repo no Orca (sem CLI para isso), com o **mesmo texto em todos os repos** — passar os dois prontos para colar: Windows → setup `"%ProgramFiles%\Git\bin\bash.exe" "%USERPROFILE%\.cache\wt-setup.sh"` e archive `"%ProgramFiles%\Git\bin\bash.exe" "%USERPROFILE%\.cache\wt-archive.sh"`; Linux/macOS → `bash ~/.cache/wt-setup.sh` e `bash ~/.cache/wt-archive.sh`. Não usar `orca.yaml` fora do git para isso (skill `worktree-orca`).
 2. **`.orca/worktree.conf`** (no projeto; `.orca/` no `.git/info/exclude`) só com o que a detecção não acerta — opções na skill `worktree-orca`. Exemplos: `WT_SITES=herd` em Herd + Laragon; `WT_SEEDER=DemoSeeder`; `WT_MIGRAR="uv run alembic upgrade head"`; `GS_TESTE_RUNNER="docker compose exec -T web pytest"` para projeto em container.
 3. **Stack**:
    - Laravel: `laravel/boost` (`composer require laravel/boost --dev` se faltar — **perguntar**, muda dependência do projeto) e `php artisan boost:install --skills --no-interaction` (sem `--mcp`).

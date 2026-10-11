@@ -7,10 +7,15 @@ description: Use ao configurar um projeto no Orca (setup/archive de worktree), a
 
 Dois scripts genéricos, instalados em `~/.cache` pelo hook de SessionStart do plugin (com `wt-lib.sh`):
 
-| Orca > repo > | Comando |
-|---|---|
-| setup script | `bash ~/.cache/wt-setup.sh` |
-| archive script | `bash ~/.cache/wt-archive.sh <caminho do checkout principal>` |
+Os mesmos dois comandos em todo repo (o archive acha o principal por `ORCA_ROOT_PATH`); o que for do projeto vai no `.orca/worktree.conf`:
+
+| Orca > repo > | Windows (o Orca roda pelo `cmd.exe`) | Linux/macOS |
+|---|---|---|
+| setup script | `"%ProgramFiles%\Git\bin\bash.exe" "%USERPROFILE%\.cache\wt-setup.sh"` | `bash ~/.cache/wt-setup.sh` |
+| archive script | `"%ProgramFiles%\Git\bin\bash.exe" "%USERPROFILE%\.cache\wt-archive.sh"` | `bash ~/.cache/wt-archive.sh` |
+
+- Windows: `Git\bin\bash.exe` explícito — o `bash` que o `cmd` acha primeiro é o `Git\usr\bin\bash.exe` (sem as ferramentas do Git no PATH) ou o do WSL.
+- Configurar na tela do repo, não num `orca.yaml` local: o Orca lê o `scripts.setup` do `orca.yaml` **de dentro do worktree novo**, então o arquivo só vale versionado no repo (vai para a equipe toda); fora do git, só o archive o enxerga.
 
 Criar a tarefa: `orca orchestration worker-start --worktree new-child --name {repo}-{flag}-{contexto} --base-branch origin/<base> --setup run …` (skill `delegacao`).
 

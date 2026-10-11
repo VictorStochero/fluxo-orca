@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Archive genérico de worktree para o Orca (Orca > repo > archive script: bash ~/.cache/wt-archive.sh <pasta do principal>).
+# Archive genérico de worktree para o Orca (orca.yaml do repo ou Orca > repo > archive script: bash ~/.cache/wt-archive.sh).
 # A pasta pode já ter sido removida: identidade por ORCA_WORKTREE_PATH; banco pelo registro que o wt-setup.sh grava
 # em <.git comum>/wt-bancos/<pasta>; servidor de banco pelo .env do principal.
 # Remove <banco>, <banco>_test e tudo que começa com <banco>_ (tenants, _test_test_N do --parallel, _template, _pool_*),
@@ -18,7 +18,8 @@ raiz_bruta="${ORCA_WORKTREE_PATH:-$(pwd)}"
 raiz="$(caminho_canonico "$raiz_bruta")"
 # O nome vem da pasta, como no setup (ORCA_WORKSPACE_NAME é o nome de exibição e pode divergir).
 pasta="$(basename "$raiz")"
-principal_bruto="${1:-}"
+# Principal: argumento, senão ORCA_ROOT_PATH (o Orca passa a raiz do repo), senão o git do worktree se ainda existir.
+principal_bruto="${1:-${ORCA_ROOT_PATH:-}}"
 if [ -z "$principal_bruto" ] && [ -d "$raiz" ]; then
     principal_bruto="$(dirname "$(git -C "$raiz" rev-parse --path-format=absolute --git-common-dir)")"
 fi
