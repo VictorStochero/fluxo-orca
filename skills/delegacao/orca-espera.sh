@@ -65,7 +65,8 @@ for w in ws:
         with open(estado_arq, encoding="utf-8") as f: anterior = json.load(f)
     except (OSError, ValueError): anterior = {}
     estado = dict(anterior)
-    inicio_incerto = w.get("dispatchStatus") == "pending" and st.get("worker") == "start_unknown" and st.get("detail") == "turn_start_unobserved"
+    # Turno iniciado à mão (Enter no terminal) fica turn_start_unobserved para sempre: só alerta sem atividade.
+    inicio_incerto = w.get("dispatchStatus") == "pending" and st.get("worker") == "start_unknown" and st.get("detail") == "turn_start_unobserved" and atividade != "working"
     estado["inicio_incerto"] = anterior.get("inicio_incerto", agora) if inicio_incerto else agora
     if atividade == "working":
         try:
