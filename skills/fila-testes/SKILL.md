@@ -5,7 +5,7 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
 
 # Fila de testes da máquina
 
-`~/.cache/gs-teste.sh` (instalado e atualizado pelo hook de SessionStart do plugin) é um semáforo: até **2** runs de teste por vez entre todos os worktrees e sessões. O hook `fila-testes.sh` bloqueia os executores de teste fora dele; listagem (`--list-tests`, `--collect-only`, `vitest list`, `--listTests`) e instalação de pacote passam livres.
+`~/.cache/gs-teste.sh` (instalado e atualizado pelo hook de SessionStart do plugin) é um semáforo: até **2** runs de teste por vez entre todos os worktrees e sessões. O hook `fila-testes.sh` bloqueia os executores de teste fora dele; listagem (`--list-tests`, `--collect-only`, `vitest list`, `--listTests`) e instalação de pacote (`composer install|require` incluso) passam livres. Cobre também `composer test`, `cargo test`, `go test` e `python -m unittest`. O dono da vaga é a raiz do git: rodar de subpasta do mesmo worktree conta como o mesmo dono.
 
 ## Como chamar (no cwd do projeto/worktree)
 - `bash ~/.cache/gs-teste.sh <argumentos>` — detecta o executor:
@@ -15,6 +15,7 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
   | Laravel (`artisan`) | `ddev artisan test` (`.ddev/`), `./vendor/bin/sail artisan test` (Sail), senão `php artisan test` |
   | Python | `uv run pytest`, `poetry run pytest`, `pipenv run pytest`, `.venv/…/pytest` ou `python -m pytest` |
   | JS (`package.json`) | `pnpm test`, `yarn test`, `bun run test` ou `npm test --` (pelo lockfile) |
+  | Rust (`Cargo.toml`) / Go (`go.mod`) | `cargo test` / `go test` (fila geral; Go: passe `./...`) |
 
 - `bash ~/.cache/gs-teste.sh -- <comando completo>` — executor explícito (`-- python manage.py test app`, `-- pnpm vitest run src/x.test.ts`).
 - Projeto em container ou com executor próprio: `GS_TESTE_RUNNER="<comando>"` no `.orca/worktree.conf` do principal (ex.: `docker compose exec -T web pytest`) — vale para todos os worktrees.

@@ -8,6 +8,7 @@
 #   Laravel (artisan): DDEV -> "ddev artisan test"; Sail -> "./vendor/bin/sail artisan test"; senão "php artisan test"
 #   Python (pyproject/requirements/Pipfile/pytest.ini): uv | poetry | pipenv | .venv -> pytest
 #   JS (package.json): pnpm | yarn | bun | npm -> script "test"
+#   Rust (Cargo.toml): cargo test; Go (go.mod): go test (sem argumentos, rode ./...)
 # Laravel: --parallel vira --processes=8 e, no fim, apaga os <banco>_test_N do MySQL/MariaDB do host.
 # Fila: Laravel no host = uma por porta de banco (3306 usa gs-teste.lockN, outras gs-teste-<porta>.lockN);
 # container = gs-teste-ctr.lockN; Python/JS = gs-teste-geral.lockN. GS_TESTE_VAGAS e GS_TESTE_PROCESSOS sobrescrevem 2 e 8.
@@ -59,6 +60,10 @@ else
         fi
     elif [ -n "$GS_TESTE_RUNNER" ]; then
         runner=$GS_TESTE_RUNNER
+    elif [ -f Cargo.toml ]; then
+        stack=rust; runner="cargo test"
+    elif [ -f go.mod ]; then
+        stack=go; runner="go test"
     else
         echo "Stack não detectada: use bash ~/.cache/gs-teste.sh -- <comando de teste>" >&2
         exit 2
