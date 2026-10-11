@@ -16,7 +16,9 @@ claude_linha() { # $1 rótulo; resto = comando
 
 claude_linha "pessoal" claude -p "/usage" > "$tmp/4" &
 if [ -d "$HOME/.claude-team" ]; then
-  claude_linha "team   " env CLAUDE_CONFIG_DIR="$HOME/.claude-team" claude --settings "$HOME/.claude/settings.json" --model haiku -p "/usage" > "$tmp/3" &
+  # Com MSYS_NO_PATHCONV o caminho POSIX chegaria cru ao claude no Windows.
+  w() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
+  claude_linha "team   " env CLAUDE_CONFIG_DIR="$(w "$HOME/.claude-team")" claude --settings "$(w "$HOME/.claude/settings.json")" --model haiku -p "/usage" > "$tmp/3" &
 fi
 if command -v agy >/dev/null 2>&1; then
   agy --dangerously-skip-permissions -p "/usage" 2>&1 | awk -F'\t' '
