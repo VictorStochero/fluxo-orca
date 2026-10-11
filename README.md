@@ -7,7 +7,7 @@ Plugin do Claude Code com um fluxo de trabalho Laravel + Orca em pt-BR, para Win
 /plugin install fluxo-orca@stochero
 ```
 
-**Instalação completa** (pré-requisitos, outros plugins, `settings.json`, CLAUDE.md global, boards, verificação): [`GUIA.md`](GUIA.md). Para configurar com o Claude, mande para ele:
+**Instalação completa** (pré-requisitos, git, gh, SSH, shims do Git Bash, plugins, `settings.json`, CLAUDE.md global, boards, verificação): [`GUIA.md`](GUIA.md). Para configurar com o Claude, mande para ele:
 
 > Siga o guia https://github.com/VictorStochero/fluxo-orca/blob/main/GUIA.md e configure esta máquina.
 
