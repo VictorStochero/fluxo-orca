@@ -18,6 +18,9 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
   | Rust (`Cargo.toml`) / Go (`go.mod`) | `cargo test` / `go test` (fila geral; Go: passe `./...`) |
 
 - `bash ~/.cache/gs-teste.sh -- <comando completo>` — executor explícito (`-- python manage.py test app`, `-- pnpm vitest run src/x.test.ts`).
+- Preparação do banco de teste também passa pela fila: `bash ~/.cache/gs-teste.sh -- php artisan migrate:fresh --env=testing --force` (idem `migrate:*`, `db:wipe` e `db:seed`). Com `artisan` no cwd, o executor explícito usa a fila Laravel por porta de `.env.testing` (PHP) ou de container, preservando o comando.
+- O detector bloqueia essas operações com `--env=testing` (ou `--env testing`) ou `--database` com token `test`/`testing` no nome da conexão (`test`, `testing`, `mysql_test`, `test_mysql`). Conexão com nome arbitrário precisa de `--env=testing`; sem indicação de teste, operações do banco de desenvolvimento continuam livres.
+- Django: `manage.py migrate|flush` com `--settings=*test*` também exige fila, por exemplo `bash ~/.cache/gs-teste.sh -- python manage.py migrate --settings=app.settings.test`. A opção de teste deve estar no mesmo trecho do comando que a operação de banco.
 - Projeto em container ou com executor próprio: `GS_TESTE_RUNNER="<comando>"` no `.orca/worktree.conf` do principal (ex.: `docker compose exec -T web pytest`) — vale para todos os worktrees.
 - Sem vaga em 5 min → `FILA OCUPADA` (exit 75): rodar de novo. `GS_TESTE_VAGAS`, `GS_TESTE_TETO` e `GS_TESTE_PROCESSOS` sobrescrevem 2 vagas, 3 do teto e 8 processos. A vaga do teto vem depois da da fila, no mesmo prazo de 5 min.
 

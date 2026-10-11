@@ -26,6 +26,26 @@ for c in 'php artisan test' 'npm ci && npm test' 'pytest -x' 'composer test' 'ca
          'npx vitest run' 'php vendor/pestphp/pest/bin/pest' 'python -m unittest' 'pnpm exec vitest run' 'go test ./...'; do
     confere BLOQ "$c"
 done
+
+for c in 'php artisan migrate --env=testing --force' 'php artisan migrate:fresh --env=testing --force' \
+         'php artisan migrate:rollback --env testing' 'php artisan db:wipe --env="testing"' \
+         "php artisan db:seed --env='testing'" 'php artisan migrate --database=mysql_test' \
+         'php artisan db:seed --database test_mysql' 'php artisan db:wipe --database=testing' \
+         'python manage.py migrate --settings=app.settings.test' 'python manage.py flush --settings app.test_settings' \
+         'bash -c "php artisan migrate:fresh --env=testing --force"' \
+         'php artisan migrate --env=local && php artisan db:seed --env=testing'; do
+    confere BLOQ "$c"
+done
+for c in 'php artisan migrate:fresh --force' 'php artisan db:wipe --env=local' \
+         'php artisan db:seed --database=mysql' 'php artisan migrate --env=testing_extra' \
+         'php artisan migrate:status --database=latest' 'php artisan migrate --database=contest' \
+         'python manage.py migrate' 'python manage.py flush --settings=app.settings.dev' \
+         'php artisan migrate --env=local && echo --env=testing' \
+         'python manage.py migrate && echo --settings=app.test' \
+         'bash ~/.cache/gs-teste.sh -- php artisan migrate:fresh --env=testing --force' \
+         'bash ~/.cache/gs-teste.sh -- python manage.py flush --settings=app.test'; do
+    confere LIVRE "$c"
+done
 for c in 'php artisan test --list-tests' 'pytest --collect-only' 'npx vitest list' 'npx jest --listTests' \
          'composer install' 'composer require foo/bar' 'npm ci' 'pip install pytest' \
          'bash ~/.cache/gs-teste.sh cargo test' 'bash ~/.cache/gs-teste.sh -- go test ./...' 'git status'; do
@@ -38,6 +58,34 @@ printf '{"tool_input":{"command":["bash","-lc","pytest -x"]}}' | bash "$tmp/guar
 
 # Teto global: com GS_TESTE_TETO=1, duas pastas (filas gerais diferentes não existem: ambas "geral", mas vagas=2) não se sobrepõem.
 export HOME="$tmp/home"; mkdir -p "$HOME" "$tmp/a" "$tmp/b"
+# Executor explícito em Laravel usa a mesma fila da suíte, sem executar PHP real.
+mkdir -p "$tmp/laravel" "$tmp/bin"
+touch "$tmp/laravel/artisan"
+cat > "$tmp/bin/php" <<'E'
+#!/bin/bash
+[ -d "$HOME/.cache/$FILA_ESPERADA.lock1" ] && [ ! -d "$HOME/.cache/gs-teste-geral.lock1" ] || exit 1
+printf '%s\n' "$*" > "$HOME/executor.log"
+E
+cp "$tmp/bin/php" "$tmp/bin/ddev"
+chmod +x "$tmp/bin/php" "$tmp/bin/ddev"
+for porta in 3306 3307; do
+    printf 'DB_PORT=%s\n' "$porta" > "$tmp/laravel/.env.testing"
+    fila=gs-teste; [ "$porta" = 3307 ] && fila=gs-teste-3307
+    (cd "$tmp/laravel" && PATH="$tmp/bin:$PATH" FILA_ESPERADA="$fila" bash "$raiz/skills/fila-testes/gs-teste.sh" -- php artisan migrate:fresh --env=testing --force)
+    rc=$?
+    if [ "$rc" = 0 ] && [ "$(cat "$HOME/executor.log")" = 'artisan migrate:fresh --env=testing --force' ]; then
+        ok "executor explícito: migration Laravel na fila $fila, argumentos preservados"
+    else
+        ruim "executor explícito: fila $fila ou argumentos incorretos (rc=$rc)"
+    fi
+done
+(cd "$tmp/laravel" && PATH="$tmp/bin:$PATH" FILA_ESPERADA=gs-teste-ctr bash "$raiz/skills/fila-testes/gs-teste.sh" -- ddev artisan db:seed --env=testing)
+rc=$?
+if [ "$rc" = 0 ] && [ "$(cat "$HOME/executor.log")" = 'artisan db:seed --env=testing' ]; then
+    ok "executor explícito: seed Laravel na fila de container, argumentos preservados"
+else
+    ruim "executor explícito: fila de container ou argumentos incorretos (rc=$rc)"
+fi
 cat > "$tmp/rodar.sh" <<'E'
 echo "$(date +%s.%N) ini" >> "$2"; bash "$1/skills/fila-testes/gs-teste.sh" -- sleep 3; echo "$(date +%s.%N) fim" >> "$2"
 E

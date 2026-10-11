@@ -34,6 +34,7 @@ if [ "${1:-}" = "--" ]; then
     shift
     runner=""
     args=("$@")
+    [ -f artisan ] && stack=laravel
 else
     if [ -f artisan ]; then
         stack=laravel
@@ -85,9 +86,11 @@ paralelo=${paralelo:-0}
 porta=$(env_testing DB_PORT)
 porta=${porta:-3306}
 mkdir -p "$HOME/.cache"
+executor=${runner%% *}
+[ -z "$executor" ] && executor=${args[0]:-}
 if [ $stack != laravel ]; then
     trava=$HOME/.cache/gs-teste-geral.lock
-elif [ "${runner%% *}" != php ]; then
+elif [ "$executor" != php ]; then
     trava=$HOME/.cache/gs-teste-ctr.lock
 elif [ "$porta" = 3306 ]; then
     trava=$HOME/.cache/gs-teste.lock
