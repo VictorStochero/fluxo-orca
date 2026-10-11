@@ -1,6 +1,6 @@
 ---
 name: fila-testes
-description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manage.py test, vitest, jest, npm/pnpm/yarn/bun test) — filas da máquina (2 vagas por recurso e teto global de 3 runs), para worktrees e agentes em paralelo não derrubarem a máquina nem corromperem bancos de teste.
+description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manage.py test, vitest, jest, npm/pnpm/yarn/bun test) ou quando perguntarem sobre a fila de testes (ocupação, vagas, travas, teto) — filas da máquina (2 vagas por recurso e teto global de 3 runs), para worktrees e agentes em paralelo não derrubarem a máquina nem corromperem bancos de teste.
 ---
 
 # Fila de testes da máquina
@@ -23,6 +23,14 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
 - Django: `manage.py migrate|flush` com `--settings=*test*` também exige fila, por exemplo `bash ~/.cache/gs-teste.sh -- python manage.py migrate --settings=app.settings.test`. A opção de teste deve estar no mesmo trecho do comando que a operação de banco.
 - Projeto em container ou com executor próprio: `GS_TESTE_RUNNER="<comando>"` no `.orca/worktree.conf` do principal (ex.: `docker compose exec -T web pytest`) — vale para todos os worktrees.
 - Sem vaga em 5 min → `FILA OCUPADA` (exit 75): rodar de novo. `GS_TESTE_VAGAS`, `GS_TESTE_TETO` e `GS_TESTE_PROCESSOS` sobrescrevem 2 vagas, 3 do teto e 8 processos. A vaga do teto vem depois da da fila, no mesmo prazo de 5 min.
+
+## Consultar o estado da fila
+
+```bash
+for d in ~/.cache/gs-teste*.lock*; do [ -d "$d" ] && echo "$(basename "$d"): $(cat "$d/dono" 2>/dev/null)"; done
+```
+
+Cada diretório é uma vaga ocupada ou uma trava pendente de recuperação; `dono` mostra worktree, banco e comando. `gs-teste-teto.lockN` ocupa o teto global e corresponde ao mesmo run de uma vaga de recurso: não somar os dois como runs distintos. Sem diretórios, nenhuma vaga está ocupada; dono vazio exige conferir a trava, sem presumir que está livre. O padrão é 2 vagas por recurso e teto de 3 runs, sobrescrito por `GS_TESTE_VAGAS` e `GS_TESTE_TETO` na execução.
 
 ## Regras
 - Laravel, suíte e pasta em paralelo: `bash ~/.cache/gs-teste.sh --parallel --compact <path>` (8 processos; apaga os `<banco>_test_N` ao terminar). **`--parallel` aceita UM path.**

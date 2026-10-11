@@ -1,6 +1,6 @@
 ---
 name: limites-cota
-description: Use antes de despachar uma onda de workers ou quando o usuário perguntar quanto resta de cota/limite — mede o uso de todas as contas (Claude principal e secundária, agy Gemini/Claude, Kimi, Codex) numa tabela e alerta acima de 80%.
+description: Use antes de despachar uma onda de workers ou quando perguntarem sobre cota, limite, pool de agentes, vagas por conta ou quem deve ser o escritor — mede o uso das contas instaladas, alerta acima de 80% e consulta vaga-agente.sh livres e limites.sh --escritor.
 ---
 
 # Revisão de limite das contas
@@ -22,3 +22,9 @@ description: Use antes de despachar uma onda de workers ou quando o usuário per
 - Revisão obrigatória continua em Opus mesmo com cota apertada: espera a janela zerar em vez de rebaixar o modelo.
 - Ao relatar ao usuário: a saída do script como tabela (fornecedor · janela · uso · zera às), sem reformular números.
 - Linha `ilegível`: o `/usage` mudou de formato ou a conta não está logada — dizer, não estimar.
+
+## Responder ao usuário
+
+- `bash ~/.cache/limites.sh` — uso por fornecedor e janela, horário de renovação e escritor escolhido; exit 3 indica algum uso acima de 80%. Apresentar os números como tabela, sem estimar linhas ilegíveis.
+- `bash ~/.cache/vaga-agente.sh livres` — cada linha traz `conta livres/total`; `0/0` significa ilimitado. A consulta pode recuperar vagas de dispatches encerrados; falha de conexão conserva a vaga. A lista do pool não comprova que o fornecedor está instalado.
+- `bash ~/.cache/limites.sh --escritor` — escolhe entre team, pessoal e Codex pela maior folga com vaga; ausentes e uso acima de 80% ficam de fora. Exit 75 indica pool cheio; `todos acima de 80% ou ausentes` distingue falta de cota de falta de vaga.

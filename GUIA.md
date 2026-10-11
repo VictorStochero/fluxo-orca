@@ -107,6 +107,7 @@ Se o usuário escreve em outro idioma que não pt-BR, ajustar a seção "Idioma"
 
 ## Fase 4b — Agentes externos e segunda conta Claude (opcional)
 Só para o que o usuário instalou na fase 2. Os workers do Orca rodam esses CLIs sem humano (o Orca abre o Codex com `--dangerously-bypass-approvals-and-sandbox`), então as regras e a trava de comando remoto têm de estar neles também.
+Fornecedor não instalado fica fora da seleção de escritor; o fluxo funciona só com a conta pessoal. Ao escolher pelo pool, ignorar contas inexistentes, mesmo que apareçam em `vaga-agente.sh livres`.
 
 1. **Regras**: baixar `extras/AGENTS.global.md` para `~/.agents/AGENTS.md` (mesclar se existir, mostrando o diff) e ligar em cada CLI instalado — `~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md` (agy), `~/.kimi-code/AGENTS.md`, `~/.config/opencode/AGENTS.md`:
    ```bash

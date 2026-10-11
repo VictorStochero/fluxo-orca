@@ -150,6 +150,17 @@ confere_rc 3 'tabela preserva alerta acima de 80% com erro do pool' bash "$tmp/s
 grep -q 'pessoal: sessão 90% usado' "$tmp/saida" && ok 'tabela mostra cota acima de 80%' || ruim 'tabela perdeu cota alta'
 export POOL_PESSOAL_USO=30
 rm "$HOME/.claude/agentes.conf"
+
+pool solta ctx_s1; pool solta ctx_s2
+rmdir "$HOME/.claude-team"
+mkdir -p "$tmp/pessoal-bin"
+cp "$tmp/bin/claude" "$tmp/pessoal-bin/"
+for comando in bash mktemp rm dirname cat sed awk mkdir date ls sort env; do
+    printf '#!/bin/bash\nexec "%s" "$@"\n' "$(command -v "$comando")" > "$tmp/pessoal-bin/$comando"
+    chmod +x "$tmp/pessoal-bin/$comando"
+done
+confere_rc 0 'seleção sem fornecedores opcionais' env PATH="$tmp/pessoal-bin" bash "$tmp/seletor/limites.sh" --escritor
+grep -qx 'escritor: pessoal (70% livre)' "$tmp/saida" && ok 'só pessoal disponível escolhe pessoal' || ruim 'seleção exige fornecedor opcional'
 confere_rc 0 'hook instala scripts em HOME temporário' env CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh"
 cmp -s "$raiz/skills/limites-cota/vaga-agente.sh" "$HOME/.cache/vaga-agente.sh" \
     && ok 'script do pool instalado' || ruim 'instalação do pool'

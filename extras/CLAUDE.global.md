@@ -4,8 +4,8 @@ Skills do plugin `fluxo-orca` com o detalhe operacional — invocar quando a tar
 - `board-github` — issue, item, campos e comentário de conclusão nos GitHub Projects (boards em `~/.claude/boards.md`).
 - `delegacao` — despacho de agentes pelo Orca, cotas, worktree por tarefa, revisão e merge.
 - `ambiente-local` — perfil da máquina (`~/.claude/ambiente.md`), ferramentas locais, bancos, armadilhas, validação no navegador.
-- `fila-testes` — todo teste pela fila da máquina.
-- `limites-cota` — uso das contas antes de cada onda de workers.
+- `fila-testes` — todo teste pela fila da máquina; estado da fila.
+- `limites-cota` — uso das contas, pool de agentes e escolha do escritor.
 - `worktree-orca` — setup e archive de worktree pelo Orca, por projeto.
 - `stack-laravel`, `stack-python`, `stack-js` — regras, validação e testes da stack do projeto.
 

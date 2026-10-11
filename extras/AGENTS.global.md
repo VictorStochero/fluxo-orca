@@ -2,7 +2,7 @@
 
 Fonte única em `~/.agents/AGENTS.md`; `~/.codex/AGENTS.md`, `~/.kimi-code/AGENTS.md`, `~/.config/opencode/AGENTS.md` e `~/.gemini/config/AGENTS.md` são links para este arquivo. Equivalente ao `~/.claude/CLAUDE.md` do Claude Code.
 
-Skills em `~/.agents/skills` (cópia das skills do plugin `fluxo-orca`, mantida pelo hook de SessionStart do Claude Code, + `orca-cli`, `orchestration`, `computer-use` do Orca) — carregar quando a tarefa tocar o assunto: `ambiente-local` (perfil em `~/.claude/ambiente.md`), `board-github` (boards em `~/.claude/boards.md`), `fila-testes`, `worktree-orca`, `stack-*`; metodologia: `systematic-debugging` antes de corrigir bug, `test-driven-development`, `verification-before-completion` antes de declarar pronto, `receiving-code-review`.
+Skills em `~/.agents/skills` (cópia das skills do plugin `fluxo-orca`, mantida pelo hook de SessionStart do Claude Code, + `orca-cli`, `orchestration`, `computer-use` do Orca) — carregar quando a tarefa tocar o assunto: `ambiente-local` (perfil em `~/.claude/ambiente.md`), `board-github` (boards em `~/.claude/boards.md`), `fila-testes` (todo teste pela fila da máquina; estado da fila), `limites-cota` (uso das contas, pool de agentes e escolha do escritor), `worktree-orca`, `stack-*`; metodologia: `systematic-debugging` antes de corrigir bug, `test-driven-development`, `verification-before-completion` antes de declarar pronto, `receiving-code-review`.
 
 ## Idioma
 - **SEMPRE ESCREVER EM ptBR** — respostas, commits, PRs, issues, comentários. Código e nomes técnicos seguem o projeto.
