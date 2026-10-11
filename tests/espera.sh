@@ -3,6 +3,7 @@
 raiz=$(cd "$(dirname "$0")/.." && pwd)
 falhas=0
 # macOS não tem timeout.
+for py in python3 python; do "$py" -c '' 2>/dev/null && break; done
 limite() { if command -v timeout >/dev/null 2>&1; then timeout "$@"; else perl -e 'alarm shift; exec @ARGV' "$@"; fi; }
 caso() { # nome resposta_do_check saida_esperada ack_esperado(sim|nao)
     local h; h=$(mktemp -d)
@@ -59,7 +60,7 @@ libera() { # nome registrado(sim|nao) outro_ativo(sim|nao|ilegivel) fecha_espera
     local outro='' ; [ "$3" = sim ] && outro=',{"dispatchId":"ctx_b","dispatchStatus":"dispatched","agentTerminalHandle":"term_t","projection":{}}'
     # Indentado como o worker-list real (uma chave por linha).
     printf '%s' '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_a","dispatchStatus":"completed","agentTerminalHandle":"term_t","projection":{}}'"$outro"']}}' \
-        | python -m json.tool > "$h/lista.json" 2>/dev/null || python3 -m json.tool > "$h/lista.json"
+        | "$py" -m json.tool > "$h/lista.json"
     [ "$3" = ilegivel ] && echo '{"ok":true,"result":' > "$h/lista.json"
     cat > "$h/bin/orca" <<EOF
 #!/bin/bash
