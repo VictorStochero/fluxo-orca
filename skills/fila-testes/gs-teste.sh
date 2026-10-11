@@ -13,7 +13,7 @@
 # Fila: Laravel no host = uma por porta de banco (3306 usa gs-teste.lockN, outras gs-teste-<porta>.lockN);
 # container = gs-teste-ctr.lockN; Python/JS = gs-teste-geral.lockN. GS_TESTE_VAGAS e GS_TESTE_PROCESSOS sobrescrevem 2 e 8.
 # Espera vaga até 5 min; sem vaga, sai com 75 (rode de novo). Imposto pelo hook fila-testes.sh do plugin fluxo-orca.
-eu="$(pwd) [$DB_DATABASE]"
+eu="$(git rev-parse --show-toplevel 2>/dev/null || pwd) [$DB_DATABASE]"
 env_testing() { # $1 chave: .env.testing, senão .env
     local v
     v=$(grep -hE "^$1=" .env.testing 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"\r')
