@@ -1,0 +1,11 @@
+{
+  "name": "fluxo-orca",
+  "version": "1.0.0",
+  "description": "Fluxo de trabalho Laravel + Orca no Claude Code (pt-BR): delegação por workers do Orca, agentes escritor/revisor/verificador, fila de testes da máquina, revisão de cota, board do GitHub, ambiente Windows + Herd e skills de metodologia, com hooks que impõem as regras.",
+  "author": {
+    "name": "Victor Stochero",
+    "url": "https://github.com/VictorStochero"
+  },
+  "license": "MIT",
+  "keywords": ["laravel", "orca", "herd", "workflow", "pt-br"]
+}

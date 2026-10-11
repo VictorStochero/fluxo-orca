@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit", "Write", "NotebookEdit",
+      "Bash(git commit *)", "Bash(git push *)", "Bash(git checkout *)", "Bash(git switch *)",
+      "Bash(git reset *)", "Bash(git merge *)", "Bash(git rebase *)", "Bash(git stash *)",
+      "Bash(git add *)", "Bash(git rm *)", "Bash(git restore *)", "Bash(git clean *)",
+      "Bash(rm *)", "Bash(mv *)", "Bash(cp *)",
+      "Bash(php artisan migrate*)", "Bash(php artisan db:*)", "Bash(composer *)", "Bash(npm *)",
+      "Bash(vendor/bin/pint*)", "Bash(php vendor/bin/pint*)", "Bash(bash ~/.cache/gs-teste.sh*)",
+      "Bash(gh pr merge *)", "Bash(gh pr create *)", "Bash(gh issue *)", "Bash(gh project *)",
+      "PowerShell(Remove-Item *)", "PowerShell(Set-Content *)", "PowerShell(git commit *)", "PowerShell(git push *)"
+    ]
+  }
+}

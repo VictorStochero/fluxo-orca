@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/instala-scripts.sh\"", "shell": "bash", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/fila-testes.sh\"", "shell": "bash", "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell|Edit",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/bloqueia-bulk.sh\"", "shell": "bash", "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Agent|Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/despacho-orca.sh\"", "shell": "bash", "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guia-laravel.sh\"", "shell": "bash", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

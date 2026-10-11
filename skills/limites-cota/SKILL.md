@@ -1,0 +1,21 @@
+---
+name: limites-cota
+description: Use antes de despachar uma onda de workers ou quando o usuário perguntar quanto resta de cota/limite — mede o uso de todas as contas (Claude principal e secundária, agy Gemini/Claude, Kimi) numa tabela e alerta acima de 80%.
+---
+
+# Revisão de limite das contas
+
+`bash ~/.cache/limites.sh` (instalado e atualizado pelo hook de SessionStart do plugin) mede em paralelo, uma linha por fornecedor, e **sai com 3 se algum passar de 80%**. Fornecedor não instalado é pulado:
+
+| Linha | Origem | Pula quando |
+|---|---|---|
+| `pessoal` | `claude -p "/usage"` (conta principal) | nunca |
+| `team` | conta secundária em `CLAUDE_CONFIG_DIR=~/.claude-team` | pasta não existe |
+| `agy Gemini` / `agy Claude` | `agy -p "/usage"`, janelas 5h e semana | `agy` fora do PATH |
+| `kimi` | API do Kimi Code (`kimi-cota.sh`), janela 5h e mês | sem credencial em `~/.kimi-code/credentials/` |
+
+- **Antes de cada onda de workers**: rodar; fornecedor acima de 80% sai da vez.
+- **Ordem de consumo**: agy Gemini / Kimi → agy Claude (limite baixo, só pontual) → conta secundária → conta principal.
+- Revisão obrigatória continua em Opus mesmo com cota apertada: espera a janela zerar em vez de rebaixar o modelo.
+- Ao relatar ao usuário: a saída do script como tabela (fornecedor · janela · uso · zera às), sem reformular números.
+- Linha `ilegível`: o `/usage` mudou de formato ou a conta não está logada — dizer, não estimar.
