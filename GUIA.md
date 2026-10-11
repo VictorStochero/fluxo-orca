@@ -7,7 +7,7 @@
 > 4. **Nunca rode `ssh`, `scp`, `rsync`, `sftp` ou `forge` contra servidor** durante a instalação.
 > 5. Ao fim de cada fase, uma linha de status; no fim, a verificação da fase 7 item por item, com o que ficou pendente e por quê.
 
-**O fluxo:** a sessão principal do Claude Code coordena; o trabalho pesado vai para **workers do Orca**, um worktree por tarefa, com banco e `.env` próprios; todo diff passa por um **revisor Opus** antes do merge; testes rodam por uma **fila única da máquina**; regras impostas por **hooks**, não pela memória do modelo. Vale para Laravel, Python e JS/TS.
+**O fluxo:** a sessão principal do Claude Code coordena; o trabalho pesado vai para **workers do Orca**, um worktree por tarefa, com banco e `.env` próprios; todo diff passa por um **revisor Opus** antes do merge; testes rodam por **filas da máquina** (2 vagas por recurso, teto global de 3); regras impostas por **hooks**, não pela memória do modelo. Vale para Laravel, Python e JS/TS.
 
 ## Fase 1 — Diagnóstico (só leitura)
 Rodar e anotar:
@@ -153,7 +153,7 @@ Para cada projeto escolhido:
 ## Fase 7 — Verificação
 Reabrir o Claude Code e conferir, relatando cada item (ok / pendente + motivo):
 1. `claude plugin list`: `fluxo-orca`, `ponytail`, `code-review`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp` (+ `laravel-worktree` se houver Laravel) habilitados, **nenhum `superpowers`**; `/skills` mostra `delegacao`, `fila-testes`, `worktree-orca`, `stack-*`, `orca-cli`, `orchestration`.
-2. `~/.cache/gs-teste.sh`, `~/.cache/wt-setup.sh`, `~/.cache/wt-archive.sh`, `~/.cache/wt-lib.sh`, `~/.cache/limites.sh`, `~/.cache/orca-espera.sh`, `~/.cache/fim-worker.sh` e `~/.claude/agents/somente-leitura.json` existem (hook de SessionStart).
+2. `~/.cache/gs-teste.sh`, `~/.cache/e-teste.sh`, `~/.cache/wt-setup.sh`, `~/.cache/wt-archive.sh`, `~/.cache/wt-lib.sh`, `~/.cache/limites.sh`, `~/.cache/orca-espera.sh`, `~/.cache/fim-worker.sh` e `~/.claude/agents/somente-leitura.json` existem (hook de SessionStart).
 3. Num projeto, o comando de teste direto (`php artisan test`, `pytest`, `pnpm test`…) é **bloqueado** pelo hook com a mensagem da fila; `bash ~/.cache/gs-teste.sh <listagem>` passa.
 4. Um `sed -i` qualquer é bloqueado pelo hook `bloqueia-bulk`.
 5. `bash ~/.cache/limites.sh` imprime ao menos a linha `pessoal`.

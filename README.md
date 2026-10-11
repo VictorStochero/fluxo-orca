@@ -1,6 +1,6 @@
 # fluxo-orca
 
-Plugin do Claude Code (pt-BR) com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), todo diff passa por um revisor Opus antes do merge e os testes rodam por uma fila única da máquina. Hooks impõem as regras.
+Plugin do Claude Code (pt-BR) com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), todo diff passa por um revisor Opus antes do merge e os testes rodam por filas da máquina (2 vagas por recurso, teto global de 3). Hooks impõem as regras.
 
 ## Instalar
 
@@ -24,7 +24,7 @@ O Claude diagnostica o sistema, as ferramentas e os projetos, instala o que cons
 | Metodologia | `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `receiving-code-review` |
 | Agentes | `escritor` (Sonnet), `revisor` e `verificador` (Opus, só leitura) |
 | Hooks | `fila-testes`, `bloqueia-bulk`, `despacho-orca`, `guia-laravel`, `instala-scripts`, `fim-worker` (worker do Orca não encerra sem `worker_done`); `guarda-externos` para os agentes externos |
-| Scripts (em `~/.cache`) | `gs-teste.sh` (fila), `wt-setup.sh`/`wt-archive.sh`/`wt-lib.sh` (worktree pelo Orca), `orca-espera.sh` (espera do coordenador: ack, estado real dos workers), `limites.sh` + `kimi-cota.sh`/`codex-cota.sh` (cota), `guarda-externos.sh`, `fim-worker.sh` |
+| Scripts (em `~/.cache`) | `gs-teste.sh` (fila) + `e-teste.sh` (detector de teste, usado pelo hook e por `guarda-externos.sh`), `wt-setup.sh`/`wt-archive.sh`/`wt-lib.sh` (worktree pelo Orca), `orca-espera.sh` (espera do coordenador: ack, estado real dos workers), `limites.sh` + `kimi-cota.sh`/`codex-cota.sh` (cota), `guarda-externos.sh`, `fim-worker.sh` |
 | Agentes externos (opcional) | Codex, agy e Kimi como workers do Orca, com as mesmas regras (`AGENTS.global.md`), as skills copiadas para `~/.agents/skills` e a trava de comando remoto; segunda conta Claude para escritores. Só entra o que estiver instalado (GUIA, fase 4b) |
 | Extras | `CLAUDE.global.md` (modelo de `~/.claude/CLAUDE.md`), `AGENTS.global.md` (modelo de `~/.agents/AGENTS.md`), `somente-leitura.json` |
 

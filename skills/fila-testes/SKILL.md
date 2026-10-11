@@ -1,11 +1,11 @@
 ---
 name: fila-testes
-description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manage.py test, vitest, jest, npm/pnpm/yarn/bun test) — fila única da máquina com 2 vagas, para worktrees e agentes em paralelo não derrubarem a máquina nem corromperem bancos de teste.
+description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manage.py test, vitest, jest, npm/pnpm/yarn/bun test) — filas da máquina (2 vagas por recurso e teto global de 3 runs), para worktrees e agentes em paralelo não derrubarem a máquina nem corromperem bancos de teste.
 ---
 
 # Fila de testes da máquina
 
-`~/.cache/gs-teste.sh` (instalado e atualizado pelo hook de SessionStart do plugin) é um semáforo: até **2** runs de teste por vez entre todos os worktrees e sessões. O hook `fila-testes.sh` bloqueia os executores de teste fora dele; listagem (`--list-tests`, `--collect-only`, `vitest list`, `--listTests`) e instalação de pacote (`composer install|require` incluso) passam livres. Cobre também `composer test`, `cargo test`, `go test` e `python -m unittest`. O dono da vaga é a raiz do git: rodar de subpasta do mesmo worktree conta como o mesmo dono.
+`~/.cache/gs-teste.sh` (instalado e atualizado pelo hook de SessionStart do plugin) é um semáforo: até **2** runs por fila (porta de banco, container ou geral) e, somando todas as filas, no máximo **3** na máquina (teto global), entre todos os worktrees e sessões. O hook `fila-testes.sh` bloqueia os executores de teste fora dele; listagem (`--list-tests`, `--collect-only`, `vitest list`, `--listTests`) e instalação de pacote (`composer install|require` incluso) passam livres. Cobre também `composer test`, `cargo test`, `go test` e `python -m unittest`. O dono da vaga é a raiz do git: rodar de subpasta do mesmo worktree conta como o mesmo dono.
 
 ## Como chamar (no cwd do projeto/worktree)
 - `bash ~/.cache/gs-teste.sh <argumentos>` — detecta o executor:
@@ -19,7 +19,7 @@ description: Use antes de rodar qualquer teste (artisan test/pest, pytest, manag
 
 - `bash ~/.cache/gs-teste.sh -- <comando completo>` — executor explícito (`-- python manage.py test app`, `-- pnpm vitest run src/x.test.ts`).
 - Projeto em container ou com executor próprio: `GS_TESTE_RUNNER="<comando>"` no `.orca/worktree.conf` do principal (ex.: `docker compose exec -T web pytest`) — vale para todos os worktrees.
-- Sem vaga em 5 min → `FILA OCUPADA` (exit 75): rodar de novo. `GS_TESTE_VAGAS` e `GS_TESTE_PROCESSOS` sobrescrevem 2 vagas e 8 processos.
+- Sem vaga em 5 min → `FILA OCUPADA` (exit 75): rodar de novo. `GS_TESTE_VAGAS`, `GS_TESTE_TETO` e `GS_TESTE_PROCESSOS` sobrescrevem 2 vagas, 3 do teto e 8 processos. A vaga do teto vem depois da da fila, no mesmo prazo de 5 min.
 
 ## Regras
 - Laravel, suíte e pasta em paralelo: `bash ~/.cache/gs-teste.sh --parallel --compact <path>` (8 processos; apaga os `<banco>_test_N` ao terminar). **`--parallel` aceita UM path.**
