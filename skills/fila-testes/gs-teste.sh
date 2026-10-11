@@ -110,7 +110,7 @@ ident() { # identidade do processo, estável durante a vida dele: winpid (Window
 }
 mata_filho() { # arquivo com "<pid> <identidade>" do executor; só mata se o pid ainda for o mesmo processo
     local f i
-    read -r f i < "$1" 2>/dev/null
+    { read -r f i < "$1"; } 2>/dev/null
     [ -n "$f" ] && [ -n "$i" ] && kill -0 "$f" 2>/dev/null && [ "$(ident "$f")" = "$i" ] || return 0
     case "$i" in
         w*) taskkill //F //T //PID "${i#w}" >/dev/null 2>&1 ;;

@@ -138,7 +138,7 @@ E
 printf '#!/bin/bash\nexit 1\n' > "$tmp/cota/bin/agy"; cp "$tmp/cota/bin/agy" "$tmp/cota/bin/codex"
 chmod +x "$tmp/cota/bin/"*
 # Cópia isolada: sem codex-cota.sh ao lado, o Codex real não entra na conta.
-cp "$raiz/skills/limites-cota/limites.sh" "$tmp/cota/"
+cp "$raiz/skills/limites-cota/limites.sh" "$raiz/skills/limites-cota/vaga-agente.sh" "$tmp/cota/"
 esc=$(PATH="$tmp/cota/bin:$PATH" bash "$tmp/cota/limites.sh" --escritor 2>/dev/null | tail -1)
 if [ "$esc" = "escritor: pessoal (40% livre)" ]; then ok "escritor: conta ilegível não é candidata"; else ruim "escritor: conta ilegível escolhida ($esc)"; fi
 
