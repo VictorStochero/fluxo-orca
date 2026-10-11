@@ -36,7 +36,7 @@ E, por stack dos projetos escolhidos (só o que faltar; respeitar o que o usuár
 - **Python**: **uv** recomendado (`winget install astral-sh.uv`, `curl -LsSf https://astral.sh/uv/install.sh | sh`, `brew install uv`), ou o que o projeto já usa (Poetry, Pipenv, pyenv).
 - **JS/TS**: **fnm** recomendado (`winget install Schniz.fnm`, `curl -fsSL https://fnm.vercel.app/install | bash`, `brew install fnm`) + `corepack enable`; ou nvm/volta se já existir.
 - **Containers**: Docker Desktop / Docker Engine / OrbStack, ou Podman (+ Podman Desktop); DDEV se os projetos usarem.
-- **Opcional**: agy (Antigravity CLI) para segunda opinião; Kimi Code.
+- **Opcional** (configuração na fase 4b): Codex CLI (escritor em paralelo ao Sonnet; `npm i -g @openai/codex`, login pelo usuário com `! codex login`); agy (Antigravity CLI) para segunda opinião; Kimi Code; segunda conta Claude (ex.: Team) para escritores.
 
 Detalhes e armadilhas de cada ferramenta: `skills/ambiente-local/ferramentas/*.md` deste repositório.
 
@@ -103,6 +103,30 @@ gh api repos/VictorStochero/fluxo-orca/contents/extras/CLAUDE.global.md --jq .co
 ```
 Se o usuário escreve em outro idioma que não pt-BR, ajustar a seção "Idioma".
 
+## Fase 4b — Agentes externos e segunda conta Claude (opcional)
+Só para o que o usuário instalou na fase 2. Os workers do Orca rodam esses CLIs sem humano (o Orca abre o Codex com `--dangerously-bypass-approvals-and-sandbox`), então as regras e a trava de comando remoto têm de estar neles também.
+
+1. **Regras**: baixar `extras/AGENTS.global.md` para `~/.agents/AGENTS.md` (mesclar se existir, mostrando o diff) e ligar em cada CLI instalado — `~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md` (agy), `~/.kimi-code/AGENTS.md`, `~/.config/opencode/AGENTS.md`:
+   ```bash
+   gh api repos/VictorStochero/fluxo-orca/contents/extras/AGENTS.global.md --jq .content | base64 -d > /tmp/AGENTS.global.md
+   ln -s ~/.agents/AGENTS.md ~/.codex/AGENTS.md          # Windows (PowerShell): New-Item -ItemType SymbolicLink -Path "$HOME\.codex\AGENTS.md" -Target "$HOME\.agents\AGENTS.md"
+   ```
+2. **Skills**: o hook de SessionStart do plugin copia as skills para `~/.agents/skills` (reabrir o Claude Code uma vez depois de instalar o CLI). O Codex lê essa pasta sozinho; no agy, ligar cada uma em `~/.gemini/config/skills/<skill>`.
+3. **Trava** (`~/.cache/guarda-externos.sh`, instalado pelo mesmo hook; no Windows também `guarda-externos-codex.cmd` e `guarda-externos-agy.cmd`): bloqueia `ssh`/`scp`/`rsync`/`sftp`/`forge` e bulk replace. Comando do hook: Windows → o `.cmd` com o caminho absoluto (`C:/Users/<u>/.cache/guarda-externos-codex.cmd`); Linux/macOS → `bash ~/.cache/guarda-externos.sh <formato>`.
+   - **Codex** — em `~/.codex/hooks.json`, um grupo novo em `PreToolUse` (sem `matcher`), depois dos que o Orca gravou: `{"hooks":[{"type":"command","command":"<comando> codex","timeout":10}]}` (no Windows o `.cmd` já leva o formato). Exit 2 o Codex trata como falha e deixa passar; por isso o formato `codex` responde em JSON. **Hook novo só roda se estiver confiável**: abrir `codex` e aprovar em `/hooks`, ou gravar a confiança no `~/.codex/config.toml` (no Windows, nas duas grafias do caminho, `C:\...` e `C:/...`; `<n>` = posição do grupo em `PreToolUse`, começando em 0):
+     ```bash
+     python -c "import hashlib,json,sys;print('sha256:'+hashlib.sha256(json.dumps({'event_name':'pre_tool_use','hooks':[{'async':False,'command':sys.argv[1],'timeout':10,'type':'command'}]},separators=(',',':'),sort_keys=True).encode()).hexdigest())" "<comando exato do hooks.json>"
+     ```
+     ```toml
+     [hooks.state.'<caminho do hooks.json>:pre_tool_use:<n>:0']
+     enabled = true
+     trusted_hash = "sha256:..."
+     ```
+   - **agy** — em `~/.gemini/config/hooks.json`, entrada `"guarda-externos": {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "<comando> agy", "timeout": 10}]}]}` (formato `agy`).
+   - **Kimi** — no `~/.kimi-code/config.toml`: `[[hooks]]` com `event = "PreToolUse"`, `command = "bash ~/.cache/guarda-externos.sh exit2"`, `timeout = 10`.
+   - Conferir: `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "Rode exatamente: ssh -V"` tem de responder que o hook bloqueou (equivalente no agy e no Kimi).
+4. **Segunda conta Claude** (ex.: Team) para escritores: pasta `~/.claude-team` com links para `CLAUDE.md`, `settings.json`, `plugins`, `skills`, `agents` e `projects` de `~/.claude`; login pelo usuário com `! CLAUDE_CONFIG_DIR=~/.claude-team claude` e `/login`. O `limites.sh` passa a medir a linha `team`, e a skill `delegacao` diz como abrir worker nessa conta.
+
 ## Fase 5 — Perfil da máquina e boards
 1. **`~/.claude/ambiente.md`** — perfil com o que a fase 1 achou, no formato da skill `ambiente-local` (sistema, shell, quem serve os sites, bancos com porta e origem, contêiner, runtimes, raiz dos projetos e a tabela de projetos com stack, serviço, banco, multi-tenant, board e base). As skills leem este arquivo; mantê-lo verdadeiro.
 2. **`~/.claude/boards.md`** — perguntar quais projetos têm GitHub Project. Para cada um: `gh project list --owner <org>` e `gh project field-list <nº> --owner <org> --format json`; gravar a tabela e os ids de campos/opções no formato da skill `board-github`. Sem board: arquivo com a tabela vazia.
@@ -127,4 +151,5 @@ Reabrir o Claude Code e conferir, relatando cada item (ok / pendente + motivo):
 7. `git config --global user.email` preenchido; `gh auth status` com `project`; `ssh -T git@github.com` autentica (é o GitHub, não servidor; passa pela aprovação do `ask`).
 8. Runtimes da stack de cada projeto respondem no shell dos hooks (`php -v`/`composer -V`, `uv --version`/`python --version`, `node -v` + gerenciador).
 9. `~/.claude/ambiente.md` e `~/.claude/boards.md` existem e batem com o que foi configurado.
-10. (Opcional, com o "sim" do usuário) criar um worktree de teste pelo Orca num projeto, conferir URL/banco/`.env` e arquivá-lo.
+10. Agentes externos instalados (fase 4b): cada um responde em pt-BR (regras carregadas), lista as skills de `~/.agents/skills` e tem o `ssh -V` bloqueado pelo hook; `limites.sh` mostra a linha `codex` e/ou `team` quando existirem.
+11. (Opcional, com o "sim" do usuário) criar um worktree de teste pelo Orca num projeto, conferir URL/banco/`.env` e arquivá-lo.

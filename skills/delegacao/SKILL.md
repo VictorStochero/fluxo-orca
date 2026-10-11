@@ -11,7 +11,7 @@ description: Use antes de despachar qualquer agente (escritor, revisor, levantam
 ```text
 orca status --json
 orca orchestration run-create --objective "<objetivo>" --json
-orca orchestration worker-start --spec "<prompt autossuficiente>" --worktree <current|new-child|path:...> --agent <claude|antigravity|opencode> --model <id> --effort <nível> --json
+orca orchestration worker-start --spec "<prompt autossuficiente>" --worktree <current|new-child|path:...> --agent <claude|codex|antigravity|opencode> --model <id> --effort <nível> --json
 orca orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
 ```
 - Disparar a onda independente inteira antes de esperar. Dependência real → `task-create` + `worker-start --task`; ondas paralelas em vez de cadeias longas.
@@ -24,14 +24,17 @@ orca orchestration check --wait --types "worker_done,escalation,question" --time
 |---|---|---|
 | Revisão de todo diff que vai para merge e verificador adversarial (gate read-only, contexto recortado) | `claude` | Opus 5.5 / `high` |
 | Implementação: escritor (código, testes, build, browser) | `claude` | Sonnet 5.5 / `medium` (nunca `low`) |
+| Implementação em paralelo (se o Codex estiver instalado): escritor das frentes independentes da mesma onda | `codex` | o modelo "workhorse" de código do Codex (par do Sonnet; hoje `gpt-6.1-sol`) / `medium` — nunca o topo de linha (`gpt-6-astra`) para escrita |
 | Levantamento, censo, contagem, mapear uso (consulta read-only) | Agent tool `Explore` | Haiku 5.5 / `medium` |
 | Mecânico conferível (fixtures, edição com `old_string` literal, mover por mapa) | `claude` | Haiku 5.5 / `low` |
 | Segunda opinião (read-only): revisão adversarial complementar, contraprova de diagnóstico | `antigravity` | Gemini; Claude/GPT só com folga de cota |
 
+- **Codex divide a onda com o Sonnet**: frentes independentes repartidas entre `claude` e `codex`; acima de 80% de cota o Codex sai da vez e o Sonnet assume. Mesmo spec autossuficiente, mesmo gate Opus e mesma verificação na sessão principal. Regras, skills e hook de guarda do Codex: GUIA, seção de agentes externos.
 - **agy (`antigravity`) é só segunda opinião, read-only**. Nunca escritor, levantamento ou mecânico; nunca substitui a revisão Opus obrigatória. Pacote recortado (diff + pergunta), resposta conferida pela sessão principal.
 
 - **Orquestrador é a sessão principal**, não um agente à parte. Mudança pequena e localizada (um arquivo, poucas linhas, sem decisão de arquitetura) ela faz direto, roda os testes, e o revisor continua obrigatório antes do merge; etapa com volume ou frentes paralelas vão para escritor.
 - **Papéis = agentes do plugin `fluxo-orca`** (configuração, não persona): `fluxo-orca:escritor` (Sonnet), `fluxo-orca:revisor` e `fluxo-orca:verificador` (Opus, sem Edit/Write). Explorador = `Explore` no Agent tool. No Orca: `orca terminal create --worktree path:<wt> --title <papel> --command "claude --agent fluxo-orca:<papel> [--settings ~/.claude/agents/somente-leitura.json]"` (o settings vai nos papéis só leitura) e então `worker-start --terminal <handle> --worktree path:<wt> --spec ...`.
+- **Conta Claude secundária** (`~/.claude-team`, se existir): mesmo caminho por terminal, com a conta no comando — `orca terminal create --worktree path:<wt> --shell git-bash --title <papel>-team --command "CLAUDE_CONFIG_DIR=~/.claude-team claude --agent fluxo-orca:<papel> --model <id> [--settings ...]"` (Linux/macOS: sem `--shell`) e `worker-start --terminal <handle>`. `--agent claude` no `worker-start` sempre abre a conta principal. Qual conta pega a etapa sai do `limites.sh`: a secundária vem antes da principal na ordem de consumo.
 - **Handoff por arquivo em `~/.cache/handoff/<tarefa>/`**: `mapa.md` (explorador → escritor), `revisao.md` (sessão principal → revisor: objetivo, critério, diff, interfaces), `afirmacoes.md` → verificador; saídas `veredito.md`, `verificacao.md`. Nada colado em prompt que um arquivo resolva.
 - **Escalar em vez de insistir**: etapa que falha duas vezes com Sonnet → Opus na terceira ou volta ao usuário.
 - **Verificação comum é reexecutar teste na sessão principal**, sem agente; o `verificador` entra só em auditoria ou afirmação de alto risco.
@@ -40,6 +43,7 @@ orca orchestration check --wait --types "worker_done,escalation,question" --time
 
 ## Cota
 - **Segunda opinião no agy**: Gemini primeiro (limite folgado); Claude/GPT no agy tem limite baixo — só pontual.
+- **Escritores Claude**: conta secundária antes da principal; a principal fica para coordenação e para o gate Opus.
 - **Medir com `bash ~/.cache/limites.sh`** (skill `limites-cota`; exit 3 se algum passar de 80%) antes de cada onda; fornecedor acima de 80% sai da vez.
 - Revisão obrigatória exige Opus 5.5, sem aprovação por modelo menor. Um escritor por tarefa, que escreve E roda os testes até commitar.
 

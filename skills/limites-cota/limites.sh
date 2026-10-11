@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Cotas de todos os fornecedores instalados, uma linha cada, em paralelo. Sai com 3 se algum limite passar de 80% usado.
-# Ordem de consumo: agy Gemini / Kimi -> agy Claude -> conta Claude secundária -> conta Claude principal.
+# Ordem de consumo: agy Gemini / Kimi -> agy Claude -> Codex -> conta Claude secundária -> conta Claude principal.
 # Conta Claude secundária: CLAUDE_CONFIG_DIR em ~/.claude-team (pula se não existir).
 export MSYS_NO_PATHCONV=1
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
@@ -26,13 +26,18 @@ fi
 if ls "$HOME"/.kimi-code/credentials/kimi-code-env-*.json >/dev/null 2>&1; then
   bash "$(dirname "$0")/kimi-cota.sh" > "$tmp/1" 2>&1 &
 fi
+if command -v codex >/dev/null 2>&1; then
+  bash "$(dirname "$0")/codex-cota.sh" > "$tmp/2" 2>&1 &
+fi
 wait
 
-{ cat "$tmp/1" 2>/dev/null; sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/3" 2>/dev/null; cat "$tmp/4"; } | tee "$tmp/todas"
+{ cat "$tmp/1" 2>/dev/null; sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/2" "$tmp/3" 2>/dev/null; cat "$tmp/4"; } | tee "$tmp/todas"
 
-# alerta: qualquer percentual de uso > 80 (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi: "5h N%")
+# alerta: qualquer percentual de uso > 80 (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi/codex: "5h N%", codex também "semana N%")
 awk '
   /usado/    { match($0, /[0-9]+% usado/); if (RLENGTH > 0) { n = substr($0, RSTART, RLENGTH) + 0; if (n > 80) bad = 1 } }
   /restam/   { match($0, /restam [0-9]+%/); if (RLENGTH > 0) { n = substr($0, RSTART + 6, RLENGTH - 6) + 0; if (100 - n > 80) bad = 1 } }
   /^kimi: 5h/ { match($0, /5h [0-9]+%/); n = substr($0, RSTART + 3, RLENGTH - 3) + 0; if (n > 80) bad = 1 }
+  /^codex: 5h/ { match($0, /5h [0-9]+%/); n = substr($0, RSTART + 3, RLENGTH - 3) + 0; if (n > 80) bad = 1
+                 match($0, /semana [0-9]+%/); n = substr($0, RSTART + 7, RLENGTH - 7) + 0; if (n > 80) bad = 1 }
   END { exit bad ? 3 : 0 }' "$tmp/todas"

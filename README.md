@@ -23,9 +23,10 @@ O Claude diagnostica o sistema, as ferramentas e os projetos, instala o que cons
 | Stacks | `stack-laravel`, `stack-python`, `stack-js` |
 | Metodologia | `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `receiving-code-review` |
 | Agentes | `escritor` (Sonnet), `revisor` e `verificador` (Opus, só leitura) |
-| Hooks | `fila-testes`, `bloqueia-bulk`, `despacho-orca`, `guia-laravel`, `instala-scripts` |
-| Scripts (em `~/.cache`) | `gs-teste.sh` (fila), `wt-setup.sh`/`wt-archive.sh`/`wt-lib.sh` (worktree pelo Orca), `limites.sh` (cota) |
-| Extras | `CLAUDE.global.md` (modelo de `~/.claude/CLAUDE.md`), `somente-leitura.json` |
+| Hooks | `fila-testes`, `bloqueia-bulk`, `despacho-orca`, `guia-laravel`, `instala-scripts`; `guarda-externos` para os agentes externos |
+| Scripts (em `~/.cache`) | `gs-teste.sh` (fila), `wt-setup.sh`/`wt-archive.sh`/`wt-lib.sh` (worktree pelo Orca), `limites.sh` + `kimi-cota.sh`/`codex-cota.sh` (cota), `guarda-externos.sh` |
+| Agentes externos (opcional) | Codex, agy e Kimi como workers do Orca, com as mesmas regras (`AGENTS.global.md`), as skills copiadas para `~/.agents/skills` e a trava de comando remoto; segunda conta Claude para escritores. Só entra o que estiver instalado (GUIA, fase 4b) |
+| Extras | `CLAUDE.global.md` (modelo de `~/.claude/CLAUDE.md`), `AGENTS.global.md` (modelo de `~/.agents/AGENTS.md`), `somente-leitura.json` |
 
 ## Licença
 
