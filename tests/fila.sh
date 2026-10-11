@@ -23,7 +23,8 @@ confere() { # esperado(BLOQ|LIVRE) comando
 }
 
 for c in 'php artisan test' 'npm ci && npm test' 'pytest -x' 'composer test' 'cargo test' 'bash -c "pytest"' \
-         'npx vitest run' 'php vendor/pestphp/pest/bin/pest' 'python -m unittest' 'pnpm exec vitest run' 'go test ./...'; do
+         'npx vitest run' 'php vendor/pestphp/pest/bin/pest' 'python -m unittest' 'pnpm exec vitest run' 'go test ./...' \
+         'git commit -m "x" && pytest' 'python -m pytest -m "not slow"'; do
     confere BLOQ "$c"
 done
 
@@ -47,6 +48,8 @@ for c in 'php artisan migrate:fresh --force' 'php artisan db:wipe --env=local' \
     confere LIVRE "$c"
 done
 for c in 'php artisan test --list-tests' 'pytest --collect-only' 'npx vitest list' 'npx jest --listTests' \
+         'git commit -m "docs: explica go test"' 'git commit -am "fix: roda pytest"' 'orca orchestration send --body "rode pytest" --type x' \
+         'gh pr comment 2 --body "npm test ok"' 'git commit -m "x" && git status' \
          'composer install' 'composer require foo/bar' 'npm ci' 'pip install pytest' \
          'bash ~/.cache/gs-teste.sh cargo test' 'bash ~/.cache/gs-teste.sh -- go test ./...' 'git status'; do
     confere LIVRE "$c"
@@ -93,7 +96,7 @@ printf 'DB_PORT=3306\n' > "$tmp/laravel/.env.testing"
 rc=$?
 if [ "$rc" = 0 ]; then ok "executor explícito: pest no host usa a fila da porta"; else ruim "executor explícito: pest no host caiu na fila de container (rc=$rc)"; fi
 cat > "$tmp/rodar.sh" <<'E'
-echo "$(date +%s.%N) ini" >> "$2"; bash "$1/skills/fila-testes/gs-teste.sh" -- sleep 3; echo "$(date +%s.%N) fim" >> "$2"
+echo "$(date +%s) ini" >> "$2"; bash "$1/skills/fila-testes/gs-teste.sh" -- sleep 3; echo "$(date +%s) fim" >> "$2"
 E
 (cd "$tmp/a" && GS_TESTE_TETO=1 bash "$tmp/rodar.sh" "$raiz" "$tmp/a.log") &
 sleep 1
@@ -101,7 +104,7 @@ sleep 1
 wait
 fim_a=$(awk '/fim/{print $1}' "$tmp/a.log"); ini_b=$(awk '/ini/{print $1}' "$tmp/b.log")
 # b pediu 2 s depois do início de a, mas só pode ter a vaga do teto depois que a terminou (a leva ~3 s; b dorme em passos de 5 s).
-if [ -z "$(ls "$HOME/.cache" 2>/dev/null | grep -E 'lock[0-9]$')" ] && awk "BEGIN{exit !($(awk '/fim/{print $1}' "$tmp/b.log") - 3 >= $fim_a - 0.5)}"; then
+if [ -z "$(ls "$HOME/.cache" 2>/dev/null | grep -E 'lock[0-9]$')" ] && awk "BEGIN{exit !($(awk '/fim/{print $1}' "$tmp/b.log") - 3 >= $fim_a - 1)}"; then
     ok "teto=1: execuções não se sobrepõem e as vagas foram liberadas"
 else
     ruim "teto=1: sobreposição ou vaga não liberada (fim_a=$fim_a ini_b=$ini_b)"

@@ -6,7 +6,11 @@ in=$(cat)
 cmd=$(printf '%s' "$in" | grep -oE '"(command|cmd)"[[:space:]]*:[[:space:]]*("([^"\\]|\\.)*"|\[[^]]*\])' | head -1)
 [ -z "$cmd" ] && exit 1
 # Livres saem da análise por trecho (entre ; & |), não o comando inteiro: `npm ci && npm test` segue bloqueado.
+# Texto de mensagem não é comando: o valor de -m/--message (git commit) e de --body/--subject/--title (gh, orca) sai antes de casar.
+v='(\\"[^"]*\\"|'"'[^']*'"'|[^[:space:];&|"]+)'
 cmd=$(printf '%s' "$cmd" | sed -E \
+    -e "/git[[:space:]]+commit/ s/(^|[[:space:]])(-a?m|--message)([[:space:]]+|=)$v//g" \
+    -e "s/--(body|subject|title)([[:space:]]+|=)$v//g" \
     -e 's/[^;&|]*gs-teste\.sh[^;&|]*//g' \
     -e 's/[^;&|]*(--list-tests|--collect-only|--listTests|vitest[[:space:]]+list)[^;&|]*//g' \
     -e 's/(pip|pip3|uv|poetry|pipenv|npm|pnpm|yarn|bun|composer)[[:space:]]+(install|add|i|ci|sync|remove|uninstall|require)[^;&|]*//g')
