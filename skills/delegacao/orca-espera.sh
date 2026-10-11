@@ -14,16 +14,27 @@ while [ $# -gt 0 ]; do
     case "$1" in --run) run=(--run "$2"); shift 2 ;; --max-min) max=$2; shift 2 ;; *) echo "argumento desconhecido: $1" >&2; exit 2 ;; esac
 done
 dir="$HOME/.cache/orca-entregas"; mkdir -p "$dir"
+# Arquivos de trabalho por processo: coordenadores em paralelo truncavam o mesmo arquivo e a entrega virava lixo.
+tmp="$dir/.ultima.$$.json"; lista="$dir/.workers.$$.json"
+trap 'rm -f "$tmp" "$lista"' EXIT
 parado=${ORCA_ESPERA_PARADO_MIN:-10}
 [[ "$parado" =~ ^[1-9][0-9]*$ ]] || { echo "ORCA_ESPERA_PARADO_MIN deve ser um inteiro positivo." >&2; exit 2; }
 fim=$(( $(date +%s) + max * 60 ))
 
-# Imprime as mensagens da entrega; sai 0 se alguma pede ação, 1 se só heartbeat, 2 se vazia.
+# Imprime as mensagens da entrega; sai 0 se alguma pede ação, 1 se só heartbeat, 2 se vazia, 4 se ilegível.
 mostra() { ORCA_ARQ="$1" "$py" -I - <<'EOF'
 import json, os, sys
 sys.stdout.reconfigure(encoding="utf-8")
-r = (json.load(open(os.environ["ORCA_ARQ"], encoding="utf-8")).get("result") or {})
-ms = r.get("messages") or []
+try:
+    # A saída pode trazer mais de um documento JSON em sequência; json.load recusaria.
+    txt = open(os.environ["ORCA_ARQ"], encoding="utf-8").read(); dec = json.JSONDecoder(); i = 0; ms = []
+    while True:
+        while i < len(txt) and txt[i].isspace(): i += 1
+        if i >= len(txt): break
+        doc, i = dec.raw_decode(txt, i)
+        if isinstance(doc, dict): ms += (doc.get("result") or {}).get("messages") or []
+except Exception as e:
+    print(f"!! entrega ilegível ({type(e).__name__}: {e}) em {os.environ['ORCA_ARQ']}"); sys.exit(4)
 if not ms: sys.exit(2)
 acao = False
 for m in ms:
@@ -44,12 +55,13 @@ EOF
 # Estado real dos workers não concluídos; imprime todos e sai 0 se algum precisa de atenção.
 # Atividade do agente no Orca: working | blocked | waiting | done (done = o turno terminou).
 confere() {
-    orca orchestration worker-list "${run[@]}" --json > "$dir/.workers.json" 2>/dev/null
-    ORCA_ARQ="$dir/.workers.json" ORCA_PARADO="$parado" "$py" -I - <<'EOF'
+    orca orchestration worker-list "${run[@]}" --json > "$lista" 2>/dev/null
+    ORCA_ARQ="$lista" ORCA_PARADO="$parado" "$py" -I - <<'EOF'
 import json, os, subprocess, sys, time
 sys.stdout.reconfigure(encoding="utf-8")
-try: ws = json.load(open(os.environ["ORCA_ARQ"], encoding="utf-8"))["result"]["workers"]
-except Exception: sys.exit(1)
+try: ws = json.JSONDecoder().raw_decode(open(os.environ["ORCA_ARQ"], encoding="utf-8").read().lstrip())[0]["result"]["workers"]
+except Exception as e:
+    print(f"   worker-list ilegível ({type(e).__name__}); estado real não conferido nesta rodada"); sys.exit(1)
 alerta = False
 agora = time.time()
 for w in ws:
@@ -125,7 +137,6 @@ EOF
 
 confere && exit 0
 while [ "$(date +%s)" -lt "$fim" ]; do
-    tmp="$dir/.ultima.json"
     restante=$(( fim - $(date +%s) )); espera=60
     [ "$restante" -lt "$espera" ] && espera=$restante
     [ "$espera" -le 0 ] && break
@@ -134,6 +145,8 @@ while [ "$(date +%s)" -lt "$fim" ]; do
     if [ -n "$entrega" ]; then
         cp "$tmp" "$dir/$entrega.json"
         mostra "$tmp"; r=$?
+        # Sem ack: a entrega continua na fila e a cópia fica para leitura manual.
+        [ $r = 4 ] && { echo "Entrega $entrega não lida e sem ack; cópia em $dir/$entrega.json"; exit 3; }
         orca orchestration check "${run[@]}" --ack "$entrega" --json >/dev/null 2>&1
         [ $r = 0 ] && { echo "(entrega $entrega com ack; cópia em $dir/$entrega.json)"; confere; exit 0; }
         continue
