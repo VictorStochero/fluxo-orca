@@ -16,8 +16,11 @@ Os mesmos dois comandos em todo repo (o archive acha o principal por `ORCA_ROOT_
 
 - Windows: `Git\bin\bash.exe` explícito — o `bash` que o `cmd` acha primeiro é o `Git\usr\bin\bash.exe` (sem as ferramentas do Git no PATH) ou o do WSL.
 - Configurar na tela do repo, não num `orca.yaml` local: o Orca lê o `scripts.setup` do `orca.yaml` **de dentro do worktree novo**, então o arquivo só vale versionado no repo (vai para a equipe toda); fora do git, só o archive o enxerga.
+- Na mesma tela do repo no Orca, configurar **aguardar o setup antes de iniciar o agente** (`wait-for-setup`), em vez de `start-immediately`: o agente só recebe a tarefa depois do setup.
 
 Criar a tarefa: `orca orchestration worker-start --worktree new-child --name {repo}-{flag}-{contexto} --base-branch origin/<base> --setup run …` (skill `delegacao`).
+
+Antes de tocar banco, o worker confere que o setup terminou com sucesso. Se ainda estiver rodando, aguarda; se falhou ou não houver evidência de sucesso, usa o `ask` do preâmbulo para enviar a saída do setup ao coordenador e aguarda orientação, sem tentar refazer migração por conta própria.
 
 ## O que o setup faz
 1. Detecta a stack (`artisan` → Laravel; `pyproject.toml`/`requirements*.txt`/`Pipfile` → Python; `package.json` → JS) e quem serve o site (`WT_SITES`: `ddev`, `herd`, `lerd`, `laragon`, `flyenv`, `nativo`; Sail fica com `/worktree` do plugin `laravel-worktree`).

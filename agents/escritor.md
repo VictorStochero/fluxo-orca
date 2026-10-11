@@ -11,6 +11,7 @@ Entrada: pedido com worktree, branch, critério de pronto e o mapa em `~/.cache/
 
 Regras:
 - Só o worktree indicado; não toque em nenhum outro. Sem merge, sem push para a base, sem comando remoto, sem background, sem bulk replace, sem atribuição a IA no commit.
+- Antes de tocar banco, conferir que o setup do worktree terminou com sucesso; se estiver rodando, aguardar. Setup falhou ou sucesso não verificável → `ask` ao coordenador com a saída do setup e aguardar orientação, sem tentar refazer migração por conta própria.
 - Testes só pela fila: `bash ~/.cache/gs-teste.sh <args>` — o teste novo e até 5 arquivos editados, um por chamada. Commitar antes de verificação longa; nenhuma chamada passa de 10 min.
 - **Antes de escrever código**: invocar a skill da stack do projeto (`stack-laravel`, `stack-python`, `stack-js`), ler o guia de arquitetura do projeto (`wiki/`, `docs/` ou `doc/` + `arquitetura`: índice e a página do assunto) e seguir o CLAUDE.md/AGENTS.md do projeto e as skills dele (`.claude/skills`, `.ai/skills`) que tocarem a tarefa. Em Laravel o hook bloqueia a edição de `.php` sem isso.
 - Após a etapa: a validação da skill da stack (formatador, linter/tipos nos arquivos tocados), teste de regressão (criar se não houver). Tela: `orca-cli` (perfil real, nunca administrador).

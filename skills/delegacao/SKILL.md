@@ -56,6 +56,7 @@ bash ~/.cache/orca-espera.sh --run <run_id>     # Bash com run_in_background; ag
 
 ## Prompt do worker (`--spec`)
 Worker não herda a conversa. O spec abre com regras concretas e **valores literais**: shell (Git Bash), caminho do worktree e "não toque em nenhum outro", branch, URL, bancos, comando de teste exato (`bash ~/.cache/gs-teste.sh ...`), skills a invocar, critério de pronto. Proibições explícitas: background, bulk replace, atribuição a Claude, merge, comando remoto (ssh/forge — bloqueado por hook nos agentes externos; precisa de servidor → `ask` ao coordenador). Pede `worker_done` com resumo de 3 frases, hash do commit, divergências e `--outcome succeeded|failed`.
+- Incluir no spec: **antes de tocar banco, conferir que o setup terminou com sucesso; se estiver rodando, aguardar; se falhou ou não houver evidência de sucesso, usar o `ask` do preâmbulo com a saída do setup e aguardar orientação, sem tentar refazer migração por conta própria**. Na tela do repo no Orca, configurar aguardar o setup antes de iniciar o agente (`wait-for-setup`), em vez de `start-immediately`.
 - **Etapas pequenas**: UMA etapa com começo, fim e prova; commita e encerra; o estado passa pelos commits. Tarefa grande se divide antes do dispatch. O spec leva o trecho preciso do plano, não "leia o plano inteiro".
 - **Auditoria = auditor + verificador adversarial** (instruído a REFUTAR afirmações checáveis).
 - **A cada worker concluído, informar o usuário**: UMA tabela (task · worktree · status `andamento` | `concluído` | `pendente` · observação) e, abaixo, as cotas.
