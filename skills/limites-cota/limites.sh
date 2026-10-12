@@ -41,9 +41,9 @@ while [ $# -gt 0 ]; do
     --escritor) SOLO=1 ;;
     --alerta) ALERTA=1 ;;
     --reserva)
-      [ $# -ge 2 ] || { echo 'uso: limites.sh [--escritor [--reserva <tag>]]' >&2; exit 2; }
+      [ $# -ge 2 ] || { echo 'uso: limites.sh [--escritor [--reserva <tag>]] | --alerta' >&2; exit 2; }
       RESERVA="res-$2"; shift ;;
-    *) echo 'uso: limites.sh [--escritor [--reserva <tag>]]' >&2; exit 2 ;;
+    *) echo 'uso: limites.sh [--escritor [--reserva <tag>]] | --alerta' >&2; exit 2 ;;
   esac
   shift
 done

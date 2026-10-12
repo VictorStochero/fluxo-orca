@@ -20,16 +20,20 @@ trap 'rm -f "$tmp" "$lista"' EXIT
 parado=${ORCA_ESPERA_PARADO_MIN:-10}
 [[ "$parado" =~ ^[1-9][0-9]*$ ]] || { echo "ORCA_ESPERA_PARADO_MIN deve ser um inteiro positivo." >&2; exit 2; }
 fim=$(( $(date +%s) + max * 60 ))
-cota_min=${ORCA_ESPERA_COTA_MIN:-10}; prox_cota=0
+cota_min=${ORCA_ESPERA_COTA_MIN:-10}
 [[ "$cota_min" =~ ^[0-9]+$ ]] || { echo "ORCA_ESPERA_COTA_MIN deve ser inteiro (0 desliga)." >&2; exit 2; }
-avisadas="$dir/.cota-avisada.${run[1]:-geral}"
+avisadas="$dir/.cota-avisada.${run[1]:-geral}"; consulta="$avisadas.consulta"
 
 # Fornecedor que passou de 80% em alguma janela: avisa antes de estourar, uma vez até cair abaixo e subir de novo.
+# O intervalo vale entre rearmes (mtime de $consulta): o limites.sh leva 30–60 s e não pode rodar a cada rearme.
 cota() {
-    [ "$cota_min" = 0 ] || [ "$(date +%s)" -lt "$prox_cota" ] && return 1
-    prox_cota=$(( $(date +%s) + cota_min * 60 ))
-    local linhas novas
-    linhas=$(bash "${ORCA_LIMITES:-$HOME/.cache/limites.sh}" --alerta 2>/dev/null)
+    [ "$cota_min" = 0 ] && return 1
+    [ -e "$consulta" ] && [ $(( $(date +%s) - $(date -r "$consulta" +%s) )) -lt $(( cota_min * 60 )) ] && return 1
+    touch "$consulta"
+    local linhas novas rc
+    linhas=$(timeout 120 bash "${ORCA_LIMITES:-$HOME/.cache/limites.sh}" --alerta 2>/dev/null); rc=$?
+    # Falha ou timeout: sem aviso e sem esquecer o que já foi avisado.
+    [ $rc = 0 ] || [ $rc = 3 ] || return 1
     novas=$(printf '%s\n' "$linhas" | while IFS= read -r l; do
         [ -n "$l" ] || continue
         grep -qxF "$(printf '%s' "$l" | awk '{print $1, $2}')" "$avisadas" 2>/dev/null || printf '%s\n' "$l"
@@ -85,7 +89,11 @@ except Exception as e:
     print(f"   worker-list ilegível ({type(e).__name__}); estado real não conferido nesta rodada"); sys.exit(1)
 alerta = False
 agora = time.time()
-LIMITE = re.compile(r"usage limit|rate[ -]?limit|insufficient_quota|\b429\b|(reached|hit|exceeded|exhausted)\b.{0,40}\b(limit|quota)|limite de (uso|cota)", re.I)
+# Mensagens de limite de Claude ("5-hour limit reached"), Codex ("hit your usage limit") e Kimi ("reached your 5-hour
+# usage limit"); 429 e rate limit só em contexto de erro, para não casar "429 passed", ":429" ou RateLimiter.
+LIMITE = re.compile(r"usage limit|\blimit (reached|hit|exceeded)|(reached|hit|exceeded|exhausted)\b.{0,40}\b(quota|limit)\b"
+                    r"|insufficient_quota|429 too many|status:? ?429|error.{0,20}\b429\b|rate[ _-]?limit(ed\b|_error|.{0,10}(reached|exceeded))"
+                    r"|limite de (uso|cota)", re.I)
 pasta_estado = os.path.dirname(os.environ["ORCA_ARQ"])
 def grava(arq, estado):
     temporario = arq + "." + str(os.getpid())
@@ -176,7 +184,7 @@ for w in ws:
     tela = ""
     if w.get("agentTerminalHandle"):
         try:
-            cauda = json.loads(subprocess.run([orca, "terminal", "read", "--terminal", w["agentTerminalHandle"], "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout)["result"]["terminal"]["tail"][-15:]
+            cauda = json.loads(subprocess.run([orca, "terminal", "read", "--terminal", w["agentTerminalHandle"], "--screen", "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout)["result"]["terminal"]["tail"][-15:]
             tela = next((l.strip() for l in reversed(cauda) if LIMITE.search(l)), "")
         except (ValueError, KeyError, TypeError, IndexError): pass
     if tela and anterior.get("limite") != tela:

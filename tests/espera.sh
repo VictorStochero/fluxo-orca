@@ -113,6 +113,14 @@ else echo "FALHA limite na tela"; printf '%s\n' "$out" | sed 's/^/     /'; falha
 out=$(roda)
 if ! printf '%s' "$out" | grep -q 'bateu limite'; then echo "ok   mesmo limite não avisa de novo"
 else echo "FALHA limite repetido"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+echo '{"ok":true,"result":{"terminal":{"tail":["  5-hour limit reached ∙ resets 3pm","> "]}}}' > "$h/tela.json"
+out=$(roda)
+if printf '%s' "$out" | grep -q 'bateu limite de cota: 5-hour limit reached'; then echo "ok   formato 'limit reached' do Claude avisa"
+else echo "FALHA limit reached"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+echo '{"ok":true,"result":{"terminal":{"tail":["Tests: 429 passed","use Illuminate\\\\Cache\\\\RateLimiter;","> "]}}}' > "$h/tela.json"
+out=$(roda)
+if ! printf '%s' "$out" | grep -q 'bateu limite'; then echo "ok   429 de teste e RateLimiter não são limite"
+else echo "FALHA falso positivo de limite"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -f "$h/tela.json"
 printf '#!/bin/bash\necho "kimi: 5h 92%% (zera 04:38) · mês 10%%"; exit 3\n' > "$h/limites.sh"
 out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
@@ -121,6 +129,18 @@ else echo "FALHA aviso de cota"; printf '%s\n' "$out" | sed 's/^/     /'; falhas
 out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
 if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   mesmo fornecedor não avisa de novo"
 else echo "FALHA aviso de cota repetido"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+c=$(ls "$h"/.cache/orca-entregas/.cota-avisada.*.consulta 2>/dev/null | head -1)
+[ -n "$c" ] && ok_int=1 || ok_int=0
+printf '#!/bin/bash\necho conta; exit 1\n' > "$h/limites.sh"
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
+if [ "$ok_int" = 1 ] && ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   intervalo da consulta vale entre rearmes"
+else echo "FALHA intervalo entre rearmes"; falhas=$((falhas + 1)); fi
+touch -d '20 minutes ago' "$c" 2>/dev/null
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
+printf '#!/bin/bash\necho "kimi: 5h 92%% (zera 04:38) · mês 10%%"; exit 3\n' > "$h/limites.sh"; touch -d '20 minutes ago' "$c"
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
+if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   falha do limites.sh não apaga o que já foi avisado"
+else echo "FALHA falha apagou deduplicação"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 
 # orca-libera: só fecha terminal criado pelo --cria e que nenhum dispatch ativo do run usa.
