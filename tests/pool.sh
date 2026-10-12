@@ -4,6 +4,7 @@ raiz=$(cd "$(dirname "$0")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home" POOL_ESTADOS="$tmp/estados"
+unset CLAUDE_CONFIG_DIR  # rodado da conta team, o stub do pessoal leria os números do team
 mkdir -p "$HOME/.claude" "$POOL_ESTADOS" "$tmp/bin"
 falhas=0
 ok() { echo "ok   $1"; }
@@ -200,6 +201,8 @@ pool solta ctx_s3
 export POOL_SESSAO_USO=90 POOL_SEMANA_USO=90 POOL_TEAM_SEMANA_USO=90 POOL_CODEX_SEMANA=90
 confere_rc 0 'cota esgotada difere de pool cheio' seletor
 grep -qx 'escritor: nenhum (todos acima do teto ou ausentes)' "$tmp/saida" && ok 'cota preserva diagnóstico' || ruim 'diagnóstico de cota'
+confere_rc 0 'reserva com cota esgotada não é pool cheio' bash "$tmp/seletor/limites.sh" --escritor --reserva r0
+grep -qx 'escritor: nenhum (todos acima do teto ou ausentes)' "$tmp/saida" && ok 'reserva preserva diagnóstico de cota' || ruim 'reserva confundiu cota com pool cheio'
 unset POOL_SESSAO_USO POOL_SEMANA_USO POOL_TEAM_SEMANA_USO POOL_CODEX_SEMANA
 printf 'pessoal=abc\n' > "$HOME/.claude/agentes.conf"
 confere_rc 2 'seletor propaga erro do pool' seletor
@@ -214,6 +217,7 @@ rm "$HOME/.claude/agentes.conf"
 
 # Reserva: a vaga é pega antes do worker-start; disputa na última vaga cai para o próximo candidato elegível.
 seletor_reserva() { bash "$tmp/seletor/limites.sh" --escritor --reserva "$1"; }
+confere_rc 2 'reserva exige --escritor' bash "$tmp/seletor/limites.sh" --reserva rx
 pool solta ctx_s2
 confere_rc 0 'reserva com vaga do vencedor tomada' seletor_reserva r1
 grep -qx 'escritor: codex (ritmo 0.8 · 80% livre, zera em 168h) reserva res-r1' "$tmp/saida" \
@@ -243,6 +247,11 @@ confere_rc 0 'reserva com TTL=0' pool pega team res-r4
 date -u -d '-1 minute' +%FT%TZ > "$HOME/.cache/agentes/team.lock1/desde"
 POOL_RESERVA_TTL=0 confere_rc 0 'livres com TTL=0' pool livres
 grep -qx 'team 1/1' "$tmp/saida" && ok 'POOL_RESERVA_TTL=0 recupera reserva antiga' || ruim 'TTL=0 não recuperou'
+
+mkdir -p "$HOME/.cache/agentes/team.lock1" && echo res-gravando > "$HOME/.cache/agentes/team.lock1/dispatch"
+POOL_RESERVA_TTL=0 confere_rc 0 'livres com reserva sem desde' pool livres
+grep -qx 'team 0/1' "$tmp/saida" && ok 'reserva sem desde (pega em curso) é conservada' || ruim 'reserva em gravação foi recuperada'
+rm -rf "$HOME/.cache/agentes/team.lock1"
 
 # Reserva impossível: pool cheio para todos os elegíveis.
 printf 'team=1\npessoal=1\n' > "$HOME/.claude/agentes.conf"

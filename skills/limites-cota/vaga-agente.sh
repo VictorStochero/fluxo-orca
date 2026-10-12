@@ -53,6 +53,8 @@ remove_vaga() { # Renomeia e confirma o dono para não apagar uma vaga já reuti
 reserva_morta() { # Reserva provisória expira por TTL; desde ilegível conserva a vaga.
     local ttl desde agora
     ttl=${POOL_RESERVA_TTL:-600}
+    # Vazio enquanto o pega concorrente ainda grava: date -d "" seria meia-noite e a reserva nova cairia.
+    [ -s "$1/desde" ] || return 1
     desde=$(date -d "$(cat "$1/desde" 2>/dev/null)" +%s 2>/dev/null) || return 1
     agora=$(date +%s)
     [ $((agora - desde)) -gt "$ttl" ]

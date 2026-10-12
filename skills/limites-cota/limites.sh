@@ -16,7 +16,7 @@ claude_linha() { # $1 rótulo; resto = comando
           printf "%s: sessão %s | semana %s\n", r, s, w }'
 }
 
-claude_linha "pessoal" claude -p "/usage" > "$tmp/4" &
+claude_linha "pessoal" env -u CLAUDE_CONFIG_DIR claude -p "/usage" > "$tmp/4" &
 if [ -d "$HOME/.claude-team" ]; then
   # Com MSYS_NO_PATHCONV o caminho POSIX chegaria cru ao claude no Windows.
   w() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
@@ -46,6 +46,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+[ -n "$RESERVA" ] && [ $SOLO = 0 ] && { echo 'uso: limites.sh [--escritor [--reserva <tag>]]' >&2; exit 2; }
 { cat "$tmp/1" 2>/dev/null; sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/2" "$tmp/3" 2>/dev/null; cat "$tmp/4"; } > "$tmp/todas"
 [ $SOLO = 0 ] && cat "$tmp/todas"
 
@@ -145,9 +146,8 @@ if [ "$n" -gt 0 ]; then
   else
     printf 'escritor: %s (ritmo %s · %d%% livre)%s\n' "${eleg_c[$i]}" "${eleg_r[$i]}" "${eleg_g[$i]}" "$sufixo"
   fi
-elif [ -n "$RESERVA" ] || { [ "$cand_q" -gt 0 ] && [ "$cand_vaga" = 0 ]; }; then
+elif [ "$cand_q" -gt 0 ] && [ "$cand_vaga" = 0 ]; then
   echo "escritor: nenhum (pool cheio)"
-  [ -n "$RESERVA" ] && exit 75
   rc=75
 else
   echo "escritor: nenhum (todos acima do teto ou ausentes)"

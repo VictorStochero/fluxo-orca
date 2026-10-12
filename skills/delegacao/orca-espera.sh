@@ -58,7 +58,7 @@ EOF
 confere() {
     orca orchestration worker-list "${run[@]}" --json > "$lista" 2>/dev/null
     ORCA_ARQ="$lista" ORCA_PARADO="$parado" "$py" -I - <<'EOF'
-import glob, json, os, shutil, subprocess, sys, time
+import glob, json, os, re, shutil, subprocess, sys, time
 orca = shutil.which("orca") or "orca"  # no Windows o subprocess só acha .exe sem caminho; which respeita o PATHEXT (.cmd)
 sys.stdout.reconfigure(encoding="utf-8")
 try: ws = json.JSONDecoder().raw_decode(open(os.environ["ORCA_ARQ"], encoding="utf-8").read().lstrip())[0]["result"]["workers"]
@@ -87,8 +87,17 @@ for w in ws:
         print("%s último commit %s (%s)" % (w["dispatchId"], hash_curto, idade)); continue
     atividade = st.get("activity")
     # O Orca às vezes liga o worker Kimi ao transcript de outro processo e reporta done falso: vale o wire.jsonl da sessão.
-    wire = sorted(glob.glob(os.path.join(os.environ.get("HOME") or os.path.expanduser("~"), ".kimi-code", "sessions", "wd_" + glob.escape(pasta.split("/")[-1]) + "_*", "session_*", "agents", "main", "wire.jsonl")), key=os.path.getmtime) if pasta else []
-    kimi = bool(wire)
+    # Pasta da sessão casada por inteiro (wd_<worktree>_<hash>): "app" não pode casar "wd_app_x_*".
+    nome = re.compile(r"wd_%s_[0-9a-f]+$" % re.escape(pasta.split("/")[-1])) if pasta else None
+    sessoes = os.path.join(os.environ.get("HOME") or os.path.expanduser("~"), ".kimi-code", "sessions")
+    wire = sorted((f for d in glob.glob(os.path.join(sessoes, "wd_*")) if nome and nome.match(os.path.basename(d))
+                   for f in glob.glob(os.path.join(d, "session_*", "agents", "main", "wire.jsonl"))), key=os.path.getmtime)
+    kimi = False
+    if wire:  # Wire de sessão Kimi antiga no mesmo worktree não vale para worker de outro agente.
+        try:
+            r = json.loads(subprocess.run([orca, "orchestration", "worker-show", "--dispatch", w["dispatchId"], "--json"], capture_output=True, text=True, encoding="utf-8").stdout)
+            kimi = ((r.get("result") or {}).get("worker") or {}).get("startOptions", {}).get("agent") == "kimi"
+        except (ValueError, AttributeError): pass
     if kimi: atividade = "working" if agora - os.path.getmtime(wire[-1]) < int(os.environ["ORCA_PARADO"]) * 60 else "done"
     try:
         with open(estado_arq, encoding="utf-8") as f: anterior = json.load(f)

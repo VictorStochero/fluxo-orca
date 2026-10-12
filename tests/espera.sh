@@ -55,7 +55,7 @@ if [ ! -e "$e/.estado-ctx_fim.json" ]; then echo "ok   estado de dispatch encerr
 rm -rf "$h"
 
 # Saída enxuta e Kimi: worker com stub configurável (atividade, wire.jsonl do Kimi).
-cena() { # atividade idade_do_wire(nenhum|recente|velho)
+cena() { # atividade idade_do_wire(nenhum|recente|velho) [agente=kimi]
     h=$(mktemp -d); mkdir -p "$h/bin" "$h/wt"
     git -C "$h/wt" init -q && git -C "$h/wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m t
     wt="$h/wt"; command -v cygpath >/dev/null 2>&1 && wt=$(cygpath -m "$h/wt")
@@ -64,6 +64,7 @@ cena() { # atividade idade_do_wire(nenhum|recente|velho)
 case "\$*" in
     *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_k","dispatchStatus":"dispatched","projection":{"stage":{"worker":"ready","activity":"$1"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}}]}}' ;;
     *worker-read*) echo '{"ok":true,"result":{"transcript":{"messages":[{"timestamp":1}],"limited":false}}}' ;;
+    *worker-show*) echo '{"ok":true,"result":{"worker":{"startOptions":{"agent":"${3:-kimi}"}}}}' ;;
     *check*) sleep 1; echo '{"ok":true,"result":{}}' ;;
 esac
 EOF2
@@ -95,6 +96,11 @@ cena working velho
 out=$(roda)
 if printf '%s' "$out" | grep -q 'agente parado sem worker_done'; then echo "ok   Kimi com wire velho é dado como parado"
 else echo "FALHA Kimi wire velho"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+cena working velho claude
+out=$(roda)
+if ! printf '%s' "$out" | grep -q '!!'; then echo "ok   wire velho de Kimi não vale para worker de outro agente"
+else echo "FALHA wire alheio"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 
 # orca-libera: só fecha terminal criado pelo --cria e que nenhum dispatch ativo do run usa.
