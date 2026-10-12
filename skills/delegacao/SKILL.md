@@ -11,9 +11,11 @@ description: Use antes de despachar qualquer agente (escritor, revisor, levantam
 ```text
 orca status --json
 orca orchestration run-create --objective "<objetivo>" --json
-orca orchestration worker-start --spec "<prompt autossuficiente>" --worktree <current|new-child|path:...> --agent <claude|codex|antigravity|opencode> --model <id> --effort <nível> --json
+bash ~/.cache/orca-inicia.sh --spec "<prompt autossuficiente>" --worktree <current|new-child|path:...> --agent <claude|codex|antigravity|opencode> --model <id> --effort <nível>
 bash ~/.cache/orca-espera.sh --run <run_id>     # Bash com run_in_background; agir quando sair; rearmar
+bash ~/.cache/orca-tela.sh <handle> [N]         # tela do terminal do worker, sem moldura nem JSON
 ```
+- **`orca-inicia.sh`** é o `worker-start --json` com saída de uma linha (`dispatch · state · task`, e `failedStage`/`lastError`/`recovery` se houver); o recibo completo fica em `~/.cache/orca-recibos/`. Erro do CLI sai como `erro <code>: <message>`. **`orca-tela.sh`** substitui `orca terminal read --screen --json` para ver o que o worker mostra.
 - **Esperar só pelo `orca-espera.sh`**, em background: ele grava cada entrega em `~/.cache/orca-entregas/`, imprime as mensagens inteiras e dá ack na hora (sem ack o Orca devolve sempre a entrega antiga e os `worker_done` novos ficam presos atrás dela), ignora heartbeat e, entre esperas, confere o estado real de cada worker ativo — atividade do agente, processo, último commit — e sai também quando um worker parou sem `worker_done`. Nunca `check --wait` em laço próprio, nunca filtrar a saída do `check` com `grep`. Saiu sem nada: rearmar.
 - **Despacho só por `worker-start`**, que injeta o preâmbulo com `Dispatch ID` e o comando de `worker_done`; texto mandado direto ao terminal deixa o worker sem como avisar que terminou. Do lado do worker, o hook `fim-worker` (Stop) não deixa o turno acabar sem `worker_done` no Claude e no Codex.
 - **Antes de despachar para um worktree**, conferir no `worker-list` que nenhum worker ativo está nele.
