@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Uma linha com a cota do Codex (janela de 5 h e semana), lida do app-server local (account/rateLimits/read).
+# Uma linha com a cota do Codex (janela de 5 h e semana, cada uma com o zera em hora local), lida do app-server local (account/rateLimits/read).
 # python3 no Windows pode ser o atalho da Microsoft Store, que não executa: vale o primeiro que rodar.
 for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break; done
 [ -n "$py" ] || { echo "codex: sem python"; exit 2; }
@@ -23,5 +23,6 @@ s, w = r.get("primary"), r.get("secondary")
 if not s:
     print("codex: cota ilegível (rode codex login)"); sys.exit(2)
 zera = time.strftime("%H:%M", time.localtime(s["resetsAt"]))
-print(f"codex: 5h {s['usedPercent']}% (zera {zera}) · semana {(w or {}).get('usedPercent', 0)}%")
+zera_w = f" (zera {time.strftime('%Y-%m-%d %H:%M', time.localtime(w['resetsAt']))})" if w and w.get("resetsAt") else ""
+print(f"codex: 5h {s['usedPercent']}% (zera {zera}) · semana {(w or {}).get('usedPercent', 0)}%{zera_w}")
 EOF
