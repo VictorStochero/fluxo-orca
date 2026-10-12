@@ -140,7 +140,7 @@ chmod +x "$tmp/cota/bin/"*
 # Cópia isolada: sem codex-cota.sh ao lado, o Codex real não entra na conta.
 cp "$raiz/skills/limites-cota/limites.sh" "$raiz/skills/limites-cota/vaga-agente.sh" "$tmp/cota/"
 esc=$(PATH="$tmp/cota/bin:$PATH" bash "$tmp/cota/limites.sh" --escritor 2>/dev/null | tail -1)
-if [ "$esc" = "escritor: pessoal (40% livre)" ]; then ok "escritor: conta ilegível não é candidata"; else ruim "escritor: conta ilegível escolhida ($esc)"; fi
+if [ "$esc" = "escritor: pessoal (ritmo 0.4 · 40% livre)" ]; then ok "escritor: conta ilegível não é candidata"; else ruim "escritor: conta ilegível escolhida ($esc)"; fi
 
 # Pid reciclado: vaga morta cujo filho é um processo alheio vivo (sem identidade conferida) não pode ser morto.
 rm -rf "$HOME/.cache"; mkdir -p "$HOME/.cache/gs-teste-geral.lock1" "$tmp/d"
