@@ -1,6 +1,6 @@
 {
   "name": "fluxo-orca",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Fluxo de trabalho com o Orca no Claude Code (pt-BR) para Laravel, Python e JS/TS em Windows, Linux ou macOS: delegação por workers do Orca, agentes escritor/revisor/verificador, worktree com banco próprio, fila de testes da máquina, revisão de cota, board do GitHub, perfil do ambiente local e skills de metodologia, com hooks que impõem as regras.",
   "author": {
     "name": "Victor Stochero",
