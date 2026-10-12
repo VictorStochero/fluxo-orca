@@ -183,7 +183,21 @@ grep -qx 'escritor: kimi (ritmo 1.0 · 96% livre)' "$tmp/saida" \
 unset POOL_TEAM_SEMANA_USO POOL_TEAM_RESET_H
 kimi_stub 2 85 "$(date -d '+720 hours' '+%Y-%m-%d %H:%M')"
 confere_rc 3 'tabela alerta mês do Kimi acima de 80%' bash "$tmp/seletor/limites.sh"
+# Janela de 5h: o primeiro número de "5h 95%" é o 5; vale o número colado ao %.
+kimi_stub 95 4 "$(date -d '+720 hours' '+%Y-%m-%d %H:%M')"
+confere_rc 0 'seleção com 5h do Kimi estourada' seletor
+grep -qx 'escritor: team (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" \
+    && ok 'Kimi com 5h acima de 80% fica fora' || ruim '5h do Kimi lida errado'
+confere_rc 3 '--alerta com 5h do Kimi estourada' bash "$tmp/seletor/limites.sh" --alerta
+[ "$(cat "$tmp/saida")" = "kimi: 5h 95% (zera 23:00) · mês 4% (zera $(date -d '+720 hours' '+%Y-%m-%d %H:%M'))" ] \
+    && ok '--alerta imprime só a linha acima de 80%' || { ruim '--alerta'; cat "$tmp/saida"; }
 rm -rf "$HOME/.kimi-code" "$tmp/seletor/kimi-cota.sh"
+POOL_CODEX_5H=95 confere_rc 3 '--alerta com 5h do Codex estourada' bash "$tmp/seletor/limites.sh" --alerta
+grep -q '^codex: 5h 95%' "$tmp/saida" && ok '5h do Codex no alerta' || ruim '5h do Codex lida errado'
+POOL_SESSAO_USO=10 POOL_SEMANA_USO=90 confere_rc 3 '--alerta com semana do Claude acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
+grep -q '^pessoal: ' "$tmp/saida" && ok 'semana do Claude no alerta (segundo % usado da linha)' || ruim 'semana do Claude ignorada'
+confere_rc 0 '--alerta sem nada acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
+[ -s "$tmp/saida" ] && ruim '--alerta imprimiu sem motivo' || ok '--alerta silencioso abaixo de 80%'
 
 pool pega team ctx_s1
 confere_rc 0 'seleção exclui team ocupado' seletor

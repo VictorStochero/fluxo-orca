@@ -20,6 +20,25 @@ trap 'rm -f "$tmp" "$lista"' EXIT
 parado=${ORCA_ESPERA_PARADO_MIN:-10}
 [[ "$parado" =~ ^[1-9][0-9]*$ ]] || { echo "ORCA_ESPERA_PARADO_MIN deve ser um inteiro positivo." >&2; exit 2; }
 fim=$(( $(date +%s) + max * 60 ))
+cota_min=${ORCA_ESPERA_COTA_MIN:-10}; prox_cota=0
+[[ "$cota_min" =~ ^[0-9]+$ ]] || { echo "ORCA_ESPERA_COTA_MIN deve ser inteiro (0 desliga)." >&2; exit 2; }
+avisadas="$dir/.cota-avisada.${run[1]:-geral}"
+
+# Fornecedor que passou de 80% em alguma janela: avisa antes de estourar, uma vez até cair abaixo e subir de novo.
+cota() {
+    [ "$cota_min" = 0 ] || [ "$(date +%s)" -lt "$prox_cota" ] && return 1
+    prox_cota=$(( $(date +%s) + cota_min * 60 ))
+    local linhas novas
+    linhas=$(bash "${ORCA_LIMITES:-$HOME/.cache/limites.sh}" --alerta 2>/dev/null)
+    novas=$(printf '%s\n' "$linhas" | while IFS= read -r l; do
+        [ -n "$l" ] || continue
+        grep -qxF "$(printf '%s' "$l" | awk '{print $1, $2}')" "$avisadas" 2>/dev/null || printf '%s\n' "$l"
+    done)
+    printf '%s\n' "$linhas" | awk 'NF {print $1, $2}' > "$avisadas"
+    [ -n "$novas" ] || return 1
+    printf '%s\n' "$novas" | sed 's/^/!! cota acima de 80%: /'
+    echo "   próximas etapas: bash ~/.cache/limites.sh --escritor (fornecedor acima do teto fica fora da vez)"
+}
 
 # Imprime as mensagens da entrega; sai 0 se alguma pede ação, 1 se só heartbeat, 2 se vazia, 4 se ilegível.
 mostra() { ORCA_ARQ="$1" "$py" -I - <<'EOF'
@@ -66,6 +85,7 @@ except Exception as e:
     print(f"   worker-list ilegível ({type(e).__name__}); estado real não conferido nesta rodada"); sys.exit(1)
 alerta = False
 agora = time.time()
+LIMITE = re.compile(r"usage limit|rate[ -]?limit|insufficient_quota|\b429\b|(reached|hit|exceeded|exhausted)\b.{0,40}\b(limit|quota)|limite de (uso|cota)", re.I)
 pasta_estado = os.path.dirname(os.environ["ORCA_ARQ"])
 def grava(arq, estado):
     temporario = arq + "." + str(os.getpid())
@@ -152,6 +172,17 @@ for w in ws:
         alerta = avisou = True
         print("!! %s parado há %d min sem saída: ler com worker-read e cobrar com send --to dispatch:%s" % (w["dispatchId"], (agora - estado["progresso"]) // 60, w["dispatchId"]))
         estado["progresso"] = agora
+    # Limite de cota estourado aparece na tela do agente antes de qualquer outro sinal; avisa uma vez por mensagem.
+    tela = ""
+    if w.get("agentTerminalHandle"):
+        try:
+            cauda = json.loads(subprocess.run([orca, "terminal", "read", "--terminal", w["agentTerminalHandle"], "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout)["result"]["terminal"]["tail"][-15:]
+            tela = next((l.strip() for l in reversed(cauda) if LIMITE.search(l)), "")
+        except (ValueError, KeyError, TypeError, IndexError): pass
+    if tela and anterior.get("limite") != tela:
+        alerta = avisou = True
+        print("!! %s bateu limite de cota: %s\n   redistribuir a etapa (limites.sh --escritor) ou esperar o reset" % (w["dispatchId"], tela[:200]))
+    estado["limite"] = tela
     grava(estado_arq, estado)
     if avisou: continue
     if motivo:
@@ -180,6 +211,7 @@ while [ "$(date +%s)" -lt "$fim" ]; do
     fi
     grep -q '"ok": *false' "$tmp" && { echo "check falhou:"; cat "$tmp"; exit 3; }
     confere && exit 0
+    cota && exit 0
 done
 resumo=$(ORCA_RESUMO=1 confere | sed "s/^/Sem novidade em $max min; /")
 echo "${resumo:-Sem novidade em $max min.}"

@@ -35,10 +35,11 @@ if command -v codex >/dev/null 2>&1; then
 fi
 wait
 
-SOLO=0; RESERVA=""
+SOLO=0; RESERVA=""; ALERTA=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --escritor) SOLO=1 ;;
+    --alerta) ALERTA=1 ;;
     --reserva)
       [ $# -ge 2 ] || { echo 'uso: limites.sh [--escritor [--reserva <tag>]]' >&2; exit 2; }
       RESERVA="res-$2"; shift ;;
@@ -46,8 +47,25 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[ -n "$RESERVA" ] && [ $SOLO = 0 ] && { echo 'uso: limites.sh [--escritor [--reserva <tag>]]' >&2; exit 2; }
+[ -n "$RESERVA" ] && [ $SOLO = 0 ] && { echo 'uso: limites.sh [--escritor [--reserva <tag>]] | --alerta' >&2; exit 2; }
 { cat "$tmp/1" 2>/dev/null; sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/2" "$tmp/3" 2>/dev/null; cat "$tmp/4"; } > "$tmp/todas"
+
+# Qualquer janela acima de 80% (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi: "5h N%" e "mês N%";
+# codex: "5h N%" e "semana N%"): sai com 3; com $1=1 imprime só as linhas acima do limite.
+alerta() {
+  awk -v so_linhas="$1" '
+    function pct(   s) { s = substr($0, RSTART, RLENGTH); match(s, /[0-9]+%/); return substr(s, RSTART, RLENGTH - 1) + 0 }
+    { r = 0 }
+    /usado/    { s = $0; while (match(s, /[0-9]+% usado/)) { if (substr(s, RSTART, RLENGTH - 7) + 0 > 80) r = 1; s = substr(s, RSTART + RLENGTH) } }
+    /restam/   { if (match($0, /restam [0-9]+%/) && 100 - pct() > 80) r = 1 }
+    /^kimi: 5h/ { if (match($0, /5h [0-9]+%/) && pct() > 80) r = 1
+                  if (match($0, /mês [0-9]+%/) && pct() > 80) r = 1 }
+    /^codex: 5h/ { if (match($0, /5h [0-9]+%/) && pct() > 80) r = 1
+                   if (match($0, /semana [0-9]+%/) && pct() > 80) r = 1 }
+    r { bad = 1; if (so_linhas == 1) print }
+    END { exit bad ? 3 : 0 }' "$tmp/todas"
+}
+[ "$ALERTA" = 1 ] && { alerta 1; exit $?; }
 [ $SOLO = 0 ] && cat "$tmp/todas"
 
 bash "$(dirname "$0")/vaga-agente.sh" livres > "$tmp/pool"
@@ -58,9 +76,10 @@ if [ "$rc" != 0 ]; then
 else
 agora=$(date +%s)
 # Cada candidato vira "conta curta longa zraw"; zraw = zera da longa legível pelo date -d, ou -.
-# pct() isola o trecho casado e reextrai os dígitos: índices de multibyte (ê, ã) variam entre awk UTF-8 e byte-orientado.
+# pct() isola o trecho casado e reextrai os dígitos colados ao %: índices de multibyte (ê, ã) variam entre awk
+# UTF-8 e byte-orientado, e o primeiro número de "5h 90%" seria o 5.
 awk '
-  function pct(   s) { s = substr($0, RSTART, RLENGTH); match(s, /[0-9]+/); return substr(s, RSTART, RLENGTH) + 0 }
+  function pct(   s) { s = substr($0, RSTART, RLENGTH); match(s, /[0-9]+%/); return substr(s, RSTART, RLENGTH - 1) + 0 }
   /^team/ || /^pessoal/ { k = ($0 ~ /^team/) ? "team" : "pessoal"
     if (match($0, /semana [0-9]+%/)) { ini = RSTART; tam = RLENGTH; l = pct()
       s = substr($0, ini, tam + 120)
@@ -154,13 +173,4 @@ else
 fi
 fi
 [ $SOLO = 1 ] && exit "$rc"
-# alerta: qualquer percentual de uso > 80 (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi: "5h N%" e "mês N%"; codex: "5h N%" e "semana N%")
-awk '
-  function pct(   s) { s = substr($0, RSTART, RLENGTH); match(s, /[0-9]+/); return substr(s, RSTART, RLENGTH) + 0 }
-  /usado/    { match($0, /[0-9]+% usado/); if (RLENGTH > 0) { n = pct(); if (n > 80) bad = 1 } }
-  /restam/   { match($0, /restam [0-9]+%/); if (RLENGTH > 0) { n = pct(); if (100 - n > 80) bad = 1 } }
-  /^kimi: 5h/ { if (match($0, /5h [0-9]+%/)) { n = pct(); if (n > 80) bad = 1 }
-                if (match($0, /mês [0-9]+%/)) { n = pct(); if (n > 80) bad = 1 } }
-  /^codex: 5h/ { if (match($0, /5h [0-9]+%/)) { n = pct(); if (n > 80) bad = 1 }
-                 if (match($0, /semana [0-9]+%/)) { n = pct(); if (n > 80) bad = 1 } }
-  END { exit bad ? 3 : 0 }' "$tmp/todas"
+alerta 0

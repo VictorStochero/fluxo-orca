@@ -62,9 +62,10 @@ cena() { # atividade idade_do_wire(nenhum|recente|velho) [agente=kimi]
     cat > "$h/bin/orca" <<EOF2
 #!/bin/bash
 case "\$*" in
-    *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_k","dispatchStatus":"dispatched","projection":{"stage":{"worker":"ready","activity":"$1"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}}]}}' ;;
+    *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_k","dispatchStatus":"dispatched","agentTerminalHandle":"term_k","projection":{"stage":{"worker":"ready","activity":"$1"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}}]}}' ;;
     *worker-read*) echo '{"ok":true,"result":{"transcript":{"messages":[{"timestamp":1}],"limited":false}}}' ;;
     *worker-show*) echo '{"ok":true,"result":{"worker":{"startOptions":{"agent":"${3:-kimi}"}}}}' ;;
+    *terminal*read*) cat "$h/tela.json" 2>/dev/null || echo '{"ok":true,"result":{"terminal":{"tail":["pronto"]}}}' ;;
     *check*) sleep 1; echo '{"ok":true,"result":{}}' ;;
 esac
 EOF2
@@ -101,6 +102,25 @@ cena working velho claude
 out=$(roda)
 if ! printf '%s' "$out" | grep -q '!!'; then echo "ok   wire velho de Kimi não vale para worker de outro agente"
 else echo "FALHA wire alheio"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+
+# Limite de cota: estourado na tela do worker e perto de estourar pelo limites.sh --alerta.
+cena working nenhum claude
+echo '{"ok":true,"result":{"terminal":{"tail":["Error: 403 You'"'"'ve reached your 5-hour usage limit.","> "]}}}' > "$h/tela.json"
+out=$(roda)
+if printf '%s' "$out" | grep -q '!! ctx_k bateu limite de cota: .*5-hour usage limit'; then echo "ok   limite estourado na tela do worker avisa"
+else echo "FALHA limite na tela"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+out=$(roda)
+if ! printf '%s' "$out" | grep -q 'bateu limite'; then echo "ok   mesmo limite não avisa de novo"
+else echo "FALHA limite repetido"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -f "$h/tela.json"
+printf '#!/bin/bash\necho "kimi: 5h 92%% (zera 04:38) · mês 10%%"; exit 3\n' > "$h/limites.sh"
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
+if printf '%s' "$out" | grep -q '^!! cota acima de 80%: kimi: 5h 92%'; then echo "ok   cota acima de 80% avisa antes de estourar"
+else echo "FALHA aviso de cota"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
+if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   mesmo fornecedor não avisa de novo"
+else echo "FALHA aviso de cota repetido"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 
 # orca-libera: só fecha terminal criado pelo --cria e que nenhum dispatch ativo do run usa.
