@@ -58,7 +58,7 @@ EOF
 confere() {
     orca orchestration worker-list "${run[@]}" --json > "$lista" 2>/dev/null
     ORCA_ARQ="$lista" ORCA_PARADO="$parado" "$py" -I - <<'EOF'
-import json, os, shutil, subprocess, sys, time
+import glob, json, os, shutil, subprocess, sys, time
 orca = shutil.which("orca") or "orca"  # no Windows o subprocess só acha .exe sem caminho; which respeita o PATHEXT (.cmd)
 sys.stdout.reconfigure(encoding="utf-8")
 try: ws = json.JSONDecoder().raw_decode(open(os.environ["ORCA_ARQ"], encoding="utf-8").read().lstrip())[0]["result"]["workers"]
@@ -79,10 +79,17 @@ for w in ws:
         continue
     p = w.get("projection") or {}; st = p.get("stage") or {}; vida = (p.get("liveness") or {}).get("verdict")
     pasta = (p.get("workspace") or {}).get("id", "").split("::")[-1]
-    commit = ""
+    commit = ""; hash_curto = "-"; idade = "-"
     if pasta:
-        commit = subprocess.run(["git", "-C", pasta, "log", "-1", "--format=%h %cr: %s"], capture_output=True, text=True, encoding="utf-8").stdout.strip()
+        h = subprocess.run(["git", "-C", pasta, "log", "-1", "--format=%h%x09%cr%x09%s"], capture_output=True, text=True, encoding="utf-8").stdout.strip().split("\t")
+        if len(h) == 3: hash_curto, idade = h[0], h[1]; commit = "%s %s: %s" % tuple(h)
+    if os.environ.get("ORCA_RESUMO"):
+        print("%s último commit %s (%s)" % (w["dispatchId"], hash_curto, idade)); continue
     atividade = st.get("activity")
+    # O Orca às vezes liga o worker Kimi ao transcript de outro processo e reporta done falso: vale o wire.jsonl da sessão.
+    wire = sorted(glob.glob(os.path.join(os.environ.get("HOME") or os.path.expanduser("~"), ".kimi-code", "sessions", "wd_" + glob.escape(pasta.split("/")[-1]) + "_*", "session_*", "agents", "main", "wire.jsonl")), key=os.path.getmtime) if pasta else []
+    kimi = bool(wire)
+    if kimi: atividade = "working" if agora - os.path.getmtime(wire[-1]) < int(os.environ["ORCA_PARADO"]) * 60 else "done"
     try:
         with open(estado_arq, encoding="utf-8") as f: anterior = json.load(f)
     except (OSError, ValueError): anterior = {}
@@ -90,7 +97,7 @@ for w in ws:
     # Turno iniciado à mão (Enter no terminal) fica turn_start_unobserved para sempre: só alerta sem atividade.
     inicio_incerto = w.get("dispatchStatus") == "pending" and st.get("worker") == "start_unknown" and st.get("detail") == "turn_start_unobserved" and atividade != "working"
     estado["inicio_incerto"] = anterior.get("inicio_incerto", agora) if inicio_incerto else agora
-    if atividade == "working":
+    if atividade == "working" and not kimi:
         try:
             cursor = anterior.get("cursor")
             timestamp = anterior.get("timestamp")
@@ -119,6 +126,9 @@ for w in ws:
     else:
         estado["progresso"] = agora
     estado["atividade"] = atividade
+    assinatura = [atividade, vida, hash_curto]
+    novo = anterior.get("impresso") != assinatura
+    estado["impresso"] = assinatura
     linha = "%s %s/%s vida=%s %s | último commit: %s" % (w["dispatchId"], st.get("worker"), atividade, vida, pasta.split("/")[-1], commit or "-")
     motivo = ""; avisou = False
     if vida == "exited":
@@ -138,7 +148,7 @@ for w in ws:
     if motivo:
         alerta = True
         print("!! " + linha + "\n   " + motivo)
-    else:
+    elif novo:
         print("   " + linha)
 sys.exit(0 if alerta else 1)
 EOF
@@ -160,7 +170,8 @@ while [ "$(date +%s)" -lt "$fim" ]; do
         continue
     fi
     grep -q '"ok": *false' "$tmp" && { echo "check falhou:"; cat "$tmp"; exit 3; }
-    echo "--- $(date +%H:%M) sem mensagem; estado real:"
     confere && exit 0
 done
-echo "Sem novidade em $max min. Rearmar: bash ~/.cache/orca-espera.sh ${run[*]}"
+resumo=$(ORCA_RESUMO=1 confere | sed "s/^/Sem novidade em $max min; /")
+echo "${resumo:-Sem novidade em $max min.}"
+echo "Rearmar: bash ~/.cache/orca-espera.sh ${run[*]}"

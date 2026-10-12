@@ -54,6 +54,49 @@ else echo "FALHA carência"; printf '1:\n%s\n2:\n%s\n' "$um" "$dois" | sed 's/^/
 if [ ! -e "$e/.estado-ctx_fim.json" ]; then echo "ok   estado de dispatch encerrado apagado"; else echo "FALHA limpeza do estado"; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 
+# Saída enxuta e Kimi: worker com stub configurável (atividade, wire.jsonl do Kimi).
+cena() { # atividade idade_do_wire(nenhum|recente|velho)
+    h=$(mktemp -d); mkdir -p "$h/bin" "$h/wt"
+    git -C "$h/wt" init -q && git -C "$h/wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m t
+    wt="$h/wt"; command -v cygpath >/dev/null 2>&1 && wt=$(cygpath -m "$h/wt")
+    cat > "$h/bin/orca" <<EOF2
+#!/bin/bash
+case "\$*" in
+    *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_k","dispatchStatus":"dispatched","projection":{"stage":{"worker":"ready","activity":"$1"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}}]}}' ;;
+    *worker-read*) echo '{"ok":true,"result":{"transcript":{"messages":[{"timestamp":1}],"limited":false}}}' ;;
+    *check*) sleep 1; echo '{"ok":true,"result":{}}' ;;
+esac
+EOF2
+    chmod +x "$h/bin/orca"
+    command -v cygpath >/dev/null 2>&1 && printf '@"%s" "%s" %%*\r\n' "$(cygpath -w "$(command -v bash)")" "$(cygpath -m "$h/bin/orca")" > "$h/bin/orca.cmd"
+    if [ "$2" != nenhum ]; then
+        w="$h/.kimi-code/sessions/wd_wt_abc/session_1/agents/main"; mkdir -p "$w"; : > "$w/wire.jsonl"
+        [ "$2" = velho ] && touch -d '2 hours ago' "$w/wire.jsonl"
+    fi
+}
+roda() { HOME="$h" PATH="$h/bin:$PATH" ORCA_ESPERA_PARADO_MIN=10 bash "$raiz/skills/delegacao/orca-espera.sh" --max-min 1 2>&1; }
+cena working nenhum
+um=$(roda)
+git -C "$h/wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m novo
+dois=$(roda)
+n1=$(printf '%s\n' "$um" | grep -c '^   ctx_k ')
+n2=$(printf '%s\n' "$dois" | grep -c '^   ctx_k ')
+if [ "$n1" = 1 ] && [ "$n2" = 1 ]; then echo "ok   minuto sem mudança não imprime; mudança (commit) imprime"
+else echo "FALHA saída só de mudança (n1=$n1 n2=$n2)"; printf '%s\n' "$um" "$dois" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+if printf '%s' "$um" | grep -q '^Sem novidade em 1 min; ctx_k último commit [0-9a-f]* (.*)$' && printf '%s' "$um" | grep -q 'Rearmar'; then echo "ok   resumo no fim"
+else echo "FALHA resumo"; printf '%s\n' "$um" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+cena done recente
+out=$(roda)
+if ! printf '%s' "$out" | grep -q '!!'; then echo "ok   Kimi com wire recente e activity=done não é dado como parado"
+else echo "FALHA Kimi wire recente"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+cena working velho
+out=$(roda)
+if printf '%s' "$out" | grep -q 'agente parado sem worker_done'; then echo "ok   Kimi com wire velho é dado como parado"
+else echo "FALHA Kimi wire velho"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+
 # orca-libera: só fecha terminal criado pelo --cria e que nenhum dispatch ativo do run usa.
 libera() { # nome registrado(sim|nao) outro_ativo(sim|nao|ilegivel) fecha_esperado(sim|nao)
     local h; h=$(mktemp -d); mkdir -p "$h/bin"
