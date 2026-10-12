@@ -109,6 +109,7 @@ mkdir -p "$tmp/seletor" "$HOME/.claude-team"
 cp "$raiz/skills/limites-cota/limites.sh" "$raiz/skills/limites-cota/vaga-agente.sh" "$tmp/seletor/" 2>/dev/null
 cat > "$tmp/bin/claude" <<'EOF'
 #!/usr/bin/env bash
+[ -n "${ORCA_PANE_KEY:-}${ORCA_AGENT_HOOK_PORT:-}" ] && touch "$POOL_ESTADOS/orca-vazou"
 uso_c=${POOL_SESSAO_USO:-30}; uso_l=${POOL_SEMANA_USO:-30}; reset_h=${POOL_RESET_H:-168}
 if [ -n "$CLAUDE_CONFIG_DIR" ]; then
     uso_c=${POOL_TEAM_SESSAO_USO:-10}; uso_l=${POOL_TEAM_SEMANA_USO:-10}; reset_h=${POOL_TEAM_RESET_H:-84}
@@ -138,6 +139,9 @@ POOL_TEAM_SEMANA_USO=60 POOL_TEAM_RESET_H=24 confere_rc 0 'ritmo: zera antes ven
 grep -qx 'escritor: team (ritmo 2.8 · 40% livre, zera em 24h)' "$tmp/saida" \
     && ok 'zera antes vence com menos folga' || ruim 'zera antes não venceu'
 unset POOL_TEAM_SEMANA_USO POOL_TEAM_RESET_H
+
+ORCA_PANE_KEY=painel ORCA_AGENT_HOOK_PORT=1 confere_rc 0 'medição dentro de painel do Orca' seletor
+[ -e "$POOL_ESTADOS/orca-vazou" ] && ruim 'claude -p herdou variáveis do Orca' || ok 'claude -p sem variáveis do Orca'
 
 # Teto da longa: 95% só com reset em < 24 h; fora disso, 80%. Curta sempre ≤ 80.
 POOL_TEAM_SEMANA_USO=90 POOL_TEAM_RESET_H=12 confere_rc 0 'teto 95 com reset próximo' seletor
@@ -251,8 +255,8 @@ rm "$HOME/.claude/agentes.conf"
 # Conta ilimitada reserva trivialmente, sem criar trava.
 export POOL_TEAM_SEMANA_USO=90 POOL_CODEX_SEMANA=90
 confere_rc 0 'reserva na conta ilimitada' seletor_reserva r6
-grep -qx 'escritor: pessoal (ritmo 0.7 · 70% livre, zera em 168h) reserva res-r6' "$tmp/saida" \
-    && ok 'conta ilimitada reserva trivialmente' || { ruim 'reserva ilimitada falhou'; cat "$tmp/saida"; }
+grep -qx 'escritor: pessoal (ritmo 0.7 · 70% livre, zera em 168h)' "$tmp/saida" \
+    && ok 'conta ilimitada sem sufixo de reserva (nada a trocar)' || { ruim 'reserva ilimitada falhou'; cat "$tmp/saida"; }
 compgen -G "$HOME/.cache/agentes/pessoal.lock*" >/dev/null && ruim 'pessoal ilimitado criou trava' || ok 'reserva ilimitada não cria trava'
 unset POOL_TEAM_SEMANA_USO POOL_CODEX_SEMANA
 

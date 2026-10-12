@@ -8,7 +8,8 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
 claude_linha() { # $1 rótulo; resto = comando
   local r=$1; shift
-  "$@" 2>&1 | awk -v r="$r" '
+  # Sem as variáveis do Orca: os hooks do claude -p reportariam fim de turno pelo agente do painel que mediu.
+  (for v in $(compgen -e | grep '^ORCA_'); do unset "$v"; done; "$@") 2>&1 | awk -v r="$r" '
     /^Current session:/ { sub(/ used.*resets /, " usado, zera "); sub(/ used$/, " usado"); sub(/^Current session: /, ""); s=$0 }
     /^Current week \(all models\):/ { sub(/ used.*resets /, " usado, zera "); sub(/ used$/, " usado"); sub(/^Current week \(all models\): /, ""); w=$0 }
     END { if (s == "") { print r ": ilegível"; exit }
@@ -131,7 +132,9 @@ if [ "$n" -gt 0 ]; then
     i=-1
     for ((j = 0; j < n; j++)); do
       if bash "$(dirname "$0")/vaga-agente.sh" pega "${eleg_c[$j]}" "$RESERVA" 2>/dev/null; then
-        i=$j; sufixo=" reserva $RESERVA"; break
+        # Conta ilimitada não cria vaga: sem sufixo, não há o que trocar depois do start.
+        i=$j; grep -qxF "$RESERVA" "$HOME/.cache/agentes/${eleg_c[$j]}".lock*/dispatch 2>/dev/null && sufixo=" reserva $RESERVA"
+        break
       fi
     done
     if [ "$i" -lt 0 ]; then echo "escritor: nenhum (pool cheio)"; exit 75; fi
