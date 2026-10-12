@@ -153,4 +153,18 @@ libera "libera mantém terminal reaproveitado por dispatch ativo" sim sim nao
 libera "libera mantém terminal não criado pelo --cria" nao nao nao
 libera "libera mantém terminal quando o worker-list é ilegível" sim ilegivel nao
 
+# orca-inicia: recibo real (stage como texto) vira uma linha; falha mostra failedStage e lastError.
+h=$(mktemp -d); mkdir -p "$h/bin"
+printf '#!/bin/bash\ncat "%s/recibo.json"\n' "$h" > "$h/bin/orca"; chmod +x "$h/bin/orca"
+inicia() { HOME="$h" ORCA_CMD="$h/bin/orca" bash "$raiz/skills/delegacao/orca-inicia.sh" --spec x 2>&1; }
+echo '{"ok":true,"result":{"dispatchId":"ctx_i","taskId":"task_i","state":"ready","stage":"input_accepted"}}' > "$h/recibo.json"
+out=$(inicia)
+if printf '%s' "$out" | grep -q '^dispatch ctx_i · state ready · task task_i · recibo .*ctx_i.json$'; then echo "ok   orca-inicia resume recibo com stage em texto"
+else echo "FALHA orca-inicia recibo real"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+echo '{"ok":true,"result":{"dispatchId":"ctx_f","taskId":"task_f","state":"failed","stage":"agent_readiness","failedStage":"agent_readiness","lastError":"Agent startup blocked"}}' > "$h/recibo.json"
+out=$(inicia)
+if printf '%s' "$out" | grep -q 'failedStage agent_readiness · lastError Agent startup blocked'; then echo "ok   orca-inicia mostra a falha"
+else echo "FALHA orca-inicia falha"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }

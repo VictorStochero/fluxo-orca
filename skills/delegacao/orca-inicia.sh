@@ -25,7 +25,8 @@ if doc.get("ok") is False or not doc:
     e = doc.get("error") or {}
     print("erro %s: %s · recibo %s" % (e.get("code") or "?", e.get("message") or txt.strip()[:200] or "saída ilegível", dest))
 else:
-    s = r.get("stage") or {}; rec = r.get("recovery") or d.get("recovery")
+    s = r.get("stage"); s = s if isinstance(s, dict) else {}  # o recibo real traz stage como texto ("input_accepted")
+    rec = r.get("recovery") or d.get("recovery")
     out = "dispatch %s · state %s · task %s" % (did or "?", d.get("state") or d.get("status") or r.get("state") or "?", d.get("taskId") or r.get("taskId") or "?")
     falha = r.get("failedStage") or d.get("failedStage") or s.get("failedStage")
     if falha: out += " · failedStage %s" % falha
