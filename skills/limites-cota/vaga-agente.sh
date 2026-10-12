@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Pool da máquina: pega <conta> <dispatch>, solta <dispatch>, livres. Zero = ilimitado.
+# Pool da máquina: pega <conta> <dispatch>, solta <dispatch>, livres, troca <provisório> <dispatch>. Zero = ilimitado.
+# Dono provisório (prefixo res-) não é consultado no Orca: vaga morta só após POOL_RESERVA_TTL s (padrão 600).
 contas=(team pessoal codex kimi agy)
 v_team=1 v_pessoal=0 v_codex=1 v_kimi=1 v_agy=1
 dir="$HOME/.cache/agentes"
@@ -49,9 +50,19 @@ remove_vaga() { # Renomeia e confirma o dono para não apagar uma vaga já reuti
         [ -e "$alvo" ] || mv "$retirada" "$alvo" 2>/dev/null
     fi
 }
+reserva_morta() { # Reserva provisória expira por TTL; desde ilegível conserva a vaga.
+    local ttl desde agora
+    ttl=${POOL_RESERVA_TTL:-600}
+    desde=$(date -d "$(cat "$1/desde" 2>/dev/null)" +%s 2>/dev/null) || return 1
+    agora=$(date +%s)
+    [ $((agora - desde)) -gt "$ttl" ]
+}
 recupera() {
     local dono
     dono=$(cat "$1/dispatch" 2>/dev/null)
+    case "$dono" in
+        res-*) reserva_morta "$1" && remove_vaga "$1" "$dono"; return 0 ;;
+    esac
     morta "$dono" && remove_vaga "$1" "$dono"
     return 0
 }
@@ -96,6 +107,28 @@ case "${1:-}" in
             done
         done
         ;;
+    troca)
+        [ "$#" = 3 ] || erro 'uso: troca <provisório> <dispatch>'
+        prov=$2; novo=$3
+        valida_dispatch "$prov"; valida_dispatch "$novo"
+        for conta in "${contas[@]}"; do
+            for v in "$dir/$conta".lock[0-9]*; do
+                [ -d "$v" ] || continue
+                [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
+                dono=$(cat "$v/dispatch" 2>/dev/null)
+                [ "$dono" = "$novo" ] && exit 0
+                [ "$dono" = "$prov" ] || continue
+                tmp_d="$v/dispatch.troca.$$"
+                if printf '%s\n' "$novo" > "$tmp_d" && mv "$tmp_d" "$v/dispatch"; then
+                    date -u +%FT%TZ > "$v/desde"
+                    exit 0
+                fi
+                rm -f "$tmp_d"
+                exit 2
+            done
+        done
+        erro "troca: vaga do dono $prov não encontrada"
+        ;;
     livres)
         [ "$#" = 1 ] || erro 'uso: livres'
         for conta in "${contas[@]}"; do
@@ -114,6 +147,6 @@ case "${1:-}" in
             printf '%s %s/%s\n' "$conta" "$livres" "$total"
         done
         ;;
-    *) erro 'uso: pega <conta> <dispatch> | solta <dispatch> | livres' ;;
+    *) erro 'uso: pega <conta> <dispatch> | solta <dispatch> | troca <provisório> <dispatch> | livres' ;;
 esac
 exit 0
