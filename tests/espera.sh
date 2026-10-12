@@ -62,9 +62,10 @@ cena() { # atividade idade_do_wire(nenhum|recente|velho) [agente=kimi]
     cat > "$h/bin/orca" <<EOF2
 #!/bin/bash
 case "\$*" in
-    *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_k","dispatchStatus":"dispatched","projection":{"stage":{"worker":"ready","activity":"$1"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}}]}}' ;;
+    *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_k","dispatchStatus":"dispatched","agentTerminalHandle":"term_k","projection":{"stage":{"worker":"ready","activity":"$1"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}}]}}' ;;
     *worker-read*) echo '{"ok":true,"result":{"transcript":{"messages":[{"timestamp":1}],"limited":false}}}' ;;
     *worker-show*) echo '{"ok":true,"result":{"worker":{"startOptions":{"agent":"${3:-kimi}"}}}}' ;;
+    *terminal*read*) cat "$h/tela.json" 2>/dev/null || echo '{"ok":true,"result":{"terminal":{"tail":["pronto"]}}}' ;;
     *check*) sleep 1; echo '{"ok":true,"result":{}}' ;;
 esac
 EOF2
@@ -103,6 +104,45 @@ if ! printf '%s' "$out" | grep -q '!!'; then echo "ok   wire velho de Kimi não 
 else echo "FALHA wire alheio"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 
+# Limite de cota: estourado na tela do worker e perto de estourar pelo limites.sh --alerta.
+cena working nenhum claude
+echo '{"ok":true,"result":{"terminal":{"tail":["Error: 403 You'"'"'ve reached your 5-hour usage limit.","> "]}}}' > "$h/tela.json"
+out=$(roda)
+if printf '%s' "$out" | grep -q '!! ctx_k bateu limite de cota: .*5-hour usage limit'; then echo "ok   limite estourado na tela do worker avisa"
+else echo "FALHA limite na tela"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+out=$(roda)
+if ! printf '%s' "$out" | grep -q 'bateu limite'; then echo "ok   mesmo limite não avisa de novo"
+else echo "FALHA limite repetido"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+echo '{"ok":true,"result":{"terminal":{"tail":["  5-hour limit reached ∙ resets 3pm","> "]}}}' > "$h/tela.json"
+out=$(roda)
+if printf '%s' "$out" | grep -q 'bateu limite de cota: 5-hour limit reached'; then echo "ok   formato 'limit reached' do Claude avisa"
+else echo "FALHA limit reached"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+echo '{"ok":true,"result":{"terminal":{"tail":["Tests: 429 passed","use Illuminate\\\\Cache\\\\RateLimiter;","> "]}}}' > "$h/tela.json"
+out=$(roda)
+if ! printf '%s' "$out" | grep -q 'bateu limite'; then echo "ok   429 de teste e RateLimiter não são limite"
+else echo "FALHA falso positivo de limite"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -f "$h/tela.json"
+printf '#!/bin/bash\necho "kimi: 5h 92%% (zera 04:38) · mês 10%%"; exit 3\n' > "$h/limites.sh"
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
+if printf '%s' "$out" | grep -q '^!! cota acima de 80%: kimi: 5h 92%'; then echo "ok   cota acima de 80% avisa antes de estourar"
+else echo "FALHA aviso de cota"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
+if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   mesmo fornecedor não avisa de novo"
+else echo "FALHA aviso de cota repetido"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+c=$(ls "$h"/.cache/orca-entregas/.cota-avisada.*.consulta 2>/dev/null | head -1)
+[ -n "$c" ] && ok_int=1 || ok_int=0
+printf '#!/bin/bash\necho conta; exit 1\n' > "$h/limites.sh"
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
+if [ "$ok_int" = 1 ] && ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   intervalo da consulta vale entre rearmes"
+else echo "FALHA intervalo entre rearmes"; falhas=$((falhas + 1)); fi
+touch -d '20 minutes ago' "$c" 2>/dev/null
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
+printf '#!/bin/bash\necho "kimi: 5h 92%% (zera 04:38) · mês 10%%"; exit 3\n' > "$h/limites.sh"; touch -d '20 minutes ago' "$c"
+out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
+if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   falha do limites.sh não apaga o que já foi avisado"
+else echo "FALHA falha apagou deduplicação"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+
 # orca-libera: só fecha terminal criado pelo --cria e que nenhum dispatch ativo do run usa.
 libera() { # nome registrado(sim|nao) outro_ativo(sim|nao|ilegivel) fecha_esperado(sim|nao)
     local h; h=$(mktemp -d); mkdir -p "$h/bin"
@@ -132,5 +172,19 @@ libera "libera fecha terminal criado e ocioso" sim nao sim
 libera "libera mantém terminal reaproveitado por dispatch ativo" sim sim nao
 libera "libera mantém terminal não criado pelo --cria" nao nao nao
 libera "libera mantém terminal quando o worker-list é ilegível" sim ilegivel nao
+
+# orca-inicia: recibo real (stage como texto) vira uma linha; falha mostra failedStage e lastError.
+h=$(mktemp -d); mkdir -p "$h/bin"
+printf '#!/bin/bash\ncat "%s/recibo.json"\n' "$h" > "$h/bin/orca"; chmod +x "$h/bin/orca"
+inicia() { HOME="$h" ORCA_CMD="$h/bin/orca" bash "$raiz/skills/delegacao/orca-inicia.sh" --spec x 2>&1; }
+echo '{"ok":true,"result":{"dispatchId":"ctx_i","taskId":"task_i","state":"ready","stage":"input_accepted"}}' > "$h/recibo.json"
+out=$(inicia)
+if printf '%s' "$out" | grep -q '^dispatch ctx_i · state ready · task task_i · recibo .*ctx_i.json$'; then echo "ok   orca-inicia resume recibo com stage em texto"
+else echo "FALHA orca-inicia recibo real"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+echo '{"ok":true,"result":{"dispatchId":"ctx_f","taskId":"task_f","state":"failed","stage":"agent_readiness","failedStage":"agent_readiness","lastError":"Agent startup blocked"}}' > "$h/recibo.json"
+out=$(inicia)
+if printf '%s' "$out" | grep -q 'failedStage agent_readiness · lastError Agent startup blocked'; then echo "ok   orca-inicia mostra a falha"
+else echo "FALHA orca-inicia falha"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
 
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
