@@ -30,6 +30,7 @@ Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele n�
 
 ## Produção e ações remotas
 - **Toda alteração remota é apresentada antes e aprovada expressamente, uma autorização por comando, SEMPRE — inclusive em bypass.** Antes de executar: mostrar o comando exato, o host/alvo e o efeito. Aprovação de um comando não vale para o próximo. Regras `ask` no `settings.json` impõem isso para `ssh`, `scp`, `rsync`, `sftp` e `forge`.
+- **SQL de alteração no servidor só em transação, ensaiado antes** (hook `exige-transacao.sh`): `START TRANSACTION; <alteração>; <SELECT de conferência>; ROLLBACK;`, conferir, e só então o mesmo comando com `COMMIT` (até 30 min depois). DDL avulso e SQL vindo de arquivo são bloqueados — schema muda por migration.
 - Ler é livre (log, `forge site:logs`, `deploy:log`). Nunca corrigir em produção por estar conectado — reproduzir local, corrigir no repo, subir pelo fluxo normal. Diagnóstico começa pelo log. Antes de afirmar algo sobre um servidor, conferir `hostname`.
 
 ## Commits e PRs
