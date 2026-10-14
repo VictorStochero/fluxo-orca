@@ -34,6 +34,12 @@
         ]
       },
       {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/exige-transacao.sh\"", "shell": "bash", "timeout": 10 }
+        ]
+      },
+      {
         "matcher": "Edit|Write",
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guia-laravel.sh\"", "shell": "bash", "timeout": 10 }
