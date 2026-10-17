@@ -28,6 +28,22 @@ msg='{"ok":true,"result":{"deliveryId":"delivery_t1","messages":[{"type":"worker
 caso "dois JSON seguidos" "$msg"$'\n''{"ok":true,"result":{}}' "== worker_done" sim
 caso "entrega ilegível não some" '{"ok":true,"result":{"deliveryId":"delivery_t2","messages":[{"type":' "entrega ilegível" nao
 
+# Heartbeat no --types: o Orca só deixa de avisar o coordenador ocioso sobre tipos cobertos pelo waiter.
+h=$(mktemp -d); mkdir -p "$h/bin"
+cat > "$h/bin/orca" <<EOF
+#!/bin/bash
+case "\$*" in
+    *worker-list*) echo '{"ok":true,"result":{"workers":[]}}' ;;
+    *--ack*) echo ack >> "$h/acks"; echo '{"ok":true}' ;;
+    *check*) echo "\$*" > "$h/args"; sleep 1; echo '{"ok":true,"result":{"deliveryId":"delivery_hb","messages":[{"type":"heartbeat","id":"m2","subject":"alive"}]}}' ;;
+esac
+EOF
+chmod +x "$h/bin/orca"
+saida=$(HOME="$h" PATH="$h/bin:$PATH" bash "$raiz/skills/delegacao/orca-espera.sh" --max-min 1 2>&1)
+if grep -q -- '--types [^ ]*heartbeat' "$h/args" && [ -s "$h/acks" ] && ! printf '%s' "$saida" | grep -q '^=='; then echo "ok   heartbeat coberto pelo waiter, com ack e sem acordar"
+else echo "FALHA heartbeat"; printf '%s\n' "$saida" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
+
 # Carência e limpeza: worker working sem progresso alerta uma vez; a rodada seguinte não repete; estado de dispatch encerrado é apagado.
 h=$(mktemp -d); mkdir -p "$h/bin" "$h/.cache/orca-entregas" "$h/wt"
 git -C "$h/wt" init -q && git -C "$h/wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m t
