@@ -206,7 +206,7 @@ while [ "$(date +%s)" -lt "$fim" ]; do
     restante=$(( fim - $(date +%s) )); espera=60
     [ "$restante" -lt "$espera" ] && espera=$restante
     [ "$espera" -le 0 ] && break
-    orca orchestration check "${run[@]}" --wait --types "worker_done,escalation,question,status" --timeout-ms "$(( espera * 1000 ))" --json > "$tmp" 2>/dev/null
+    orca orchestration check "${run[@]}" --wait --types "worker_done,escalation,question,status,heartbeat" --timeout-ms "$(( espera * 1000 ))" --json > "$tmp" 2>/dev/null
     entrega=$(grep -o '"deliveryId": *"[^"]*"' "$tmp" | head -1 | cut -d'"' -f4)
     if [ -n "$entrega" ]; then
         cp "$tmp" "$dir/$entrega.json"
