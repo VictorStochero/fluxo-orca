@@ -74,6 +74,21 @@ sql() {
         $p = new PDO($d, getenv("DBU"), getenv("DBW"));
         $r = $p->query($argv[1]); if ($r && $r->columnCount()) { foreach ($r->fetchAll(PDO::FETCH_COLUMN) as $v) echo $v, "\n"; }' "$1"
 }
+# teste_info <.env> <.env.testing> — T_MOTOR/T_H/T_P/T_U/T_W com a conexão do arquivo de teste quando difere da do .env
+# (motor, host, porta ou usuário); T_MOTOR vazio se igual, sem arquivo ou sem banco identificado. Deixa DB_* com o arquivo de teste.
+teste_info() {
+    local dev
+    T_MOTOR=""; T_H=""; T_P=""; T_U=""; T_W=""
+    [ -f "$2" ] || return 0
+    db_info "$1"; dev="$DB_MOTOR|$DB_H|$DB_P|$DB_U"
+    db_info "$2"
+    [ -n "$DB_MOTOR" ] || return 0
+    [ "$DB_MOTOR|$DB_H|$DB_P|$DB_U" = "$dev" ] && return 0
+    T_MOTOR="$DB_MOTOR"; T_H="$DB_H"; T_P="$DB_P"; T_U="$DB_U"; T_W="$DB_W"
+    return 0
+}
+# em_teste <função> [args] — roda a função de banco na conexão T_* (servidor de teste), sem alterar a conexão corrente.
+em_teste() { ( DB_MOTOR="$T_MOTOR"; DB_H="$T_H"; DB_P="$T_P"; DB_U="$T_U"; DB_W="$T_W"; "$@" ); }
 listar_bancos() { if [ "$DB_MOTOR" = pgsql ]; then sql "SELECT datname FROM pg_database WHERE NOT datistemplate"; else sql "SHOW DATABASES"; fi; }
 criar_banco() {
     if [ "$DB_MOTOR" = pgsql ]; then

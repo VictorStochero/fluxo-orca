@@ -6,7 +6,7 @@
 #   WT_BASE=origin/<branch>   WT_COPIAR=".mcp.json .claude/settings.local.json"   WT_BUILD=0
 #   WT_INSTALAR="<cmd>"  WT_MIGRAR="<cmd>"  WT_SEED="<cmd>"  WT_SEEDER=<Classe Laravel>  WT_SEM_SEED=1
 #   WT_PORTA_BASE=8000   WT_POS_SETUP() { ...; }   GS_TESTE_RUNNER="<cmd de teste>" (lido pela fila)
-# Banco: <pasta com _> e <banco>_test; toda chave do .env que apontava para o banco do principal passa ao do worktree.
+# Banco: <pasta com _> e <banco>_test (no servidor do .env.testing, se for outro); toda chave do .env que apontava para o banco do principal passa ao do worktree.
 # Multi-tenant Laravel (config/tenancy.php): TENANCY_DB_PREFIX=<banco>_tenant_ / <banco>_test_tenant_.
 
 set -euo pipefail
@@ -146,10 +146,23 @@ else
                 fi
             done
             # O archive apaga pelo registro, não recalcula: nome de exibição do Orca e truncamento não o enganam.
+            # Linha 2 (só se o .env.testing aponta para outro servidor): onde apagar os bancos de teste.
             mkdir -p "$comum/wt-bancos"
-            printf '%s\n' "$banco" > "$(registro_bancos "$comum" "$(basename "$raiz")")"
+            teste_info "$raiz/.env" "$raiz/${testes[0]:-.env.testing}"
+            db_info "$raiz/.env"
+            {
+                printf '%s\n' "$banco"
+                if [ -n "$T_MOTOR" ]; then printf 'teste=%s|%s|%s|%s\n' "$T_MOTOR" "$T_H" "$T_P" "$T_U"; fi
+            } > "$(registro_bancos "$comum" "$(basename "$raiz")")"
             criar_banco "$banco"
-            [ ${#testes[@]} -gt 0 ] && criar_banco "${banco}_test"
+            if [ ${#testes[@]} -gt 0 ]; then
+                if [ -n "$T_MOTOR" ]; then
+                    echo "banco de teste em $T_H:$T_P (servidor de teste)"
+                    em_teste criar_banco "${banco}_test"
+                else
+                    criar_banco "${banco}_test"
+                fi
+            fi
         else
             echo "Banco não identificado no .env (MySQL/MariaDB/Postgres): criar à mão se o projeto usar." >&2
         fi
