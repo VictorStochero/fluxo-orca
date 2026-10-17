@@ -11,3 +11,4 @@
 - **Servir**: `php artisan serve --port=<porta>`, `npm run dev -- --port <porta>`, `manage.py runserver <porta>`. O `wt-setup.sh` no modo `nativo` dá a cada worktree `http://<pasta>.localhost:<porta estável>` — navegadores resolvem `*.localhost` para a máquina, inclusive subdomínio de tenant. Alternativas com `.test`: Valet Linux, Lerd (`lerd.md`) ou vhost no nginx.
 - macOS: bash padrão é 3.2 — os scripts do plugin são compatíveis; `stat` é o BSD (`-f`), já tratado.
 - Linux sem Git Bash: os hooks rodam no `bash` do sistema; nada de shim.
+- **Servidor de teste separado**: segunda instância do `mariadbd` (ou `mysqld`) com `--defaults-file=<my-teste.cnf> --port=3307 --datadir=<pasta vazia dedicada> --socket=<outro socket>`, datadir inicializado uma vez (`mariadb-install-db --datadir=…`); a config de velocidade está no bloco "Teste" de `herd.md`. Fixar como serviço (unit do systemd ou `brew services` com plist próprio) é por conta de quem instala.

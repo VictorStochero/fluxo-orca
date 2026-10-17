@@ -8,3 +8,4 @@
 - **Worktrees**: o Lerd detecta `git worktree add` sozinho e dá domínio próprio a cada um; o `wt-setup.sh` ainda roda `lerd link` (inofensivo se já estiver ligado). Conferir a URL real com `lerd open` e, se o padrão for outro, ajustar `APP_URL` no `WT_POS_SETUP`.
 - PHP e Node por projeto (painel web). Comandos `php`/`composer` no host: conferir com `command -v php` — se não houver, rodar pelo que o Lerd expõe e registrar no perfil.
 - Serviços: `lerd service preset <nome>` (MySQL, Postgres, Redis, Mailpit…); `mysql` e `psql` funcionam no host contra os motores do Lerd. Porta e credenciais: registrar no perfil da máquina.
+- **Servidor de teste separado**: não confirmei na doc do Lerd uma segunda instância do mesmo serviço (`lerd service preset` cria um por preset). Alternativa: um container dedicado (`containers.md`, "Servidor de teste separado") na porta 3307.

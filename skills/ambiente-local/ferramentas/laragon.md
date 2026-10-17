@@ -14,3 +14,6 @@ Combinação comum: **Herd serve o PHP e os sites**, **Laragon só o MySQL** (He
 - No Laragon, parar Apache/Nginx (porta 80/443 é do Herd) e deixar só o MySQL; no perfil da máquina: "Sites: Herd; Banco: MySQL do Laragon em 3306".
 - Projetos ficam na pasta do Herd (`~/Herd`), não em `www`.
 - `WT_SITES=herd` no `.orca/worktree.conf` se a detecção escolher errado.
+
+## Servidor de teste separado
+Não confirmado na doc do Laragon: o menu roda um MySQL por vez. Segundo servidor, pelo `mysqld` da própria pasta `C:\laragon\bin\mysql\<versão>\bin`, com `--defaults-file=<my-teste.ini> --port=3307 --datadir=<pasta vazia dedicada>` (inicializar o datadir uma vez com `mysqld --initialize-insecure` ou `mariadb-install-db`); config de velocidade em `ambiente-local/ferramentas/herd.md` (bloco "Teste").

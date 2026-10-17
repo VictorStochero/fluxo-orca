@@ -7,3 +7,4 @@
 - Versão gratuita pode limitar o número de sites (relato de terceiros: 3) — conferir antes de contar com um site por worktree; sem folga, usar `WT_SITES=nativo` (`*.localhost:<porta>`).
 - Bancos: porta e credenciais na tela do serviço; registrar no perfil da máquina. O `wt-lib.sh` usa o cliente no PATH ou o PDO do PHP.
 - PATH dos runtimes para o shell/Git Bash: opção de adicionar ao PATH na tela de cada versão.
+- **Servidor de teste separado** (não confirmado na doc): instalar uma segunda versão do MariaDB/MySQL na interface e dar-lhe outra porta (ex.: 3307) na tela do serviço; a config de velocidade (`my.ini`/`my.cnf` do serviço) está no bloco "Teste" de `herd.md`.
