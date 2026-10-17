@@ -24,6 +24,7 @@ Combinações são comuns (ex.: Herd serve o PHP e Laragon o MySQL): o perfil se
 ## Regras de qualquer ambiente
 - **Worktrees** são pastas irmãs `<repo>-<flag>-<contexto>`, criadas pelo Orca com `wt-setup.sh` (skill `worktree-orca`); banco próprio por worktree e por suíte de teste. **Nunca** apontar a suíte para banco compartilhado.
 - **Testes sempre pela fila** (skill `fila-testes`).
+- **Dois servidores de banco**: um de **desenvolvimento** (migrate, seed, navegador) e um **só de teste**, descartável e ajustado para velocidade (sem binlog, flush relaxado, cache de tabelas limitado). **A suíte roda no servidor de teste**, apontado pelo `.env.testing` do checkout principal (`DB_HOST`/`DB_PORT`); o `wt-setup.sh` copia o arquivo para cada worktree e cria lá o `<banco>_test`. Suíte paralela num servidor só (o de dev) estoura a memória: cada banco de teste paralelo reabre todas as tabelas (skill `fila-testes`). Como criar o segundo servidor: a referência da ferramenta.
 - Versão de banco/runtime local diferente da produção: nada pode depender de comportamento exclusivo da versão local.
 - **Setup não pode sujar o git**: conferir `git status` depois de instalar/gerar; o que for só local vai para `.git/info/exclude`.
 - **A tool `Grep` respeita o `.gitignore`**: em pasta ignorada usar `grep -r`.
@@ -44,7 +45,7 @@ Combinações são comuns (ex.: Herd serve o PHP e Laragon o MySQL): o perfil se
 - Shell dos hooks: Git Bash | bash | zsh
 - Pacotes: winget | apt | dnf | brew
 - Sites servidos por: Herd | Laragon | FlyEnv | Lerd | DDEV | Sail | compose | nativo
-- Bancos: MariaDB 11.8 em 127.0.0.1:3306 (Herd), root sem senha | Postgres 16 em 5432 (FlyEnv) | por projeto no container
+- Bancos: servidor de desenvolvimento MariaDB 11.8 em 127.0.0.1:3306 (Herd), root sem senha; servidor de teste MariaDB 11.8 em 127.0.0.1:3307 (Herd, só da fila de testes, descartável) | Postgres 16 em 5432 (FlyEnv) | por projeto no container
 - Contêiner: Docker | Podman (rootless) | nenhum
 - Runtimes: PHP 8.4 (Herd) | Python 3.12 (uv) | Node 22 (fnm)
 - Raiz dos projetos: ~/Herd | C:/laragon/www | ~/code
@@ -52,5 +53,5 @@ Combinações são comuns (ex.: Herd serve o PHP e Laragon o MySQL): o perfil se
 ## Projetos
 | Projeto | Caminho | Stack | Serve | Banco | Multi-tenant | Board | Base |
 |---|---|---|---|---|---|---|---|
-| app | ~/Herd/app | Laravel | Herd | MariaDB 3306 | não | org/app #1 | develop |
+| app | ~/Herd/app | Laravel | Herd | dev 3306, teste 3307 | não | org/app #1 | develop |
 ```

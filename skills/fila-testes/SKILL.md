@@ -33,7 +33,10 @@ for d in ~/.cache/gs-teste*.lock*; do [ -d "$d" ] && echo "$(basename "$d"): $(c
 Cada diretório é uma vaga ocupada ou uma trava pendente de recuperação; `dono` mostra worktree, banco e comando. `gs-teste-teto.lockN` ocupa o teto global e corresponde ao mesmo run de uma vaga de recurso: não somar os dois como runs distintos. Sem diretórios, nenhuma vaga está ocupada; dono vazio exige conferir a trava, sem presumir que está livre. O padrão é 2 vagas por recurso e teto de 3 runs, sobrescrito por `GS_TESTE_VAGAS` e `GS_TESTE_TETO` na execução.
 
 ## Regras
-- Laravel, suíte e pasta em paralelo: `bash ~/.cache/gs-teste.sh --parallel --compact <path>` (8 processos; apaga os `<banco>_test_N` ao terminar). **`--parallel` aceita UM path.**
+- Laravel, suíte e pasta em paralelo: `bash ~/.cache/gs-teste.sh --parallel --compact <path>` (8 processos; apaga os `<banco>_test_N` ao terminar). **`--parallel` aceita UM path.** **`--parallel` é obrigatório para usar vários processos**: `GS_TESTE_PROCESSOS` sem ele é ignorado e a suíte roda em 1 processo.
+- **Servidor de teste**: a fila da suíte é a da **porta do `DB_PORT` do `.env.testing`** (padrão de dois servidores: dev em 3306, teste em 3307; skill `ambiente-local`). Duas vagas por servidor de teste, então a fila do 3307 é independente da do 3306, e o drop dos `_test_N` ao terminar acontece nele.
+- **Memória do servidor de teste**: pesa o número de **tabelas abertas** (~1,6 MB cada, com triggers compilados) = processos paralelos × tabelas por banco; `table_open_cache` alto com schema grande (ex.: 12 processos × ~230 tabelas com triggers de auditoria) passou de 16–30 GB e travou a máquina. Sintoma: servidor de teste crescendo a cada run e a máquina engasgando — conferir `table_open_cache` (2500 no teste, ver `ambiente-local/ferramentas/herd.md`) antes de culpar a suíte. Menos processos (`GS_TESTE_PROCESSOS`, com `--parallel`) também alivia.
+- **`FLUSH TABLES` trava com teste rodando** (espera as tabelas em uso): não usar com a fila ocupada. Para liberar memória, reiniciar o servidor de teste é seguro — o banco é descartável — mas só com a fila vazia (conferir o estado acima); run em andamento morre junto.
 - Banco próprio por trilha: `DB_DATABASE=<banco>_sN bash ~/.cache/gs-teste.sh ...`. Mesmo worktree + mesmo banco nunca rodam juntos.
 - Subagente de etapa roda só o teste novo e até 5 arquivos editados, um por chamada; pasta e suíte uma vez na integração.
 - **Falha que surge com a máquina carregada: re-rodar o arquivo isolado antes de investigar.**
@@ -43,4 +46,4 @@ Cada diretório é uma vaga ocupada ou uma trava pendente de recuperação; `don
 - Suíte longa passa de 10 min e cai para background: esperar a notificação, sem polling. **Nunca `| tail`** em run que pode estourar: redirecionar para arquivo.
 - Teste que passa por coincidência não protege: **forçar a divergência** entre ids que deveriam diferir.
 - CLI externo (Codex, agy, Kimi) tem o mesmo bloqueio, pelo `guarda-externos.sh` (detector `e-teste.sh`, copiado para `~/.cache`); o prompt do worker ainda manda usar a fila.
-- Filas separadas: Laravel no host uma por porta de banco; container uma; Python/JS uma.
+- Filas separadas: Laravel no host uma por porta de banco (a do `.env.testing`); container uma; Python/JS uma.

@@ -18,3 +18,6 @@
 - Isolar por worktree com `-p <pasta>` (`docker compose -p <pasta> up -d`) e portas por variável no `.env`.
 - Testes: `GS_TESTE_RUNNER="docker compose exec -T <serviço> <comando de teste>"` no `.orca/worktree.conf` (`-T`: sem TTY, senão trava fora do terminal).
 - Setup: `WT_INSTALAR`, `WT_MIGRAR`, `WT_POS_SETUP` com `docker compose -p <pasta> …`; limpeza: `docker compose -p <pasta> down -v` (o `wt-archive.sh` não enxerga banco em container).
+
+## Servidor de teste separado
+Um serviço próprio no compose (ou `docker run`/`podman run`), só para a suíte: imagem `mariadb`, porta publicada `3307:3306`, `tmpfs` ou volume descartável no datadir e as opções de velocidade do bloco "Teste" de `herd.md` como argumentos do `command` (`--table-open-cache=2500 --innodb-flush-log-at-trx-commit=0 --skip-log-bin …`). O `.env.testing` aponta `DB_HOST`/`DB_PORT` para ele. No DDEV/Sail o banco já é por projeto; em suíte paralela grande, o mesmo vale: serviço dedicado com esses argumentos.

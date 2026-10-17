@@ -3,7 +3,8 @@
 # A pasta pode já ter sido removida: identidade por ORCA_WORKTREE_PATH; banco pelo registro que o wt-setup.sh grava
 # em <.git comum>/wt-bancos/<pasta>; servidor de banco pelo .env do principal.
 # Remove <banco>, <banco>_test e tudo que começa com <banco>_ (tenants, _test_test_N do --parallel, _template, _pool_*),
-# exceto os de outro worktree vivo cujo nome começa com <banco>_. Aborta sem remover nada se: houver alteração não
+# exceto os de outro worktree vivo cujo nome começa com <banco>_. Se o registro tem a linha "teste=" (o .env.testing apontava para
+# outro servidor), apaga também <banco>_test e derivados naquele servidor. Aborta sem remover nada se: houver alteração não
 # commitada, o git falhar, ou <banco> colidir com o banco do principal ou de outro worktree vivo.
 
 set -euo pipefail
@@ -68,16 +69,41 @@ while read -r linha; do
     case "$b" in "${banco}_"*) protegidos+=("$b") ;; esac
 done <<< "$lista"
 
-bancos="$(listar_bancos)" || aborta "não consegui listar os bancos"
 removidos=""
-while read -r b; do
-    [ -n "$b" ] || continue
-    case "$b" in "$banco"|"${banco}_"*) ;; *) continue ;; esac
-    for o in ${protegidos[@]+"${protegidos[@]}"}; do
-        case "$b" in "$o"|"${o}_"*) continue 2 ;; esac
+# apaga <base> <bancos> — remove <base> e <base>_* da conexão corrente, menos os protegidos de outro worktree vivo.
+apaga() {
+    local b o
+    while read -r b; do
+        [ -n "$b" ] || continue
+        case "$b" in "$1"|"${1}_"*) ;; *) continue ;; esac
+        for o in ${protegidos[@]+"${protegidos[@]}"}; do
+            case "$b" in "$o"|"${o}_"*) continue 2 ;; esac
+        done
+        dropar_banco "$b" && removidos="$removidos $b"
+    done <<< "$2"
+}
+bancos="$(listar_bancos)" || aborta "não consegui listar os bancos"
+apaga "$banco" "$bancos"
+
+# Servidor de teste (linha 2 do registro): só <banco>_test e derivados; o registro fica se ele estiver fora do ar.
+conn_teste="$(sed -n 's/^teste=//p' "$registro" | head -1 | tr -d '\r')"
+if [ -n "$conn_teste" ]; then
+    IFS='|' read -r T_MOTOR T_H T_P T_U <<< "$conn_teste"
+    T_W=""
+    for f in .env.testing .env.test; do
+        [ -f "$principal_bruto/$f" ] || continue
+        db_info "$principal_bruto/$f"
+        [ "$DB_MOTOR|$DB_H|$DB_P|$DB_U" = "$T_MOTOR|$T_H|$T_P|$T_U" ] && { T_W="$DB_W"; break; }
     done
-    dropar_banco "$b" && removidos="$removidos $b"
-done <<< "$bancos"
+    DB_MOTOR="$T_MOTOR"; DB_H="$T_H"; DB_P="$T_P"; DB_U="$T_U"; DB_W="$T_W"
+    if bancos="$(listar_bancos)"; then
+        apaga "${banco}_test" "$bancos"
+    else
+        registra "ERRO ($pasta): servidor de teste $T_H:$T_P inacessível — bancos de teste não removidos, registro mantido (rode o archive de novo com ele no ar)."
+        registra "bancos removidos:${removidos:- nenhum}"
+        exit 1
+    fi
+fi
 rm -f "$registro"
 registra "bancos removidos:${removidos:- nenhum}"
 
