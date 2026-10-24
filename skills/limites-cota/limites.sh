@@ -118,14 +118,13 @@ n=0; cand_q=0; cand_vaga=0
   { cand[$1] = 1; curta[$1] = $2; longa[$1] = $3; reset[$1] = $4; q++ }
   END {
     split("team pessoal codex", ordem, " ")
-    dur["team"] = 168; dur["pessoal"] = 168; dur["codex"] = 168
     for (i = 1; i <= 3; i++) { k = ordem[i]
       if (!(k in cand) || !livre[k]) continue
       tem_vaga = 1
       h = -1; if (reset[k] != "-") h = (reset[k] - agora) / 3600
       if (curta[k] > 80) continue
       if (!(longa[k] <= 80 || (longa[k] <= 95 && h >= 0 && h < 24))) continue
-      frac = 1; if (h >= 0) { frac = h / dur[k]; if (frac < 0.01) frac = 0.01; else if (frac > 1) frac = 1 }
+      frac = 1; if (h >= 0) { frac = h / 168; if (frac < 0.01) frac = 0.01; else if (frac > 1) frac = 1 }
       r = (100 - longa[k]) / (100 * frac)
       m++; rr[m] = r; ll[m] = k; gg[m] = 100 - longa[k]; hh[m] = h
     }

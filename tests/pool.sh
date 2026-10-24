@@ -163,10 +163,13 @@ unset POOL_TEAM_SESSAO_USO POOL_TEAM_SEMANA_USO POOL_TEAM_RESET_H
 POOL_CODEX_SEM_RESET=1 POOL_CODEX_SEMANA=4 POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=168 confere_rc 0 'Codex com reset ilegível' seletor
 grep -qx 'escritor: codex (ritmo 1.0 · 96% livre)' "$tmp/saida" \
     && ok 'reset ilegível cai para a folga' || ruim 'reset ilegível quebrou a seleção'
+# Janela de 5h: o primeiro número de "5h 95%" é o 5; vale o número colado ao %.
+POOL_CODEX_5H=95 POOL_CODEX_SEMANA=4 POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=168 confere_rc 0 'seleção com 5h do Codex estourada' seletor
+grep -qx 'escritor: team (ritmo 0.8 · 80% livre, zera em 168h)' "$tmp/saida" \
+    && ok 'Codex com 5h acima de 80% fica fora' || ruim '5h do Codex lida errado na seleção'
 
 POOL_CODEX_5H=95 confere_rc 3 '--alerta com 5h do Codex estourada' bash "$tmp/seletor/limites.sh" --alerta
 grep -q '^codex: 5h 95%' "$tmp/saida" && ok '5h do Codex no alerta' || ruim '5h do Codex lida errado'
-# Janela de 5h: o primeiro número de "5h 95%" é o 5; vale o número colado ao %.
 [ "$(wc -l < "$tmp/saida")" = 1 ] && grep -q '^codex: 5h 95% (zera 23:00) · semana 20% ' "$tmp/saida" \
     && ok '--alerta imprime só a linha acima de 80%' || { ruim '--alerta'; cat "$tmp/saida"; }
 POOL_SESSAO_USO=10 POOL_SEMANA_USO=90 confere_rc 3 '--alerta com semana do Claude acima de 80%' bash "$tmp/seletor/limites.sh" --alerta

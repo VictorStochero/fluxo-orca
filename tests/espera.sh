@@ -99,6 +99,11 @@ else echo "FALHA saída só de mudança (n1=$n1 n2=$n2)"; printf '%s\n' "$um" "$
 if printf '%s' "$um" | grep -q '^Sem novidade em 1 min; ctx_k último commit [0-9a-f]* (.*)$' && printf '%s' "$um" | grep -q 'Rearmar'; then echo "ok   resumo no fim"
 else echo "FALHA resumo"; printf '%s\n' "$um" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
+cena done
+out=$(roda)
+if printf '%s' "$out" | grep -q 'agente parado sem worker_done'; then echo "ok   activity=done sem worker_done é dado como parado"
+else echo "FALHA activity=done"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+rm -rf "$h"
 
 # Limite de cota: estourado na tela do worker e perto de estourar pelo limites.sh --alerta.
 cena working
