@@ -2,7 +2,7 @@
 # Cotas de todos os fornecedores instalados, uma linha cada, em paralelo. Sai com 3 se algum limite passar de 80% usado.
 # Última linha: escritor elegível de maior ritmo com vaga no pool; --escritor imprime só ela (75 = pool cheio).
 # --escritor --reserva <tag> reserva a vaga do escolhido antes do worker-start (dono provisório res-<tag>, TTL em vaga-agente.sh).
-# Conta Claude secundária: CLAUDE_CONFIG_DIR em ~/.claude-team (pula se não existir).
+# Contas Claude secundárias: CLAUDE_CONFIG_DIR em ~/.claude-team e ~/.claude-b (pula a que não existir).
 export MSYS_NO_PATHCONV=1
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
@@ -17,10 +17,14 @@ claude_linha() { # $1 rótulo; resto = comando
 }
 
 claude_linha "pessoal" env -u CLAUDE_CONFIG_DIR claude -p "/usage" > "$tmp/4" &
+# Com MSYS_NO_PATHCONV o caminho POSIX chegaria cru ao claude no Windows.
+w() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 if [ -d "$HOME/.claude-team" ]; then
-  # Com MSYS_NO_PATHCONV o caminho POSIX chegaria cru ao claude no Windows.
-  w() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
   claude_linha "team   " env CLAUDE_CONFIG_DIR="$(w "$HOME/.claude-team")" claude --settings "$(w "$HOME/.claude/settings.json")" --model haiku -p "/usage" > "$tmp/3" &
+fi
+if [ -d "$HOME/.claude-b" ]; then
+  # Só exibe e alerta: a claude-b trabalha pelo opencode, fora da escolha de escritor.
+  claude_linha "claude-b" env CLAUDE_CONFIG_DIR="$(w "$HOME/.claude-b")" claude --settings "$(w "$HOME/.claude/settings.json")" --model haiku -p "/usage" > "$tmp/5" &
 fi
 if command -v agy >/dev/null 2>&1; then
   agy --dangerously-skip-permissions -p "/usage" 2>&1 | awk -F'\t' '
@@ -48,7 +52,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$RESERVA" ] && [ $SOLO = 0 ] && { echo 'uso: limites.sh [--escritor [--reserva <tag>]] | --alerta' >&2; exit 2; }
-{ cat "$tmp/1" 2>/dev/null; sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/2" "$tmp/3" 2>/dev/null; cat "$tmp/4"; } > "$tmp/todas"
+{ cat "$tmp/1" 2>/dev/null; sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/2" "$tmp/3" 2>/dev/null; cat "$tmp/4"; cat "$tmp/5" 2>/dev/null; } > "$tmp/todas"
 
 # Qualquer janela acima de 80% (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi: "5h N%" e "mês N%";
 # codex: "5h N%" e "semana N%"): sai com 3; com $1=1 imprime só as linhas acima do limite.
