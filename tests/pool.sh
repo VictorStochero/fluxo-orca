@@ -42,9 +42,9 @@ pool_sem_associativo() {
         source "$1" "${@:2}"
     ' bash "$raiz/skills/limites-cota/vaga-agente.sh" "$@"
 }
-printf 'team=2\npessoal=0\ncodex=3\nkimi=4\nagy=5\n' > "$HOME/.claude/agentes.conf"
+printf 'team=2\npessoal=0\ncodex=3\nagy=5\n' > "$HOME/.claude/agentes.conf"
 confere_rc 0 'pool funciona sem arrays associativos' pool_sem_associativo livres
-for esperado in 'team 2/2' 'pessoal 0/0' 'codex 3/3' 'kimi 4/4' 'agy 5/5'; do
+for esperado in 'team 2/2' 'pessoal 0/0' 'codex 3/3' 'agy 5/5'; do
     grep -qx "$esperado" "$tmp/saida" && ok "limite independente: $esperado" || ruim "limite sem array associativo: $esperado"
 done
 rm "$HOME/.claude/agentes.conf"
@@ -79,7 +79,7 @@ rmdir "$HOME/.cache/agentes/team.lock1"
 confere_rc 0 'pessoal ilimitado: primeira reserva' pool pega pessoal ctx_p1
 confere_rc 0 'pessoal ilimitado: segunda reserva' pool pega pessoal ctx_p2
 compgen -G "$HOME/.cache/agentes/pessoal.lock*" >/dev/null && ruim 'pessoal criou trava' || ok 'pessoal não cria trava'
-for conta in codex kimi agy; do
+for conta in codex agy; do
     confere_rc 0 "primeira vaga: $conta" pool pega "$conta" ctx_a
     confere_rc 75 "limite de uma vaga: $conta" pool pega "$conta" ctx_b
 done
@@ -105,7 +105,7 @@ rm "$HOME/.claude/agentes.conf"
 pool solta ctx_c2; pool solta ctx_p1; pool solta ctx_novo
 
 # Executa o seletor real com provedores simulados, sem rede ou credenciais reais.
-# Ritmo = (100 − longa) / (100 × fração restante da janela longa); longa: 168 h (semana) ou 720 h (mês do Kimi).
+# Ritmo = (100 − longa) / (100 × fração restante da janela longa); longa: 168 h (semana).
 mkdir -p "$tmp/seletor" "$HOME/.claude-team"
 cp "$raiz/skills/limites-cota/limites.sh" "$raiz/skills/limites-cota/vaga-agente.sh" "$tmp/seletor/" 2>/dev/null
 cat > "$tmp/bin/claude" <<'EOF'
@@ -125,6 +125,7 @@ exit 0
 EOF
 cat > "$tmp/seletor/codex-cota.sh" <<'EOF'
 c=${POOL_CODEX_5H:-20}; l=${POOL_CODEX_SEMANA:-20}; h=${POOL_CODEX_RESET_H:-168}
+[ -n "${POOL_CODEX_SEM_RESET:-}" ] && { printf 'codex: 5h %s%% (zera 23:00) · semana %s%%\n' "$c" "$l"; exit 0; }
 printf 'codex: 5h %s%% (zera 23:00) · semana %s%% (zera %s)\n' "$c" "$l" "$(date -d "+${h} hours" '+%Y-%m-%d %H:%M')"
 EOF
 chmod +x "$tmp/bin/claude" "$tmp/bin/codex" "$tmp/seletor/codex-cota.sh"
@@ -158,42 +159,19 @@ POOL_TEAM_SESSAO_USO=85 POOL_TEAM_SEMANA_USO=10 confere_rc 0 'curta acima de 80'
 grep -qx 'escritor: codex (ritmo 0.8 · 80% livre, zera em 168h)' "$tmp/saida" \
     && ok 'curta acima de 80 fica fora' || ruim 'curta acima de 80 entrou'
 unset POOL_TEAM_SESSAO_USO POOL_TEAM_SEMANA_USO POOL_TEAM_RESET_H
-
-# Kimi entra direto pelo ritmo do mês (720 h); semana-eq deixou de existir.
-mkdir -p "$HOME/.kimi-code/credentials"; : > "$HOME/.kimi-code/credentials/kimi-code-env-t.json"
-kimi_stub() { echo "echo 'kimi: 5h ${1:-2}% (zera 23:00) · mês ${2:-10}%${3:+ (zera $3)}'" > "$tmp/seletor/kimi-cota.sh"; }
-kimi_stub 2 10 "$(date -d '+720 hours' '+%Y-%m-%d %H:%M')"
-POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=168 confere_rc 0 'seleção com Kimi' seletor
-grep -qx 'escritor: kimi (ritmo 0.9 · 90% livre, zera em 720h)' "$tmp/saida" \
-    && ok 'Kimi com maior ritmo é escolhido' || ruim 'Kimi não escolhido'
-unset POOL_TEAM_SEMANA_USO POOL_TEAM_RESET_H
-kimi_stub 2 90 "$(date -d '+720 hours' '+%Y-%m-%d %H:%M')"
-confere_rc 0 'seleção com Kimi acima do teto' seletor
-grep -qx 'escritor: team (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" \
-    && ok 'Kimi acima do teto fica fora' || ruim 'Kimi acima do teto escolhido'
-kimi_stub 2 90 "$(date -d '+10 hours' '+%Y-%m-%d %H:%M')"
-confere_rc 0 'Kimi com reset próximo' seletor
-grep -qx 'escritor: kimi (ritmo 7.2 · 10% livre, zera em 10h)' "$tmp/saida" \
-    && ok 'Kimi 90% entra pelo teto 95% com reset < 24 h' || ruim 'teto 95% do Kimi não aplicado'
 # Reset ilegível cai para a folga da longa, sem quebrar.
-kimi_stub 2 4 ""
-POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=168 confere_rc 0 'Kimi com reset ilegível' seletor
-grep -qx 'escritor: kimi (ritmo 1.0 · 96% livre)' "$tmp/saida" \
+POOL_CODEX_SEM_RESET=1 POOL_CODEX_SEMANA=4 POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=168 confere_rc 0 'Codex com reset ilegível' seletor
+grep -qx 'escritor: codex (ritmo 1.0 · 96% livre)' "$tmp/saida" \
     && ok 'reset ilegível cai para a folga' || ruim 'reset ilegível quebrou a seleção'
-unset POOL_TEAM_SEMANA_USO POOL_TEAM_RESET_H
-kimi_stub 2 85 "$(date -d '+720 hours' '+%Y-%m-%d %H:%M')"
-confere_rc 3 'tabela alerta mês do Kimi acima de 80%' bash "$tmp/seletor/limites.sh"
 # Janela de 5h: o primeiro número de "5h 95%" é o 5; vale o número colado ao %.
-kimi_stub 95 4 "$(date -d '+720 hours' '+%Y-%m-%d %H:%M')"
-confere_rc 0 'seleção com 5h do Kimi estourada' seletor
-grep -qx 'escritor: team (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" \
-    && ok 'Kimi com 5h acima de 80% fica fora' || ruim '5h do Kimi lida errado'
-confere_rc 3 '--alerta com 5h do Kimi estourada' bash "$tmp/seletor/limites.sh" --alerta
-[ "$(cat "$tmp/saida")" = "kimi: 5h 95% (zera 23:00) · mês 4% (zera $(date -d '+720 hours' '+%Y-%m-%d %H:%M'))" ] \
-    && ok '--alerta imprime só a linha acima de 80%' || { ruim '--alerta'; cat "$tmp/saida"; }
-rm -rf "$HOME/.kimi-code" "$tmp/seletor/kimi-cota.sh"
+POOL_CODEX_5H=95 POOL_CODEX_SEMANA=4 POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=168 confere_rc 0 'seleção com 5h do Codex estourada' seletor
+grep -qx 'escritor: team (ritmo 0.8 · 80% livre, zera em 168h)' "$tmp/saida" \
+    && ok 'Codex com 5h acima de 80% fica fora' || ruim '5h do Codex lida errado na seleção'
+
 POOL_CODEX_5H=95 confere_rc 3 '--alerta com 5h do Codex estourada' bash "$tmp/seletor/limites.sh" --alerta
 grep -q '^codex: 5h 95%' "$tmp/saida" && ok '5h do Codex no alerta' || ruim '5h do Codex lida errado'
+[ "$(wc -l < "$tmp/saida")" = 1 ] && grep -q '^codex: 5h 95% (zera 23:00) · semana 20% ' "$tmp/saida" \
+    && ok '--alerta imprime só a linha acima de 80%' || { ruim '--alerta'; cat "$tmp/saida"; }
 POOL_SESSAO_USO=10 POOL_SEMANA_USO=90 confere_rc 3 '--alerta com semana do Claude acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
 grep -q '^pessoal: ' "$tmp/saida" && ok 'semana do Claude no alerta (segundo % usado da linha)' || ruim 'semana do Claude ignorada'
 confere_rc 0 '--alerta sem nada acima de 80%' bash "$tmp/seletor/limites.sh" --alerta

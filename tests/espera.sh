@@ -70,8 +70,8 @@ else echo "FALHA carência"; printf '1:\n%s\n2:\n%s\n' "$um" "$dois" | sed 's/^/
 if [ ! -e "$e/.estado-ctx_fim.json" ]; then echo "ok   estado de dispatch encerrado apagado"; else echo "FALHA limpeza do estado"; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 
-# Saída enxuta e Kimi: worker com stub configurável (atividade, wire.jsonl do Kimi).
-cena() { # atividade idade_do_wire(nenhum|recente|velho) [agente=kimi]
+# Saída enxuta: worker com stub configurável (atividade).
+cena() { # atividade
     h=$(mktemp -d); mkdir -p "$h/bin" "$h/wt"
     git -C "$h/wt" init -q && git -C "$h/wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m t
     wt="$h/wt"; command -v cygpath >/dev/null 2>&1 && wt=$(cygpath -m "$h/wt")
@@ -80,20 +80,15 @@ cena() { # atividade idade_do_wire(nenhum|recente|velho) [agente=kimi]
 case "\$*" in
     *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_k","dispatchStatus":"dispatched","agentTerminalHandle":"term_k","projection":{"stage":{"worker":"ready","activity":"$1"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}}]}}' ;;
     *worker-read*) echo '{"ok":true,"result":{"transcript":{"messages":[{"timestamp":1}],"limited":false}}}' ;;
-    *worker-show*) echo '{"ok":true,"result":{"worker":{"startOptions":{"agent":"${3:-kimi}"}}}}' ;;
     *terminal*read*) cat "$h/tela.json" 2>/dev/null || echo '{"ok":true,"result":{"terminal":{"tail":["pronto"]}}}' ;;
     *check*) sleep 1; echo '{"ok":true,"result":{}}' ;;
 esac
 EOF2
     chmod +x "$h/bin/orca"
     command -v cygpath >/dev/null 2>&1 && printf '@"%s" "%s" %%*\r\n' "$(cygpath -w "$(command -v bash)")" "$(cygpath -m "$h/bin/orca")" > "$h/bin/orca.cmd"
-    if [ "$2" != nenhum ]; then
-        w="$h/.kimi-code/sessions/wd_wt_abc/session_1/agents/main"; mkdir -p "$w"; : > "$w/wire.jsonl"
-        [ "$2" = velho ] && touch -d '2 hours ago' "$w/wire.jsonl"
-    fi
 }
 roda() { HOME="$h" PATH="$h/bin:$PATH" ORCA_ESPERA_PARADO_MIN=10 bash "$raiz/skills/delegacao/orca-espera.sh" --max-min 1 2>&1; }
-cena working nenhum
+cena working
 um=$(roda)
 git -C "$h/wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m novo
 dois=$(roda)
@@ -104,24 +99,14 @@ else echo "FALHA saída só de mudança (n1=$n1 n2=$n2)"; printf '%s\n' "$um" "$
 if printf '%s' "$um" | grep -q '^Sem novidade em 1 min; ctx_k último commit [0-9a-f]* (.*)$' && printf '%s' "$um" | grep -q 'Rearmar'; then echo "ok   resumo no fim"
 else echo "FALHA resumo"; printf '%s\n' "$um" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
-cena done recente
+cena done
 out=$(roda)
-if ! printf '%s' "$out" | grep -q '!!'; then echo "ok   Kimi com wire recente e activity=done não é dado como parado"
-else echo "FALHA Kimi wire recente"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
-rm -rf "$h"
-cena working velho
-out=$(roda)
-if printf '%s' "$out" | grep -q 'agente parado sem worker_done'; then echo "ok   Kimi com wire velho é dado como parado"
-else echo "FALHA Kimi wire velho"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
-rm -rf "$h"
-cena working velho claude
-out=$(roda)
-if ! printf '%s' "$out" | grep -q '!!'; then echo "ok   wire velho de Kimi não vale para worker de outro agente"
-else echo "FALHA wire alheio"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+if printf '%s' "$out" | grep -q 'agente parado sem worker_done'; then echo "ok   activity=done sem worker_done é dado como parado"
+else echo "FALHA activity=done"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 
 # Limite de cota: estourado na tela do worker e perto de estourar pelo limites.sh --alerta.
-cena working nenhum claude
+cena working
 echo '{"ok":true,"result":{"terminal":{"tail":["Error: 403 You'"'"'ve reached your 5-hour usage limit.","> "]}}}' > "$h/tela.json"
 out=$(roda)
 if printf '%s' "$out" | grep -q '!! ctx_k bateu limite de cota: .*5-hour usage limit'; then echo "ok   limite estourado na tela do worker avisa"
@@ -138,9 +123,9 @@ out=$(roda)
 if ! printf '%s' "$out" | grep -q 'bateu limite'; then echo "ok   429 de teste e RateLimiter não são limite"
 else echo "FALHA falso positivo de limite"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -f "$h/tela.json"
-printf '#!/bin/bash\necho "kimi: 5h 92%% (zera 04:38) · mês 10%%"; exit 3\n' > "$h/limites.sh"
+printf '#!/bin/bash\necho "codex: 5h 92%% (zera 04:38) · semana 10%%"; exit 3\n' > "$h/limites.sh"
 out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
-if printf '%s' "$out" | grep -q '^!! cota acima de 80%: kimi: 5h 92%'; then echo "ok   cota acima de 80% avisa antes de estourar"
+if printf '%s' "$out" | grep -q '^!! cota acima de 80%: codex: 5h 92%'; then echo "ok   cota acima de 80% avisa antes de estourar"
 else echo "FALHA aviso de cota"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
 if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   mesmo fornecedor não avisa de novo"
@@ -153,7 +138,7 @@ if [ "$ok_int" = 1 ] && ! printf '%s' "$out" | grep -q 'cota acima'; then echo "
 else echo "FALHA intervalo entre rearmes"; falhas=$((falhas + 1)); fi
 touch -d '20 minutes ago' "$c" 2>/dev/null
 out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
-printf '#!/bin/bash\necho "kimi: 5h 92%% (zera 04:38) · mês 10%%"; exit 3\n' > "$h/limites.sh"; touch -d '20 minutes ago' "$c"
+printf '#!/bin/bash\necho "codex: 5h 92%% (zera 04:38) · semana 10%%"; exit 3\n' > "$h/limites.sh"; touch -d '20 minutes ago' "$c"
 out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
 if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   falha do limites.sh não apaga o que já foi avisado"
 else echo "FALHA falha apagou deduplicação"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi

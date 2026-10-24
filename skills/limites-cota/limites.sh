@@ -31,9 +31,6 @@ if command -v agy >/dev/null 2>&1; then
     { grupo = ($1 ~ /Gemini/) ? "agy Gemini " : "agy Claude "; janela = ($2 ~ /Five/) ? "5h" : "semana"
       printf "%s %s restam %s\n", grupo, janela, $3 }' | sort > "$tmp/agy" &
 fi
-if ls "$HOME"/.kimi-code/credentials/kimi-code-env-*.json >/dev/null 2>&1; then
-  bash "$(dirname "$0")/kimi-cota.sh" > "$tmp/1" 2>&1 &
-fi
 if command -v codex >/dev/null 2>&1; then
   bash "$(dirname "$0")/codex-cota.sh" > "$tmp/2" 2>&1 &
 fi
@@ -52,9 +49,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$RESERVA" ] && [ $SOLO = 0 ] && { echo 'uso: limites.sh [--escritor [--reserva <tag>]] | --alerta' >&2; exit 2; }
-{ cat "$tmp/1" 2>/dev/null; sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/2" "$tmp/3" 2>/dev/null; cat "$tmp/4"; cat "$tmp/5" 2>/dev/null; } > "$tmp/todas"
+{ sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/2" "$tmp/3" 2>/dev/null; cat "$tmp/4"; cat "$tmp/5" 2>/dev/null; } > "$tmp/todas"
 
-# Qualquer janela acima de 80% (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N; kimi: "5h N%" e "mês N%";
+# Qualquer janela acima de 80% (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N;
 # codex: "5h N%" e "semana N%"): sai com 3; com $1=1 imprime só as linhas acima do limite.
 alerta() {
   awk -v so_linhas="$1" '
@@ -62,8 +59,6 @@ alerta() {
     { r = 0 }
     /usado/    { s = $0; while (match(s, /[0-9]+% usado/)) { if (substr(s, RSTART, RLENGTH - 7) + 0 > 80) r = 1; s = substr(s, RSTART + RLENGTH) } }
     /restam/   { if (match($0, /restam [0-9]+%/) && 100 - pct() > 80) r = 1 }
-    /^kimi: 5h/ { if (match($0, /5h [0-9]+%/) && pct() > 80) r = 1
-                  if (match($0, /mês [0-9]+%/) && pct() > 80) r = 1 }
     /^codex: 5h/ { if (match($0, /5h [0-9]+%/) && pct() > 80) r = 1
                    if (match($0, /semana [0-9]+%/) && pct() > 80) r = 1 }
     r { bad = 1; if (so_linhas == 1) print }
@@ -96,12 +91,6 @@ awk '
       s = substr($0, ini, tam + 30)
       if (match(s, /\(zera [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\)/)) z = substr(s, RSTART + 6, RLENGTH - 7) }
     if (c >= 0 && l >= 0) print "codex", c, l, z; next }
-  /^kimi: 5h/ { c = -1; l = -1; z = "-"
-    if (match($0, /5h [0-9]+%/)) c = pct()
-    if (match($0, /mês [0-9]+%/)) { ini = RSTART; tam = RLENGTH; l = pct()
-      s = substr($0, ini, tam + 30)
-      if (match(s, /\(zera [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\)/)) z = substr(s, RSTART + 6, RLENGTH - 7) }
-    if (c >= 0 && l >= 0) print "kimi", c, l, z; next }
 ' "$tmp/todas" | while IFS=' ' read -r conta curta longa z; do
   ep=-
   case "$z" in
@@ -128,15 +117,14 @@ n=0; cand_q=0; cand_vaga=0
   FNR == NR { split($2, v, "/"); livre[$1] = (v[2] == 0 || v[1] > 0); next }
   { cand[$1] = 1; curta[$1] = $2; longa[$1] = $3; reset[$1] = $4; q++ }
   END {
-    split("team pessoal codex kimi", ordem, " ")
-    dur["team"] = 168; dur["pessoal"] = 168; dur["codex"] = 168; dur["kimi"] = 720
-    for (i = 1; i <= 4; i++) { k = ordem[i]
+    split("team pessoal codex", ordem, " ")
+    for (i = 1; i <= 3; i++) { k = ordem[i]
       if (!(k in cand) || !livre[k]) continue
       tem_vaga = 1
       h = -1; if (reset[k] != "-") h = (reset[k] - agora) / 3600
       if (curta[k] > 80) continue
       if (!(longa[k] <= 80 || (longa[k] <= 95 && h >= 0 && h < 24))) continue
-      frac = 1; if (h >= 0) { frac = h / dur[k]; if (frac < 0.01) frac = 0.01; else if (frac > 1) frac = 1 }
+      frac = 1; if (h >= 0) { frac = h / 168; if (frac < 0.01) frac = 0.01; else if (frac > 1) frac = 1 }
       r = (100 - longa[k]) / (100 * frac)
       m++; rr[m] = r; ll[m] = k; gg[m] = 100 - longa[k]; hh[m] = h
     }

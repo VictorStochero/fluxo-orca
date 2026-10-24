@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Pool da máquina: pega <conta> <dispatch>, solta <dispatch>, livres, troca <provisório> <dispatch>. Zero = ilimitado.
 # Dono provisório (prefixo res-) não é consultado no Orca: vaga morta só após POOL_RESERVA_TTL s (padrão 600).
-contas=(team pessoal codex kimi agy)
-v_team=1 v_pessoal=0 v_codex=1 v_kimi=1 v_agy=1
+contas=(team pessoal codex agy)
+v_team=1 v_pessoal=0 v_codex=1 v_agy=1
 dir="$HOME/.cache/agentes"
 erro() { echo "vaga-agente: $*" >&2; exit 2; }
 valida_dispatch() { [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]] || erro 'dispatch inválido'; }
@@ -10,7 +10,7 @@ if [ -f "$HOME/.claude/agentes.conf" ]; then
     while IFS= read -r linha || [ -n "$linha" ]; do
         linha=${linha%%#*}; linha=${linha//$'\r'/}
         [[ "$linha" =~ ^[[:space:]]*$ ]] && continue
-        [[ "$linha" =~ ^[[:space:]]*(team|pessoal|codex|kimi|agy)=([0-9]+)[[:space:]]*$ ]] || erro "configuração inválida: $linha"
+        [[ "$linha" =~ ^[[:space:]]*(team|pessoal|codex|agy)=([0-9]+)[[:space:]]*$ ]] || erro "configuração inválida: $linha"
         chave=v_${BASH_REMATCH[1]}
         printf -v "$chave" '%s' "$((10#${BASH_REMATCH[2]}))"
         [ "${!chave}" -ge 0 ] || erro 'limite inválido'

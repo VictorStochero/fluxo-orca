@@ -36,7 +36,7 @@ E, por stack dos projetos escolhidos (só o que faltar; respeitar o que o usuár
 - **Python**: **uv** recomendado (`winget install astral-sh.uv`, `curl -LsSf https://astral.sh/uv/install.sh | sh`, `brew install uv`), ou o que o projeto já usa (Poetry, Pipenv, pyenv).
 - **JS/TS**: **fnm** recomendado (`winget install Schniz.fnm`, `curl -fsSL https://fnm.vercel.app/install | bash`, `brew install fnm`) + `corepack enable`; ou nvm/volta se já existir.
 - **Containers**: Docker Desktop / Docker Engine / OrbStack, ou Podman (+ Podman Desktop); DDEV se os projetos usarem.
-- **Opcional** (configuração na fase 4b): Codex CLI (escritor em paralelo ao Sonnet; `npm i -g @openai/codex`, login pelo usuário com `! codex login`); agy (Antigravity CLI) para segunda opinião; Kimi Code; segunda conta Claude (ex.: Team) para escritores.
+- **Opcional** (configuração na fase 4b): Codex CLI (escritor em paralelo ao Sonnet; `npm i -g @openai/codex`, login pelo usuário com `! codex login`); agy (Antigravity CLI) para segunda opinião; segunda conta Claude (ex.: Team) para escritores.
 
 Detalhes e armadilhas de cada ferramenta: `skills/ambiente-local/ferramentas/*.md` deste repositório.
 
@@ -109,7 +109,7 @@ Se o usuário escreve em outro idioma que não pt-BR, ajustar a seção "Idioma"
 Só para o que o usuário instalou na fase 2. Os workers do Orca rodam esses CLIs sem humano (o Orca abre o Codex com `--dangerously-bypass-approvals-and-sandbox`), então as regras e a trava de comando remoto têm de estar neles também.
 Fornecedor não instalado fica fora da seleção de escritor; o fluxo funciona só com a conta pessoal. Ao escolher pelo pool, ignorar contas inexistentes, mesmo que apareçam em `vaga-agente.sh livres`.
 
-1. **Regras**: baixar `extras/AGENTS.global.md` para `~/.agents/AGENTS.md` (mesclar se existir, mostrando o diff) e ligar em cada CLI instalado — `~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md` (agy), `~/.kimi-code/AGENTS.md`, `~/.config/opencode/AGENTS.md`:
+1. **Regras**: baixar `extras/AGENTS.global.md` para `~/.agents/AGENTS.md` (mesclar se existir, mostrando o diff) e ligar em cada CLI instalado — `~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md` (agy), `~/.config/opencode/AGENTS.md`:
    ```bash
    gh api repos/VictorStochero/fluxo-orca/contents/extras/AGENTS.global.md --jq .content | base64 -d > /tmp/AGENTS.global.md
    ln -s ~/.agents/AGENTS.md ~/.codex/AGENTS.md          # Windows (PowerShell): New-Item -ItemType SymbolicLink -Path "$HOME\.codex\AGENTS.md" -Target "$HOME\.agents\AGENTS.md"
@@ -127,10 +127,9 @@ Fornecedor não instalado fica fora da seleção de escritor; o fluxo funciona s
      trusted_hash = "sha256:..."
      ```
    - **agy** — em `~/.gemini/config/hooks.json`, entrada `"guarda-externos": {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "<comando> agy", "timeout": 10}]}]}` (formato `agy`).
-   - **Kimi** — no `~/.kimi-code/config.toml`: `[[hooks]]` com `event = "PreToolUse"`, `command = "bash ~/.cache/guarda-externos.sh exit2"`, `timeout = 10`.
    - **Codex, fim do worker** — em `~/.codex/hooks.json`, um grupo novo em `Stop` (depois do que o Orca gravou): `{"hooks":[{"type":"command","command":"<fim-worker>","timeout":15}]}`, com `<fim-worker>` = `C:/Users/<u>/.cache/fim-worker-codex.cmd` no Windows ou `bash ~/.cache/fim-worker.sh` no Linux/macOS; confiança com `<evento>` = `stop`. Worker de Orca que encerra o turno sem `worker_done` recebe o comando de volta e continua (o Claude ganha o mesmo hook pelo plugin).
-   - Conferir: `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "Rode exatamente: ssh -V"` tem de responder que o hook bloqueou (equivalente no agy e no Kimi).
-4. **Segunda conta Claude** (ex.: Team) para escritores (o escritor de cada etapa é quem tem mais ritmo de cota entre team, pessoal, Codex e Kimi: `bash ~/.cache/limites.sh --escritor`; worktree novo pede confiança no primeiro uso em qualquer conta Claude, `hasTrustDialogAccepted` do caminho em `~/.claude.json` ou `~/.claude-team/.claude.json`): pasta `~/.claude-team` com links para `CLAUDE.md`, `settings.json`, `plugins`, `skills`, `agents` e `projects` de `~/.claude`; login pelo usuário com `! CLAUDE_CONFIG_DIR=~/.claude-team claude` e `/login`. Atalho no `~/.bashrc` (o `--settings` garante o mesmo settings mesmo se o link quebrar): `claude-team() { CLAUDE_CONFIG_DIR="$HOME/.claude-team" claude --settings "$HOME/.claude/settings.json" "$@"; }`. O `limites.sh` passa a medir a linha `team`, e a skill `delegacao` diz como abrir worker nessa conta.
+   - Conferir: `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "Rode exatamente: ssh -V"` tem de responder que o hook bloqueou (equivalente no agy).
+4. **Segunda conta Claude** (ex.: Team) para escritores (o escritor de cada etapa é quem tem mais ritmo de cota entre team, pessoal e Codex: `bash ~/.cache/limites.sh --escritor`; worktree novo pede confiança no primeiro uso em qualquer conta Claude, `hasTrustDialogAccepted` do caminho em `~/.claude.json` ou `~/.claude-team/.claude.json`): pasta `~/.claude-team` com links para `CLAUDE.md`, `settings.json`, `plugins`, `skills`, `agents` e `projects` de `~/.claude`; login pelo usuário com `! CLAUDE_CONFIG_DIR=~/.claude-team claude` e `/login`. Atalho no `~/.bashrc` (o `--settings` garante o mesmo settings mesmo se o link quebrar): `claude-team() { CLAUDE_CONFIG_DIR="$HOME/.claude-team" claude --settings "$HOME/.claude/settings.json" "$@"; }`. O `limites.sh` passa a medir a linha `team`, e a skill `delegacao` diz como abrir worker nessa conta.
 
 ## Fase 5 — Perfil da máquina e boards
 1. **`~/.claude/ambiente.md`** — perfil com o que a fase 1 achou, no formato da skill `ambiente-local` (sistema, shell, quem serve os sites, bancos com porta e origem, contêiner, runtimes, raiz dos projetos e a tabela de projetos com stack, serviço, banco, multi-tenant, board e base). As skills leem este arquivo; mantê-lo verdadeiro.
@@ -141,7 +140,7 @@ Fornecedor não instalado fica fora da seleção de escritor; o fluxo funciona s
 - `~/.claude/ambiente.md` e `~/.claude/boards.md` (armadilhas e regras de board não se detectam de novo); corrigir caminhos, portas e versões que mudaram.
 - Por projeto, fora do git: `.env`/`.env.testing` e `.orca/worktree.conf` (vêm junto se a pasta for copiada; se o projeto for clonado de novo, trazer à parte).
 - Opcional: memórias do Claude por projeto (`~/.claude/projects/*/memory`; o nome da pasta muda se o caminho do projeto mudar).
-- Logins não migram: Claude (e a segunda conta), `gh`, Codex/agy/Kimi e as chaves SSH são refeitos nas fases 3 e 4b.
+- Logins não migram: Claude (e a segunda conta), `gh`, Codex/agy e as chaves SSH são refeitos nas fases 3 e 4b.
 
 ## Fase 6 — Por projeto
 Para cada projeto escolhido:

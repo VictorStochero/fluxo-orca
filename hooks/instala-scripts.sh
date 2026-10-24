@@ -1,7 +1,7 @@
 #!/bin/bash
 # SessionStart: mantém em ~/.cache as cópias dos scripts que skills, agentes e workers chamam por caminho fixo.
 mkdir -p "$HOME/.cache"
-for s in skills/fila-testes/gs-teste.sh skills/fila-testes/e-teste.sh skills/limites-cota/limites.sh skills/limites-cota/kimi-cota.sh \
+for s in skills/fila-testes/gs-teste.sh skills/fila-testes/e-teste.sh skills/limites-cota/limites.sh \
          skills/limites-cota/codex-cota.sh skills/limites-cota/vaga-agente.sh skills/worktree-orca/wt-setup.sh skills/worktree-orca/wt-archive.sh \
          skills/worktree-orca/wt-lib.sh skills/delegacao/orca-espera.sh skills/delegacao/orca-libera.sh skills/delegacao/orca-inicia.sh skills/delegacao/orca-tela.sh hooks/guarda-externos.sh hooks/fim-worker.sh; do
     cmp -s "$CLAUDE_PLUGIN_ROOT/$s" "$HOME/.cache/$(basename "$s")" || cp "$CLAUDE_PLUGIN_ROOT/$s" "$HOME/.cache/"
@@ -10,8 +10,8 @@ mkdir -p "$HOME/.claude/agents"
 cmp -s "$CLAUDE_PLUGIN_ROOT/extras/somente-leitura.json" "$HOME/.claude/agents/somente-leitura.json" \
     || cp "$CLAUDE_PLUGIN_ROOT/extras/somente-leitura.json" "$HOME/.claude/agents/"
 
-# Agentes externos (Codex, agy, Kimi): sem eles, nada abaixo.
-command -v codex >/dev/null 2>&1 || command -v agy >/dev/null 2>&1 || command -v kimi >/dev/null 2>&1 || exit 0
+# Agentes externos (Codex, agy): sem eles, nada abaixo.
+command -v codex >/dev/null 2>&1 || command -v agy >/dev/null 2>&1 || exit 0
 
 # Windows: Codex e agy chamam o hook por .cmd. Tem de ser o Git\bin\bash.exe, que monta o PATH do Git;
 # o usr\bin\bash.exe roda sem grep no PATH e libera tudo.

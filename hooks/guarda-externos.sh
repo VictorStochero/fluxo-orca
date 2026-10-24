@@ -1,6 +1,6 @@
 #!/bin/bash
-# PreToolUse dos CLIs despachados sem humano (kimi, agy, codex): nega comando remoto, bulk replace e teste fora da fila.
-# Uso: guarda-externos.sh [exit2|agy|codex] — exit2 = stderr + exit 2 (Kimi); agy = JSON {"decision":...}; codex = JSON hookSpecificOutput deny (exit 2 o Codex trata como falha e deixa passar).
+# PreToolUse dos CLIs despachados sem humano (agy, codex): nega comando remoto, bulk replace e teste fora da fila.
+# Uso: guarda-externos.sh [exit2|agy|codex] — exit2 = stderr + exit 2 (padrão genérico); agy = JSON {"decision":...}; codex = JSON hookSpecificOutput deny (exit 2 o Codex trata como falha e deixa passar).
 formato=${1:-exit2}
 in=$(cat)
 motivo=""
