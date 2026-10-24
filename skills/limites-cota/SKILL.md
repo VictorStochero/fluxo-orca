@@ -11,6 +11,7 @@ description: Use antes de despachar uma onda de workers ou quando perguntarem so
 |---|---|---|
 | `pessoal` | `claude -p "/usage"` (conta principal) | nunca |
 | `team` | conta secundária em `CLAUDE_CONFIG_DIR=~/.claude-team` | pasta não existe |
+| `claude-b` | conta em `CLAUDE_CONFIG_DIR=~/.claude-b` (usada pelo opencode); só exibe e alerta, não concorre a escritor | pasta não existe |
 | `agy Gemini` / `agy Claude` | `agy -p "/usage"`, janelas 5h e semana | `agy` fora do PATH |
 | `kimi` | API do Kimi Code (`kimi-cota.sh`), janela 5h e mês | sem credencial em `~/.kimi-code/credentials/` |
 | `codex` | app-server local do Codex (`codex-cota.sh`, `account/rateLimits/read`), janela 5h e semana | `codex` fora do PATH |
