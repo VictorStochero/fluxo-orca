@@ -125,6 +125,7 @@ exit 0
 EOF
 cat > "$tmp/seletor/codex-cota.sh" <<'EOF'
 c=${POOL_CODEX_5H:-20}; l=${POOL_CODEX_SEMANA:-20}; h=${POOL_CODEX_RESET_H:-168}
+[ -n "${POOL_CODEX_SEM_RESET:-}" ] && { printf 'codex: 5h %s%% (zera 23:00) · semana %s%%\n' "$c" "$l"; exit 0; }
 printf 'codex: 5h %s%% (zera 23:00) · semana %s%% (zera %s)\n' "$c" "$l" "$(date -d "+${h} hours" '+%Y-%m-%d %H:%M')"
 EOF
 chmod +x "$tmp/bin/claude" "$tmp/bin/codex" "$tmp/seletor/codex-cota.sh"
@@ -158,6 +159,10 @@ POOL_TEAM_SESSAO_USO=85 POOL_TEAM_SEMANA_USO=10 confere_rc 0 'curta acima de 80'
 grep -qx 'escritor: codex (ritmo 0.8 · 80% livre, zera em 168h)' "$tmp/saida" \
     && ok 'curta acima de 80 fica fora' || ruim 'curta acima de 80 entrou'
 unset POOL_TEAM_SESSAO_USO POOL_TEAM_SEMANA_USO POOL_TEAM_RESET_H
+# Reset ilegível cai para a folga da longa, sem quebrar.
+POOL_CODEX_SEM_RESET=1 POOL_CODEX_SEMANA=4 POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=168 confere_rc 0 'Codex com reset ilegível' seletor
+grep -qx 'escritor: codex (ritmo 1.0 · 96% livre)' "$tmp/saida" \
+    && ok 'reset ilegível cai para a folga' || ruim 'reset ilegível quebrou a seleção'
 
 POOL_CODEX_5H=95 confere_rc 3 '--alerta com 5h do Codex estourada' bash "$tmp/seletor/limites.sh" --alerta
 grep -q '^codex: 5h 95%' "$tmp/saida" && ok '5h do Codex no alerta' || ruim '5h do Codex lida errado'

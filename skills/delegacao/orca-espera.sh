@@ -89,7 +89,7 @@ except Exception as e:
     print(f"   worker-list ilegível ({type(e).__name__}); estado real não conferido nesta rodada"); sys.exit(1)
 alerta = False
 agora = time.time()
-# Mensagens de limite de Claude ("5-hour limit reached"), e Codex ("hit your usage limit");
+# Mensagens de limite de Claude ("5-hour limit reached") e Codex ("hit your usage limit");
 # 429 e rate limit só em contexto de erro, para não casar "429 passed", ":429" ou RateLimiter.
 LIMITE = re.compile(r"usage limit|\blimit (reached|hit|exceeded)|(reached|hit|exceeded|exhausted)\b.{0,40}\b(quota|limit)\b"
                     r"|insufficient_quota|429 too many|status:? ?429|error.{0,20}\b429\b|rate[ _-]?limit(ed\b|_error|.{0,10}(reached|exceeded))"
