@@ -121,8 +121,10 @@ contas_lanca() { # conta papel [modelo] → comando para orca-libera.sh --cria -
     linha=$(conta_campo "$1" comando)
     [ -n "$(conta_campo "$1" args)" ] && linha="$linha $(conta_campo "$1" args)"
     [ -n "$cfg" ] && linha="CLAUDE_CONFIG_DIR=$(printf '%q' "$cfg") $linha"
-    # Só o Claude Code conhece os agentes do plugin; nos demais o papel vai no spec.
-    [ "$(conta_campo "$1" agente)" = claude ] && linha="$linha --agent fluxo-orca:$2"
+    # Só o Claude Code conhece os agentes de plugin; nos demais o papel vai no spec. Papel com ":" já é o agente (plugin:agente).
+    if [ "$(conta_campo "$1" agente)" = claude ]; then
+        case "$2" in *:*) linha="$linha --agent $2" ;; *) linha="$linha --agent fluxo-orca:$2" ;; esac
+    fi
     [ -n "$modelo" ] && linha="$linha --model $(printf '%q' "$modelo")"
     printf '%s\n' "$linha"
 }

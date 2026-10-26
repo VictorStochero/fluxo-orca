@@ -72,6 +72,7 @@ lanca() { bash "$lib" lanca "$@" 2>"$tmp/erro"; }
 igual 'lança: team escritor' "CLAUDE_CONFIG_DIR=$HOME/.claude-team claude --dangerously-skip-permissions --agent fluxo-orca:escritor --model claude-sonnet-5-5" "$(lanca team escritor claude-sonnet-5-5)"
 igual 'lança: codex usa o modelo da conta' 'codex --dangerously-bypass-approvals-and-sandbox --model gpt-6.1-sol' "$(lanca codex escritor)"
 igual 'lança: claude-b com comando próprio' "CLAUDE_CONFIG_DIR=$HOME/.claude-b claude-b --dangerously-skip-permissions --agent fluxo-orca:revisor" "$(lanca claude-b revisor)"
+igual 'lança: agente de outro plugin' "CLAUDE_CONFIG_DIR=$HOME/.claude-team claude --dangerously-skip-permissions --agent auditoria-pre-subida:auditor --model claude-opus-5-5" "$(lanca team auditoria-pre-subida:auditor claude-opus-5-5)"
 lanca nenhuma escritor >/dev/null; igual 'lança: conta desconhecida' 2 $?
 
 # Erros: linha inválida para tudo, com a linha na mensagem.
