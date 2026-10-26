@@ -21,7 +21,8 @@ minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minima
 - Chaves: `agente` (chave do catálogo, obrigatória), `config` (pasta `CLAUDE_CONFIG_DIR` de uma conta Claude), `comando`, `args`, `modelo`, `vagas` (0 = ilimitado), `papeis` (`escritor revisor verificador mecanico segunda-opiniao orquestra`; padrão `escritor,revisor,verificador,mecanico`; `orquestra` sozinho = medida, nunca escolhida), `medidor` (`claude`, `orca:<fornecedor>` ou `-`).
 - Contas Claude pessoais: quantas o dev tiver, cada uma com a sua pasta de config (mesmo layout da `~/.claude-team`, fase 4b do GUIA).
 - Sem linha de conta no arquivo, valem as padrão: `team` (`~/.claude-team`, 1 vaga), `pessoal` (ilimitada), `codex` (1), `agy` (1, só segunda opinião) e `claude-b` (`~/.claude-b`, só medida, se a pasta existir). Linhas `conta=N` mudam só as vagas.
-- `bash ~/.cache/contas.sh lista` mostra o registro efetivo; `contas.sh lanca <conta> <papel> [modelo]` imprime o comando para `orca-libera.sh --cria --command` (Claude ganha `--agent fluxo-orca:<papel>`).
+- `bash ~/.cache/contas.sh lista` mostra o registro efetivo; `contas.sh lanca <conta> <papel> [modelo]` imprime o comando para `orca-libera.sh --cria --command` (Claude ganha `--agent fluxo-orca:<papel>`, ou `--agent <plugin:agente>` quando o papel já vem assim, ex.: `auditoria-pre-subida:auditor`).
+- `comando` de conta Claude tem de ser um executável no PATH (script), não função do `.bashrc`: a medição usa o `claude` com a pasta de config, mas o terminal do worker roda o `comando`.
 - Kimi e MiniMax: no catálogo e medidos pelo Orca, **não testados com conta real**. MiniMax não tem agente próprio no Orca: conta pelo `opencode` ou pelo `claude` com `ANTHROPIC_BASE_URL`.
 
 ## Medição
