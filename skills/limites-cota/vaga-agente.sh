@@ -64,7 +64,7 @@ case "${1:-}" in
     pega)
         [ "$#" = 3 ] || erro 'uso: pega <conta> <dispatch>'
         conta=$2; dispatch=$3
-        conta_existe "$conta" || erro 'conta desconhecida'
+        conta_no_pool "$conta" || erro 'conta desconhecida'
         valida_dispatch "$dispatch"
         total=$(conta_campo "$conta" vagas)
         [ "$total" = 0 ] && exit 0
@@ -122,6 +122,7 @@ case "${1:-}" in
     livres)
         [ "$#" = 1 ] || erro 'uso: livres'
         for conta in $CONTAS; do
+            conta_no_pool "$conta" || continue
             total=$(conta_campo "$conta" vagas); ocupadas=0
             for v in "$dir/$conta".lock[0-9]*; do
                 [ -d "$v" ] || continue

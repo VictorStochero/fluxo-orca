@@ -16,7 +16,8 @@ if [ "$1 $2 $3" = 'account list --json' ]; then
     c=${POOL_CODEX_5H:-20}; l=${POOL_CODEX_SEMANA:-20}; h=${POOL_CODEX_RESET_H:-168}
     z5=$(( $(date -d '23:00' +%s) * 1000 )); zs=$(( ($(date +%s) + h * 3600) * 1000 ))
     [ -n "${POOL_CODEX_SEM_RESET:-}" ] && zs=null
-    printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"weekly":{"usedPercent":%s,"windowMinutes":10080,"resetsAt":%s},"status":"ok","error":null}}}}\n' "$c" "$z5" "$l" "$zs"
+    longa=weekly; min=10080; [ -n "${POOL_CODEX_MENSAL:-}" ] && { longa=monthly; min=43200; }
+    printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs"
     exit 0
 fi
 [ "$1 $2 $3 $5" = 'orchestration worker-show --dispatch --json' ] || exit 2
@@ -112,6 +113,13 @@ confere_rc 2 'config inválida rejeitada' pool livres
 rm "$HOME/.claude/agentes.conf"
 pool solta ctx_c2; pool solta ctx_p1; pool solta ctx_novo
 
+# claude-b padrão é só medida: fica fora do pool, como antes do registro.
+mkdir -p "$HOME/.claude-b"
+confere_rc 0 'claude-b só medida: livres' pool livres
+grep -q '^claude-b ' "$tmp/saida" && ruim 'claude-b só medida apareceu no pool' || ok 'claude-b só medida fora do livres'
+confere_rc 2 'claude-b só medida: pega rejeitada' pool pega claude-b ctx_cb
+rmdir "$HOME/.claude-b"
+
 # Registro do dev: contas pessoais e agentes fora da lista antiga.
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 dev2    agente=claude config=~/.claude-dev2 vagas=1
@@ -190,6 +198,11 @@ POOL_CODEX_5H=95 POOL_CODEX_SEMANA=4 POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=1
 grep -qx 'escritor: team (ritmo 0.8 · 80% livre, zera em 168h)' "$tmp/saida" \
     && ok 'Codex com 5h acima de 80% fica fora' || ruim '5h do Codex lida errado na seleção'
 
+# Janela longa mensal: a fração usa os 720 h do windowMinutes, não a semana.
+POOL_CODEX_MENSAL=1 POOL_CODEX_RESET_H=360 POOL_TEAM_SEMANA_USO=60 POOL_TEAM_RESET_H=168 confere_rc 0 'seleção com longa mensal' seletor
+grep -qx 'escritor: codex (ritmo 1.6 · 80% livre, zera em 360h)' "$tmp/saida" \
+    && ok 'longa mensal pela duração do Orca' || { ruim 'longa mensal'; cat "$tmp/saida"; }
+
 POOL_CODEX_5H=95 confere_rc 3 '--alerta com 5h do Codex estourada' bash "$tmp/seletor/limites.sh" --alerta
 grep -q '^codex: 5h 95%' "$tmp/saida" && ok '5h do Codex no alerta' || ruim '5h do Codex lida errado'
 [ "$(wc -l < "$tmp/saida")" = 1 ] && grep -q '^codex: 5h 95% (zera 23:00) · semana 20% ' "$tmp/saida" \
@@ -255,6 +268,17 @@ team    agente=claude config=~/.claude-team vagas=1
 EOF
 confere_rc 0 'registro: escolha=ordem' seletor
 grep -qx 'escritor: aider1 (sem medidor)' "$tmp/saida" && ok 'ordem do registro vence o ritmo' || { ruim 'escolha=ordem'; cat "$tmp/saida"; }
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+cb agente=claude comando=claude-b-fora-do-path config=~/.claude-team vagas=1
+EOF
+confere_rc 0 'registro: conta Claude com atalho fora do PATH' seletor
+grep -qx 'escritor: cb (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" \
+    && ok 'conta Claude medida pelo claude, não pelo atalho' || { ruim 'conta Claude com atalho sumiu'; cat "$tmp/saida"; }
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+escolha=ordem
+aider1  agente=aider vagas=1
+team    agente=claude config=~/.claude-team vagas=1
+EOF
 pool pega aider1 ctx_o1
 confere_rc 0 'registro: ordem pula a sem vaga' seletor
 grep -qx 'escritor: team (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" && ok 'ordem segue para a próxima com vaga' || { ruim 'ordem sem vaga'; cat "$tmp/saida"; }

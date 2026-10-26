@@ -11,11 +11,15 @@ _contas_set() { printf -v "$(_contas_var "$1" "$2")" '%s' "$3"; }
 conta_campo() { local v; v=$(_contas_var "$1" "$2"); printf '%s' "${!v}"; }
 conta_tem_papel() { case ",$(conta_campo "$1" papeis)," in *",$2,"*) return 0 ;; esac; return 1; }
 conta_existe() { case " $CONTAS " in *" $1 "*) return 0 ;; esac; return 1; }
+# Só medida (sem papel, ou só orquestra) não ocupa vaga: fica fora do pool.
+conta_no_pool() { conta_existe "$1" && case ",$(conta_campo "$1" papeis)," in ,, | ,orquestra,) return 1 ;; esac; }
+CONTAS_CAMPOS="agente id comando args config modelo vagas papeis medidor nota"
 _contas_erro() { echo "contas: $1: $2" >&2; return 2; }
 
 _contas_define() { # conta chave-do-catálogo
     local l id cmd args med nota
-    conta_existe "$1" && return 3
+    # "a-b" e "a_b" usam a mesma variável: contam como repetidas.
+    conta_existe "$1" || [ -n "$(conta_campo "$1" agente)" ] && return 3
     while IFS= read -r l || [ -n "$l" ]; do
         l=${l%$'\r'}
         case "$l" in '' | '#'*) continue ;; esac
@@ -83,7 +87,8 @@ _contas_linha() { # Conta do dev: nome chave=valor ..., valor com espaço entre 
 }
 
 contas_carrega() {
-    local linha legado=() proprias=0 i conta
+    local linha legado=() proprias=0 i conta f
+    for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do unset "$(_contas_var "$conta" "$f")"; done; done
     CONTAS=""; ESCOLHA=ritmo
     if [ -f "$CONTAS_CONF" ]; then
         while IFS= read -r linha || [ -n "$linha" ]; do
@@ -115,10 +120,10 @@ contas_lanca() { # conta papel [modelo] → comando para orca-libera.sh --cria -
     cfg=$(conta_campo "$1" config); modelo=${3:-$(conta_campo "$1" modelo)}
     linha=$(conta_campo "$1" comando)
     [ -n "$(conta_campo "$1" args)" ] && linha="$linha $(conta_campo "$1" args)"
-    [ -n "$cfg" ] && linha="CLAUDE_CONFIG_DIR=$cfg $linha"
+    [ -n "$cfg" ] && linha="CLAUDE_CONFIG_DIR=$(printf '%q' "$cfg") $linha"
     # Só o Claude Code conhece os agentes do plugin; nos demais o papel vai no spec.
     [ "$(conta_campo "$1" agente)" = claude ] && linha="$linha --agent fluxo-orca:$2"
-    [ -n "$modelo" ] && linha="$linha --model $modelo"
+    [ -n "$modelo" ] && linha="$linha --model $(printf '%q' "$modelo")"
     printf '%s\n' "$linha"
 }
 

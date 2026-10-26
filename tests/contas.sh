@@ -84,6 +84,16 @@ for linha in 'Team! agente=claude' 'x agente=inexistente' 'x agente=claude cor=a
 done
 printf 'x agente=claude\nx agente=codex\n' > "$HOME/.claude/agentes.conf"
 igual 'erro: conta repetida' 2 "$(rc_carrega)"
+printf 'a-b agente=claude\na_b agente=codex\n' > "$HOME/.claude/agentes.conf"
+igual 'erro: nomes que colidem na variável' 2 "$(rc_carrega)"
+
+# Carregar duas vezes (o limites.sh recarrega as padrão quando o registro falha) não acusa repetida.
+printf 'team agente=claude\n' > "$HOME/.claude/agentes.conf"
+igual 'recarga limpa o registro anterior' 'team pessoal codex agy' "$(carrega 'CONTAS_CONF=/dev/null; contas_carrega && echo $CONTAS')"
+
+# Caminho com espaço sai escapado na linha de lançamento.
+printf 'sp agente=claude config="~/conta com espaço"\n' > "$HOME/.claude/agentes.conf"
+igual 'lança: config com espaço' "CLAUDE_CONFIG_DIR=$(printf '%q' "$HOME/conta com espaço") claude --dangerously-skip-permissions --agent fluxo-orca:escritor" "$(bash "$lib" lanca sp escritor 2>&1)"
 
 # Bash 3.2: nada de arrays associativos.
 printf 'dev2 agente=claude config=~/.claude-dev2 vagas=1\n' > "$HOME/.claude/agentes.conf"

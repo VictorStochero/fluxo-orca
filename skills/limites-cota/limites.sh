@@ -29,6 +29,8 @@ contas_carrega 2>/dev/null || { CONTAS_CONF=/dev/null; contas_carrega; }
 instalada() { # O binário da conta (sem as atribuições VAR=) está no PATH e a pasta de config, se houver, existe.
   local b cfg
   for b in $(conta_campo "$1" comando); do [[ "$b" == *=* ]] || break; done
+  # Conta Claude é medida pelo próprio claude: o atalho dela (ex.: função claude-b do .bashrc) não existe aqui.
+  [ "$(conta_campo "$1" agente)" = claude ] && b=claude
   command -v "$b" >/dev/null 2>&1 || return 1
   cfg=$(conta_campo "$1" config)
   [ -z "$cfg" ] || [ -d "$cfg" ]
