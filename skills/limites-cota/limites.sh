@@ -1,40 +1,12 @@
 #!/usr/bin/env bash
-# Cotas de todos os fornecedores instalados, uma linha cada, em paralelo. Sai com 3 se algum limite passar de 80% usado.
-# Última linha: escritor elegível de maior ritmo com vaga no pool; --escritor imprime só ela (75 = pool cheio).
+# Cota de cada conta do registro (contas.sh: catálogo + ~/.claude/agentes.conf), em paralelo. Sai com 3 se algum limite passar de 80% usado.
+# Última linha: escritor escolhido entre as contas com papel escritor e vaga no pool; --escritor imprime só ela (75 = pool cheio).
+# escolha=ritmo (padrão): maior ritmo entre as medidas, depois as sem medidor na ordem do registro; escolha=ordem: a ordem do registro,
+# com o medidor só tirando da vez quem passou do teto.
 # --escritor --reserva <tag> reserva a vaga do escolhido antes do worker-start (dono provisório res-<tag>, TTL em vaga-agente.sh).
-# Contas Claude secundárias: CLAUDE_CONFIG_DIR em ~/.claude-team e ~/.claude-b (pula a que não existir).
 export MSYS_NO_PATHCONV=1
+aqui=$(dirname "$0")
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-
-claude_linha() { # $1 rótulo; resto = comando
-  local r=$1; shift
-  # Sem as variáveis do Orca: os hooks do claude -p reportariam fim de turno pelo agente do painel que mediu.
-  (for v in $(compgen -e | grep '^ORCA_'); do unset "$v"; done; "$@") 2>&1 | awk -v r="$r" '
-    /^Current session:/ { sub(/ used.*resets /, " usado, zera "); sub(/ used$/, " usado"); sub(/^Current session: /, ""); s=$0 }
-    /^Current week \(all models\):/ { sub(/ used.*resets /, " usado, zera "); sub(/ used$/, " usado"); sub(/^Current week \(all models\): /, ""); w=$0 }
-    END { if (s == "") { print r ": ilegível"; exit }
-          printf "%s: sessão %s | semana %s\n", r, s, w }'
-}
-
-claude_linha "pessoal" env -u CLAUDE_CONFIG_DIR claude -p "/usage" > "$tmp/4" &
-# Com MSYS_NO_PATHCONV o caminho POSIX chegaria cru ao claude no Windows.
-w() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
-if [ -d "$HOME/.claude-team" ]; then
-  claude_linha "team   " env CLAUDE_CONFIG_DIR="$(w "$HOME/.claude-team")" claude --settings "$(w "$HOME/.claude/settings.json")" --model haiku -p "/usage" > "$tmp/3" &
-fi
-if [ -d "$HOME/.claude-b" ]; then
-  # Só exibe e alerta: a claude-b trabalha pelo opencode, fora da escolha de escritor.
-  claude_linha "claude-b" env CLAUDE_CONFIG_DIR="$(w "$HOME/.claude-b")" claude --settings "$(w "$HOME/.claude/settings.json")" --model haiku -p "/usage" > "$tmp/5" &
-fi
-if command -v agy >/dev/null 2>&1; then
-  agy --dangerously-skip-permissions -p "/usage" 2>&1 | awk -F'\t' '
-    { grupo = ($1 ~ /Gemini/) ? "agy Gemini " : "agy Claude "; janela = ($2 ~ /Five/) ? "5h" : "semana"
-      printf "%s %s restam %s\n", grupo, janela, $3 }' | sort > "$tmp/agy" &
-fi
-if command -v codex >/dev/null 2>&1; then
-  bash "$(dirname "$0")/codex-cota.sh" > "$tmp/2" 2>&1 &
-fi
-wait
 
 SOLO=0; RESERVA=""; ALERTA=0
 while [ $# -gt 0 ]; do
@@ -49,93 +21,110 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$RESERVA" ] && [ $SOLO = 0 ] && { echo 'uso: limites.sh [--escritor [--reserva <tag>]] | --alerta' >&2; exit 2; }
-{ sed -n '1,4p' "$tmp/agy" 2>/dev/null; cat "$tmp/2" "$tmp/3" 2>/dev/null; cat "$tmp/4"; cat "$tmp/5" 2>/dev/null; } > "$tmp/todas"
 
-# Qualquer janela acima de 80% (Claude: "N% usado"; agy: "restam N%" -> usado = 100-N;
-# codex: "5h N%" e "semana N%"): sai com 3; com $1=1 imprime só as linhas acima do limite.
+source "$aqui/contas.sh" || exit 2
+# Registro inválido: a tabela ainda mede as contas padrão; a escolha cai no erro do pool, que lê o mesmo registro.
+contas_carrega 2>/dev/null || { CONTAS_CONF=/dev/null; contas_carrega; }
+
+instalada() { # O binário da conta (sem as atribuições VAR=) está no PATH e a pasta de config, se houver, existe.
+  local b cfg
+  for b in $(conta_campo "$1" comando); do [[ "$b" == *=* ]] || break; done
+  command -v "$b" >/dev/null 2>&1 || return 1
+  cfg=$(conta_campo "$1" config)
+  [ -z "$cfg" ] || [ -d "$cfg" ]
+}
+
+: > "$tmp/medidas"; n=0; precisa_orca=0
+for c in $CONTAS; do
+  med=$(conta_campo "$c" medidor)
+  [ "$med" = - ] && continue
+  instalada "$c" || continue
+  printf '%s %s %s\n' "$n" "$c" "$med" >> "$tmp/medidas"
+  case "$med" in orca:*) precisa_orca=1 ;; esac
+  n=$((n + 1))
+done
+if [ "$precisa_orca" = 1 ]; then
+  # Uma consulta ao Orca para todas as contas medidas por ele.
+  "${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" account list --json > "$tmp/orca.json" 2>/dev/null || : > "$tmp/orca.json"
+  export MEDIDOR_ORCA_JSON="$tmp/orca.json"
+fi
+while read -r i c med; do
+  case "$med" in
+    claude) CONTA_CONFIG=$(conta_campo "$c" config) bash "$aqui/medidores/claude.sh" "$c" > "$tmp/m.$i" 2>&1 & ;;
+    orca:*) bash "$aqui/medidores/orca.sh" "$c" "${med#orca:}" > "$tmp/m.$i" 2>&1 & ;;
+  esac
+done < "$tmp/medidas"
+wait
+
+# Saída do medidor: linhas humanas e a de máquina (#cand). Só awk: a seleção roda com o PATH mínimo.
+humanas() { awk '!/^#/' "$1" 2>/dev/null; }
+cand() { awk '/^#cand / { print; exit }' "$1" 2>/dev/null; }
+# Qualquer janela acima de 80%: sai com 3; com $1=1 imprime só as linhas das contas acima do limite.
 alerta() {
-  awk -v so_linhas="$1" '
-    function pct(   s) { s = substr($0, RSTART, RLENGTH); match(s, /[0-9]+%/); return substr(s, RSTART, RLENGTH - 1) + 0 }
-    { r = 0 }
-    /usado/    { s = $0; while (match(s, /[0-9]+% usado/)) { if (substr(s, RSTART, RLENGTH - 7) + 0 > 80) r = 1; s = substr(s, RSTART + RLENGTH) } }
-    /restam/   { if (match($0, /restam [0-9]+%/) && 100 - pct() > 80) r = 1 }
-    /^codex: 5h/ { if (match($0, /5h [0-9]+%/) && pct() > 80) r = 1
-                   if (match($0, /semana [0-9]+%/) && pct() > 80) r = 1 }
-    r { bad = 1; if (so_linhas == 1) print }
-    END { exit bad ? 3 : 0 }' "$tmp/todas"
+  local i c med cu lo bad=0
+  while read -r i c med; do
+    read -r _ _ cu lo _ <<< "$(cand "$tmp/m.$i")"
+    [ -n "$lo" ] || continue
+    if [ "$cu" -gt 80 ] || [ "$lo" -gt 80 ]; then
+      bad=1; [ "$1" = 1 ] && humanas "$tmp/m.$i"
+    fi
+  done < "$tmp/medidas"
+  [ "$bad" = 0 ] || return 3
 }
 [ "$ALERTA" = 1 ] && { alerta 1; exit $?; }
-[ $SOLO = 0 ] && cat "$tmp/todas"
+if [ $SOLO = 0 ]; then
+  while read -r i _; do humanas "$tmp/m.$i"; done < "$tmp/medidas"
+fi
 
-bash "$(dirname "$0")/vaga-agente.sh" livres > "$tmp/pool"
+bash "$aqui/vaga-agente.sh" livres > "$tmp/pool"
 rc=$?
 if [ "$rc" != 0 ]; then
   [ $SOLO = 1 ] && exit "$rc"
   echo "AVISO: erro do pool (status $rc); seleção de escritor indisponível" >&2
 else
 agora=$(date +%s)
-# Cada candidato vira "conta curta longa zraw"; zraw = zera da longa legível pelo date -d, ou -.
-# pct() isola o trecho casado e reextrai os dígitos colados ao %: índices de multibyte (ê, ã) variam entre awk
-# UTF-8 e byte-orientado, e o primeiro número de "5h 90%" seria o 5.
-awk '
-  function pct(   s) { s = substr($0, RSTART, RLENGTH); match(s, /[0-9]+%/); return substr(s, RSTART, RLENGTH - 1) + 0 }
-  /^team/ || /^pessoal/ { k = ($0 ~ /^team/) ? "team" : "pessoal"
-    if (match($0, /semana [0-9]+%/)) { ini = RSTART; tam = RLENGTH; l = pct()
-      s = substr($0, ini, tam + 120)
-      c = l; if (match($0, /sessão [0-9]+%/)) c = pct()
-      z = "-"; if (match(s, /zera [^|]+/)) { z = substr(s, RSTART + 5, RLENGTH - 5); gsub(/ \([^)]*\)/, "", z); gsub(/,/, "", z) }
-      print k, c, l, z } next }
-  /^codex: 5h/ { c = -1; l = -1; z = "-"
-    if (match($0, /5h [0-9]+%/)) c = pct()
-    if (match($0, /semana [0-9]+%/)) { ini = RSTART; tam = RLENGTH; l = pct()
-      s = substr($0, ini, tam + 30)
-      if (match(s, /\(zera [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\)/)) z = substr(s, RSTART + 6, RLENGTH - 7) }
-    if (c >= 0 && l >= 0) print "codex", c, l, z; next }
-' "$tmp/todas" | while IFS=' ' read -r conta curta longa z; do
-  ep=-
-  case "$z" in
-    [0-9]*) ep=$(date -d "$z" +%s 2>/dev/null) || ep=- ;;
-    *) # Sem ano: date assume o corrente; se cair no passado, é do ano seguinte.
-      ep=$(date -d "$z" +%s 2>/dev/null) || ep=-
-      if [ "$ep" != - ] && [ "$ep" -le "$agora" ]; then
-        ep=$(date -d "$z $(( $(date +%Y) + 1 ))" +%s 2>/dev/null) || ep=-
-      fi ;;
-  esac
-  [ -z "$ep" ] && ep=-
-  [ "$ep" != - ] && [ "$ep" -le "$agora" ] && ep=-
-  printf '%s %s %s %s\n' "$conta" "$curta" "$longa" "$ep"
-done > "$tmp/cand"
+# Candidatos na ordem do registro: "conta m curta longa reset dur" (medida) ou "conta s" (sem medidor).
+: > "$tmp/cand"
+for c in $CONTAS; do
+  conta_tem_papel "$c" escritor || continue
+  instalada "$c" || continue
+  if [ "$(conta_campo "$c" medidor)" = - ]; then echo "$c s" >> "$tmp/cand"; continue; fi
+  i=$(awk -v c="$c" '$2 == c { print $1 }' "$tmp/medidas")
+  linha=$(cand "$tmp/m.$i"); [ -n "$linha" ] || continue
+  read -r _ _ cu lo ep dur <<< "$linha"
+  echo "$c m $cu $lo $ep $dur" >> "$tmp/cand"
+done
 
-# Escritor: elegível (curta <= 80 e longa <= 80, ou <= 95 com reset da longa em < 24 h) e com vaga;
-# vence o maior ritmo = (100 - longa) / (100 * fração restante da longa); reset ilegível vira fração 1.
+# Medida elegível: curta <= 80 e longa <= 80, ou <= 95 com reset da longa em < 24 h. Ritmo = (100 - longa) / (100 * fração
+# restante da longa); fração = horas até o reset / duração da janela, em [0,01, 1]; reset ilegível vira fração 1.
 n=0; cand_q=0; cand_vaga=0
 { read -r _ cand_q cand_vaga
-  while read -r c r g h; do
-    eleg_c[$n]=$c; eleg_r[$n]=$r; eleg_g[$n]=$g; eleg_h[$n]=$h; n=$((n + 1))
+  while read -r c r g h t; do
+    eleg_c[$n]=$c; eleg_r[$n]=$r; eleg_g[$n]=$g; eleg_h[$n]=$h; eleg_t[$n]=$t; n=$((n + 1))
   done
-} < <(awk -v agora="$agora" '
+} < <(awk -v agora="$agora" -v escolha="$ESCOLHA" '
   FNR == NR { split($2, v, "/"); livre[$1] = (v[2] == 0 || v[1] > 0); next }
-  { cand[$1] = 1; curta[$1] = $2; longa[$1] = $3; reset[$1] = $4; q++ }
+  { q++; k = $1; if (!livre[k]) next
+    tem_vaga = 1
+    if ($2 == "s") { o++; oc[o] = k; ot[o] = "s"; next }
+    curta = $3; longa = $4; h = -1; if ($5 != "-") h = ($5 - agora) / 3600
+    if (curta > 80) next
+    if (!(longa <= 80 || (longa <= 95 && h >= 0 && h < 24))) next
+    frac = 1; if (h >= 0) { frac = h / $6; if (frac < 0.01) frac = 0.01; else if (frac > 1) frac = 1 }
+    o++; oc[o] = k; ot[o] = "m"; orr[o] = (100 - longa) / (100 * frac); og[o] = 100 - longa; oh[o] = h
+  }
   END {
-    split("team pessoal codex", ordem, " ")
-    for (i = 1; i <= 3; i++) { k = ordem[i]
-      if (!(k in cand) || !livre[k]) continue
-      tem_vaga = 1
-      h = -1; if (reset[k] != "-") h = (reset[k] - agora) / 3600
-      if (curta[k] > 80) continue
-      if (!(longa[k] <= 80 || (longa[k] <= 95 && h >= 0 && h < 24))) continue
-      frac = 1; if (h >= 0) { frac = h / 168; if (frac < 0.01) frac = 0.01; else if (frac > 1) frac = 1 }
-      r = (100 - longa[k]) / (100 * frac)
-      m++; rr[m] = r; ll[m] = k; gg[m] = 100 - longa[k]; hh[m] = h
-    }
-    for (i = 2; i <= m; i++) for (j = i; j > 1 && rr[j - 1] < rr[j]; j--) {
-      t = rr[j - 1]; rr[j - 1] = rr[j]; rr[j] = t
-      t = ll[j - 1]; ll[j - 1] = ll[j]; ll[j] = t
-      t = gg[j - 1]; gg[j - 1] = gg[j]; gg[j] = t
-      t = hh[j - 1]; hh[j - 1] = hh[j]; hh[j] = t
-    }
     printf "info %d %d\n", q + 0, tem_vaga + 0
-    for (i = 1; i <= m; i++) printf "%s %.1f %d %.1f\n", ll[i], rr[i], gg[i], hh[i]
+    if (escolha == "ordem") { for (i = 1; i <= o; i++) emite(i); exit }
+    # ritmo: as medidas por ritmo (estável na ordem do registro), depois as sem medidor na ordem do registro.
+    for (i = 1; i <= o; i++) if (ot[i] == "m") { m++; idx[m] = i }
+    for (i = 2; i <= m; i++) for (j = i; j > 1 && orr[idx[j - 1]] < orr[idx[j]]; j--) { t = idx[j - 1]; idx[j - 1] = idx[j]; idx[j] = t }
+    for (i = 1; i <= m; i++) emite(idx[i])
+    for (i = 1; i <= o; i++) if (ot[i] == "s") emite(i)
+  }
+  function emite(i) {
+    if (ot[i] == "s") printf "%s 0 0 -1 s\n", oc[i]
+    else printf "%s %.1f %d %.1f m\n", oc[i], orr[i], og[i], oh[i]
   }' "$tmp/pool" "$tmp/cand")
 rc=0
 if [ "$n" -gt 0 ]; then
@@ -143,7 +132,7 @@ if [ "$n" -gt 0 ]; then
   if [ -n "$RESERVA" ]; then
     i=-1
     for ((j = 0; j < n; j++)); do
-      if bash "$(dirname "$0")/vaga-agente.sh" pega "${eleg_c[$j]}" "$RESERVA" 2>/dev/null; then
+      if bash "$aqui/vaga-agente.sh" pega "${eleg_c[$j]}" "$RESERVA" 2>/dev/null; then
         # Conta ilimitada não cria vaga: sem sufixo, não há o que trocar depois do start.
         i=$j; grep -qxF "$RESERVA" "$HOME/.cache/agentes/${eleg_c[$j]}".lock*/dispatch 2>/dev/null && sufixo=" reserva $RESERVA"
         break
@@ -151,7 +140,9 @@ if [ "$n" -gt 0 ]; then
     done
     if [ "$i" -lt 0 ]; then echo "escritor: nenhum (pool cheio)"; exit 75; fi
   fi
-  if [ "$(awk -v h="${eleg_h[$i]}" 'BEGIN { print (h >= 0) ? 1 : 0 }')" = 1 ]; then
+  if [ "${eleg_t[$i]}" = s ]; then
+    printf 'escritor: %s (sem medidor)%s\n' "${eleg_c[$i]}" "$sufixo"
+  elif [ "$(awk -v h="${eleg_h[$i]}" 'BEGIN { print (h >= 0) ? 1 : 0 }')" = 1 ]; then
     zera=$(awk -v h="${eleg_h[$i]}" 'BEGIN { printf "%.0f", h }')
     printf 'escritor: %s (ritmo %s · %d%% livre, zera em %sh)%s\n' "${eleg_c[$i]}" "${eleg_r[$i]}" "${eleg_g[$i]}" "$zera" "$sufixo"
   else

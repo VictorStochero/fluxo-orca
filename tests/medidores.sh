@@ -58,6 +58,7 @@ igual 'orca: linha do codex como a de hoje' "codex: 5h 95% (zera 23:00) · seman
 read -r _ conta c l ep dur <<< "$(printf '%s\n' "$saida" | grep '^#cand')"
 igual 'orca: #cand codex' 'codex 95 20 168' "$conta $c $l $dur"
 igual 'orca: reset da semana' "$((semana / 1000))" "$ep"
+igual 'orca: caminho lido sem conversão do MSYS' '#cand codex 95 20' "$(MSYS_NO_PATHCONV=1 bash "$med/orca.sh" codex codex | grep '^#cand' | cut -d' ' -f1-4)"
 igual 'orca: fornecedor indisponível' 'kimi: ilegível (Not signed in to Kimi Code)' "$(bash "$med/orca.sh" kimi kimi)"
 saida=$(bash "$med/orca.sh" mm minimax)
 comeca 'orca: longa mensal' 'mm: 5h 5% (zera 23:00) · mês 50% (zera ' "$(printf '%s\n' "$saida" | head -1)"

@@ -11,6 +11,8 @@ if [ -z "$json" ]; then
     json=$(mktemp); trap 'rm -f "$json"' EXIT
     "${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" account list --json > "$json" 2>/dev/null || : > "$json"
 fi
+# Com MSYS_NO_PATHCONV (o limites.sh exporta) o python do Windows não abriria o caminho POSIX.
+command -v cygpath >/dev/null 2>&1 && json=$(cygpath -w "$json")
 MED_ARQ="$json" MED_CONTA="$conta" MED_FORNECEDOR="$fornecedor" "$py" -I - <<'EOF'
 import json, os, sys, time
 sys.stdout.reconfigure(encoding="utf-8")
