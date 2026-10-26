@@ -63,6 +63,7 @@ orca skills install                     # orca-cli, orchestration, computer-use
 claude plugin marketplace add VictorStochero/claude-plugins
 claude plugin install fluxo-orca@stochero
 claude plugin install laravel-worktree@stochero          # só se houver projeto Laravel
+claude plugin install auditoria-pre-subida@stochero      # auditoria antes de PR/merge; bloqueia só nos repos com .auditoria-pre-subida
 
 claude plugin marketplace add DietrichGebert/ponytail
 claude plugin install ponytail@ponytail
@@ -153,7 +154,7 @@ Para cada projeto escolhido:
 
 ## Fase 7 — Verificação
 Reabrir o Claude Code e conferir, relatando cada item (ok / pendente + motivo):
-1. `claude plugin list`: `fluxo-orca`, `ponytail`, `code-review`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp` (+ `laravel-worktree` se houver Laravel) habilitados, **nenhum `superpowers`**; `/skills` mostra `delegacao`, `fila-testes`, `worktree-orca`, `stack-*`, `orca-cli`, `orchestration`.
+1. `claude plugin list`: `fluxo-orca`, `auditoria-pre-subida`, `ponytail`, `code-review`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp` (+ `laravel-worktree` se houver Laravel) habilitados, **nenhum `superpowers`**; `/skills` mostra `delegacao`, `fila-testes`, `worktree-orca`, `stack-*`, `orca-cli`, `orchestration`, `auditoria-pre-subida:auditar`.
 2. `~/.cache/gs-teste.sh`, `~/.cache/e-teste.sh`, `~/.cache/wt-setup.sh`, `~/.cache/wt-archive.sh`, `~/.cache/wt-lib.sh`, `~/.cache/limites.sh`, `~/.cache/orca-espera.sh`, `~/.cache/fim-worker.sh` e `~/.claude/agents/somente-leitura.json` existem (hook de SessionStart).
 3. Num projeto, o comando de teste direto (`php artisan test`, `pytest`, `pnpm test`…) é **bloqueado** pelo hook com a mensagem da fila; `bash ~/.cache/gs-teste.sh <listagem>` passa.
 4. Um `sed -i` qualquer é bloqueado pelo hook `bloqueia-bulk`.

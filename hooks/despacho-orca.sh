@@ -12,8 +12,9 @@ if [ "$tool" = "Agent" ]; then
     tipo=$(printf '%s' "$in" | grep -oE '"subagent_type"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
     case "$tipo" in
         Explore|claude-code-guide|Plan) exit 0 ;;
+        auditoria-pre-subida:*) motivo="Auditor e verificador da auditoria-pre-subida vão como worker do Orca (skill delegacao, passo 5): orca-libera.sh --cria ... --command \"claude --agent $tipo --settings ~/.claude/agents/somente-leitura.json\" e worker-start --terminal <handle>." ;;
     esac
-    if printf '%s' "$in" | grep -qiE 'commit|implement|edit[ae]|refator|revis[aã]o|revise|review|git diff|merge|escritor|worktree da tarefa'; then
+    if [ -z "$motivo" ] && printf '%s' "$in" | grep -qiE 'commit|implement|edit[ae]|refator|revis[aã]o|revise|review|git diff|merge|escritor|worktree da tarefa'; then
         motivo="Trabalho de escrita/revisão vai como worker do Orca: skill orchestration -> orca orchestration worker-start --spec ... --agent claude --model <id> --effort <nível>. Agent tool só para consulta read-only (Explore, claude-code-guide, Plan)."
     fi
 elif printf '%s' "$in" | grep -qE '(^|["'"'"';&|( ])(claude|claude-team|agy)(\.exe)?[[:space:]][^;&|]*(-p|--print|--prompt)([[:space:]]|")' \
