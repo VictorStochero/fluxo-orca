@@ -1,21 +1,12 @@
 #!/usr/bin/env bash
 # Pool da máquina: pega <conta> <dispatch>, solta <dispatch>, livres, troca <provisório> <dispatch>. Zero = ilimitado.
 # Dono provisório (prefixo res-) não é consultado no Orca: vaga morta só após POOL_RESERVA_TTL s (padrão 600).
-contas=(team pessoal codex agy)
-v_team=1 v_pessoal=0 v_codex=1 v_agy=1
+# Contas e vagas vêm do registro (contas.sh: catálogo + ~/.claude/agentes.conf).
 dir="$HOME/.cache/agentes"
 erro() { echo "vaga-agente: $*" >&2; exit 2; }
 valida_dispatch() { [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]] || erro 'dispatch inválido'; }
-if [ -f "$HOME/.claude/agentes.conf" ]; then
-    while IFS= read -r linha || [ -n "$linha" ]; do
-        linha=${linha%%#*}; linha=${linha//$'\r'/}
-        [[ "$linha" =~ ^[[:space:]]*$ ]] && continue
-        [[ "$linha" =~ ^[[:space:]]*(team|pessoal|codex|agy)=([0-9]+)[[:space:]]*$ ]] || erro "configuração inválida: $linha"
-        chave=v_${BASH_REMATCH[1]}
-        printf -v "$chave" '%s' "$((10#${BASH_REMATCH[2]}))"
-        [ "${!chave}" -ge 0 ] || erro 'limite inválido'
-    done < "$HOME/.claude/agentes.conf"
-fi
+source "$(dirname "${BASH_SOURCE[0]}")/contas.sh" || exit 2
+contas_carrega || exit 2
 
 morta() { # Só evidência explícita do Orca libera uma vaga; falhas de transporte não liberam.
     local resposta
@@ -73,9 +64,9 @@ case "${1:-}" in
     pega)
         [ "$#" = 3 ] || erro 'uso: pega <conta> <dispatch>'
         conta=$2; dispatch=$3
-        [[ " ${contas[*]} " = *" $conta "* ]] || erro 'conta desconhecida'
+        conta_no_pool "$conta" || erro 'conta desconhecida'
         valida_dispatch "$dispatch"
-        chave=v_$conta; total=${!chave}
+        total=$(conta_campo "$conta" vagas)
         [ "$total" = 0 ] && exit 0
         mkdir -p "$dir" || exit 2
         ocupadas=0
@@ -101,40 +92,38 @@ case "${1:-}" in
     solta)
         [ "$#" = 2 ] || erro 'uso: solta <dispatch>'
         valida_dispatch "$2"
-        for conta in "${contas[@]}"; do
-            for v in "$dir/$conta".lock[0-9]*; do
-                [ -d "$v" ] || continue
-                [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
-                [ "$(cat "$v/dispatch" 2>/dev/null)" = "$2" ] && remove_vaga "$v" "$2"
-            done
+        # Todas as travas, não só as das contas atuais: a conta pode ter saído do registro com a vaga ocupada.
+        for v in "$dir"/*.lock[0-9]*; do
+            [ -d "$v" ] || continue
+            [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
+            [ "$(cat "$v/dispatch" 2>/dev/null)" = "$2" ] && remove_vaga "$v" "$2"
         done
         ;;
     troca)
         [ "$#" = 3 ] || erro 'uso: troca <provisório> <dispatch>'
         prov=$2; novo=$3
         valida_dispatch "$prov"; valida_dispatch "$novo"
-        for conta in "${contas[@]}"; do
-            for v in "$dir/$conta".lock[0-9]*; do
-                [ -d "$v" ] || continue
-                [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
-                dono=$(cat "$v/dispatch" 2>/dev/null)
-                [ "$dono" = "$novo" ] && exit 0
-                [ "$dono" = "$prov" ] || continue
-                tmp_d="$v/dispatch.troca.$$"
-                if printf '%s\n' "$novo" > "$tmp_d" && mv "$tmp_d" "$v/dispatch"; then
-                    date -u +%FT%TZ > "$v/desde"
-                    exit 0
-                fi
-                rm -f "$tmp_d"
-                exit 2
-            done
+        for v in "$dir"/*.lock[0-9]*; do
+            [ -d "$v" ] || continue
+            [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
+            dono=$(cat "$v/dispatch" 2>/dev/null)
+            [ "$dono" = "$novo" ] && exit 0
+            [ "$dono" = "$prov" ] || continue
+            tmp_d="$v/dispatch.troca.$$"
+            if printf '%s\n' "$novo" > "$tmp_d" && mv "$tmp_d" "$v/dispatch"; then
+                date -u +%FT%TZ > "$v/desde"
+                exit 0
+            fi
+            rm -f "$tmp_d"
+            exit 2
         done
         erro "troca: vaga do dono $prov não encontrada"
         ;;
     livres)
         [ "$#" = 1 ] || erro 'uso: livres'
-        for conta in "${contas[@]}"; do
-            chave=v_$conta; total=${!chave}; ocupadas=0
+        for conta in $CONTAS; do
+            conta_no_pool "$conta" || continue
+            total=$(conta_campo "$conta" vagas); ocupadas=0
             for v in "$dir/$conta".lock[0-9]*; do
                 [ -d "$v" ] || continue
                 [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue

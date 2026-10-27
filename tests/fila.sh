@@ -137,9 +137,10 @@ case "$*" in *haiku*) echo "sem login";; *) echo "Current session: 50% used"; ec
 E
 printf '#!/bin/bash\nexit 1\n' > "$tmp/cota/bin/agy"; cp "$tmp/cota/bin/agy" "$tmp/cota/bin/codex"
 chmod +x "$tmp/cota/bin/"*
-# Cópia isolada: sem codex-cota.sh ao lado, o Codex real não entra na conta.
-cp "$raiz/skills/limites-cota/limites.sh" "$raiz/skills/limites-cota/vaga-agente.sh" "$tmp/cota/"
-esc=$(PATH="$tmp/cota/bin:$PATH" bash "$tmp/cota/limites.sh" --escritor 2>/dev/null | tail -1)
+# Cópia isolada; Orca simulado fora do ar: o Codex real não entra na conta.
+cp -r "$raiz/skills/limites-cota/limites.sh" "$raiz/skills/limites-cota/vaga-agente.sh" "$raiz/skills/limites-cota/contas.sh" \
+    "$raiz/skills/limites-cota/agentes-catalogo.conf" "$raiz/skills/limites-cota/medidores" "$tmp/cota/"
+esc=$(PATH="$tmp/cota/bin:$PATH" ORCA_CMD="$tmp/cota/bin/agy" bash "$tmp/cota/limites.sh" --escritor 2>/dev/null | tail -1)
 if [ "$esc" = "escritor: pessoal (ritmo 0.4 · 40% livre)" ]; then ok "escritor: conta ilegível não é candidata"; else ruim "escritor: conta ilegível escolhida ($esc)"; fi
 
 # Pid reciclado: vaga morta cujo filho é um processo alheio vivo (sem identidade conferida) não pode ser morto.

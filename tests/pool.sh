@@ -11,6 +11,18 @@ ok() { echo "ok   $1"; }
 ruim() { echo "FALHA $1"; falhas=$((falhas + 1)); }
 cat > "$tmp/bin/orca" <<'EOF'
 #!/usr/bin/env bash
+if [ "$1 $2 $3" = 'account list --json' ]; then
+    # Cota do Codex como o Orca devolve: 5h zera às 23:00; semana zera em POOL_CODEX_RESET_H horas (null com POOL_CODEX_SEM_RESET).
+    c=${POOL_CODEX_5H:-20}; l=${POOL_CODEX_SEMANA:-20}; h=${POOL_CODEX_RESET_H:-168}
+    z5=$(( $(date -d '23:00' +%s) * 1000 )); zs=$(( ($(date +%s) + h * 3600) * 1000 ))
+    [ -n "${POOL_CODEX_SEM_RESET:-}" ] && zs=null
+    longa=weekly; min=10080; [ -n "${POOL_CODEX_MENSAL:-}" ] && { longa=monthly; min=43200; }
+    agy=""
+    # Antigravity com um grupo acima de 80% e outro abaixo.
+    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":10,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":85,"windowMinutes":10080,"resetsAt":%s}]}' "$zs" "$zs")
+    printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}%s}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs" "$agy"
+    exit 0
+fi
 [ "$1 $2 $3 $5" = 'orchestration worker-show --dispatch --json' ] || exit 2
 estado=$(cat "$POOL_ESTADOS/$4" 2>/dev/null || echo pending)
 case "$estado" in
@@ -104,10 +116,36 @@ confere_rc 2 'config inválida rejeitada' pool livres
 rm "$HOME/.claude/agentes.conf"
 pool solta ctx_c2; pool solta ctx_p1; pool solta ctx_novo
 
+# claude-b padrão é só medida: fica fora do pool, como antes do registro.
+mkdir -p "$HOME/.claude-b"
+confere_rc 0 'claude-b só medida: livres' pool livres
+grep -q '^claude-b ' "$tmp/saida" && ruim 'claude-b só medida apareceu no pool' || ok 'claude-b só medida fora do livres'
+confere_rc 2 'claude-b só medida: pega rejeitada' pool pega claude-b ctx_cb
+rmdir "$HOME/.claude-b"
+
+# Registro do dev: contas pessoais e agentes fora da lista antiga.
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+dev2    agente=claude config=~/.claude-dev2 vagas=1
+minimax agente=opencode vagas=1 medidor=orca:minimax papeis=escritor
+EOF
+confere_rc 0 'registro: livres das contas do dev' pool livres
+grep -qx 'dev2 1/1' "$tmp/saida" && grep -qx 'minimax 1/1' "$tmp/saida" && ! grep -q '^team ' "$tmp/saida" \
+    && ok 'livres lista só as contas do registro' || { ruim 'livres do registro'; cat "$tmp/saida"; }
+confere_rc 0 'registro: pega conta pessoal nova' pool pega dev2 ctx_d1
+confere_rc 75 'registro: conta pessoal nova cheia' pool pega dev2 ctx_d2
+confere_rc 0 'registro: pega agente sem medidor' pool pega minimax ctx_m1
+confere_rc 2 'registro: conta fora do registro rejeitada' pool pega team ctx_t1
+printf 'minimax agente=opencode vagas=1 papeis=escritor\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'registro: solta vaga de conta que saiu do registro' pool solta ctx_d1
+compgen -G "$HOME/.cache/agentes/dev2.lock*" >/dev/null && ruim 'vaga de conta removida ficou presa' || ok 'vaga de conta removida foi solta'
+pool solta ctx_m1
+rm "$HOME/.claude/agentes.conf"
+
 # Executa o seletor real com provedores simulados, sem rede ou credenciais reais.
 # Ritmo = (100 − longa) / (100 × fração restante da janela longa); longa: 168 h (semana).
 mkdir -p "$tmp/seletor" "$HOME/.claude-team"
-cp "$raiz/skills/limites-cota/limites.sh" "$raiz/skills/limites-cota/vaga-agente.sh" "$tmp/seletor/" 2>/dev/null
+cp -r "$raiz/skills/limites-cota/limites.sh" "$raiz/skills/limites-cota/vaga-agente.sh" "$raiz/skills/limites-cota/contas.sh" \
+    "$raiz/skills/limites-cota/agentes-catalogo.conf" "$raiz/skills/limites-cota/medidores" "$tmp/seletor/"
 cat > "$tmp/bin/claude" <<'EOF'
 #!/usr/bin/env bash
 [ -n "${ORCA_PANE_KEY:-}${ORCA_AGENT_HOOK_PORT:-}" ] && touch "$POOL_ESTADOS/orca-vazou"
@@ -123,12 +161,7 @@ cat > "$tmp/bin/codex" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-cat > "$tmp/seletor/codex-cota.sh" <<'EOF'
-c=${POOL_CODEX_5H:-20}; l=${POOL_CODEX_SEMANA:-20}; h=${POOL_CODEX_RESET_H:-168}
-[ -n "${POOL_CODEX_SEM_RESET:-}" ] && { printf 'codex: 5h %s%% (zera 23:00) · semana %s%%\n' "$c" "$l"; exit 0; }
-printf 'codex: 5h %s%% (zera 23:00) · semana %s%% (zera %s)\n' "$c" "$l" "$(date -d "+${h} hours" '+%Y-%m-%d %H:%M')"
-EOF
-chmod +x "$tmp/bin/claude" "$tmp/bin/codex" "$tmp/seletor/codex-cota.sh"
+chmod +x "$tmp/bin/claude" "$tmp/bin/codex"
 cp "$tmp/bin/codex" "$tmp/bin/agy"
 export PATH="$tmp/bin:$PATH"
 seletor() { bash "$tmp/seletor/limites.sh" --escritor; }
@@ -168,12 +201,20 @@ POOL_CODEX_5H=95 POOL_CODEX_SEMANA=4 POOL_TEAM_SEMANA_USO=20 POOL_TEAM_RESET_H=1
 grep -qx 'escritor: team (ritmo 0.8 · 80% livre, zera em 168h)' "$tmp/saida" \
     && ok 'Codex com 5h acima de 80% fica fora' || ruim '5h do Codex lida errado na seleção'
 
+# Janela longa mensal: a fração usa os 720 h do windowMinutes, não a semana.
+POOL_CODEX_MENSAL=1 POOL_CODEX_RESET_H=360 POOL_TEAM_SEMANA_USO=60 POOL_TEAM_RESET_H=168 confere_rc 0 'seleção com longa mensal' seletor
+grep -qx 'escritor: codex (ritmo 1.6 · 80% livre, zera em 360h)' "$tmp/saida" \
+    && ok 'longa mensal pela duração do Orca' || { ruim 'longa mensal'; cat "$tmp/saida"; }
+
 POOL_CODEX_5H=95 confere_rc 3 '--alerta com 5h do Codex estourada' bash "$tmp/seletor/limites.sh" --alerta
 grep -q '^codex: 5h 95%' "$tmp/saida" && ok '5h do Codex no alerta' || ruim '5h do Codex lida errado'
 [ "$(wc -l < "$tmp/saida")" = 1 ] && grep -q '^codex: 5h 95% (zera 23:00) · semana 20% ' "$tmp/saida" \
     && ok '--alerta imprime só a linha acima de 80%' || { ruim '--alerta'; cat "$tmp/saida"; }
 POOL_SESSAO_USO=10 POOL_SEMANA_USO=90 confere_rc 3 '--alerta com semana do Claude acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
 grep -q '^pessoal: ' "$tmp/saida" && ok 'semana do Claude no alerta (segundo % usado da linha)' || ruim 'semana do Claude ignorada'
+POOL_AGY_ALTO=1 confere_rc 3 '--alerta com um grupo do agy acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
+[ "$(wc -l < "$tmp/saida")" = 1 ] && grep -q '^agy Claude and GPT models: semana 85%' "$tmp/saida" \
+    && ok '--alerta imprime só o grupo acima de 80%' || { ruim '--alerta com grupos do agy'; cat "$tmp/saida"; }
 confere_rc 0 '--alerta sem nada acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
 [ -s "$tmp/saida" ] && ruim '--alerta imprimiu sem motivo' || ok '--alerta silencioso abaixo de 80%'
 
@@ -206,6 +247,53 @@ confere_rc 3 'tabela preserva alerta acima de 80% com erro do pool' bash "$tmp/s
 grep -q 'pessoal: sessão 90% usado' "$tmp/saida" && ok 'tabela mostra cota acima de 80%' || ruim 'tabela perdeu cota alta'
 unset POOL_SESSAO_USO POOL_SEMANA_USO
 rm "$HOME/.claude/agentes.conf"
+
+# Registro com papéis e conta sem medidor (aider1: só vagas). team e codex livres durante o bloco.
+pool solta ctx_s1; pool solta ctx_s2
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/aider"; chmod +x "$tmp/bin/aider"
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+pessoal agente=claude vagas=0 papeis=orquestra
+team    agente=claude config=~/.claude-team vagas=1
+aider1  agente=aider vagas=1 papeis=escritor
+aider2  agente=aider vagas=1
+codex   agente=codex vagas=1
+EOF
+confere_rc 0 'registro: medida vence a sem medidor no ritmo' seletor
+grep -qx 'escritor: team (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" && ok 'ritmo escolhe a medida' || { ruim 'ritmo com registro'; cat "$tmp/saida"; }
+POOL_SESSAO_USO=0 POOL_SEMANA_USO=0 POOL_TEAM_SEMANA_USO=90 POOL_CODEX_SEMANA=90 confere_rc 0 'registro: medidas no teto' seletor
+grep -qx 'escritor: aider1 (sem medidor)' "$tmp/saida" \
+    && ok 'orquestra fica fora e a sem medidor entra depois das medidas' || { ruim 'papel orquestra ou sem medidor'; cat "$tmp/saida"; }
+POOL_SESSAO_USO=0 POOL_SEMANA_USO=0 POOL_TEAM_SEMANA_USO=90 POOL_CODEX_SEMANA=90 \
+    confere_rc 0 'registro: reserva na sem medidor' bash "$tmp/seletor/limites.sh" --escritor --reserva r9
+grep -qx 'escritor: aider1 (sem medidor) reserva res-r9' "$tmp/saida" && [ "$(cat "$HOME/.cache/agentes/aider1.lock1/dispatch" 2>/dev/null)" = res-r9 ] \
+    && ok 'reserva da sem medidor gravada' || { ruim 'reserva da sem medidor'; cat "$tmp/saida"; }
+pool solta res-r9
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+escolha=ordem
+aider2  agente=aider vagas=1
+aider1  agente=aider vagas=1 papeis=escritor
+team    agente=claude config=~/.claude-team vagas=1
+EOF
+confere_rc 0 'registro: escolha=ordem' seletor
+grep -qx 'escritor: aider1 (sem medidor)' "$tmp/saida" \
+    && ok 'ordem do registro vence o ritmo, e agente sem trava e sem papel escrito (aider2) fica fora' || { ruim 'escolha=ordem'; cat "$tmp/saida"; }
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+cb agente=claude comando=claude-b-fora-do-path config=~/.claude-team vagas=1
+EOF
+confere_rc 0 'registro: conta Claude com atalho fora do PATH' seletor
+grep -qx 'escritor: cb (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" \
+    && ok 'conta Claude medida pelo claude, não pelo atalho' || { ruim 'conta Claude com atalho sumiu'; cat "$tmp/saida"; }
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+escolha=ordem
+aider1  agente=aider vagas=1 papeis=escritor
+team    agente=claude config=~/.claude-team vagas=1
+EOF
+pool pega aider1 ctx_o1
+confere_rc 0 'registro: ordem pula a sem vaga' seletor
+grep -qx 'escritor: team (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" && ok 'ordem segue para a próxima com vaga' || { ruim 'ordem sem vaga'; cat "$tmp/saida"; }
+pool solta ctx_o1
+rm "$HOME/.claude/agentes.conf"
+pool pega team ctx_s1; pool pega codex ctx_s2
 
 # Reserva: a vaga é pega antes do worker-start; disputa na última vaga cai para o próximo candidato elegível.
 seletor_reserva() { bash "$tmp/seletor/limites.sh" --escritor --reserva "$1"; }
@@ -275,5 +363,7 @@ grep -qx 'escritor: pessoal (ritmo 0.7 · 70% livre, zera em 168h)' "$tmp/saida"
 confere_rc 0 'hook instala scripts em HOME temporário' env CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh"
 cmp -s "$raiz/skills/limites-cota/vaga-agente.sh" "$HOME/.cache/vaga-agente.sh" \
     && ok 'script do pool instalado' || ruim 'instalação do pool'
+cmp -s "$raiz/skills/limites-cota/medidores/orca.sh" "$HOME/.cache/medidores/orca.sh" && [ -f "$HOME/.cache/contas.sh" ] \
+    && [ -f "$HOME/.cache/agentes-catalogo.conf" ] && ok 'registro e medidores instalados' || ruim 'instalação do registro e dos medidores'
 
 [ "$falhas" = 0 ] && echo 'TUDO OK' || { echo "$falhas falha(s)"; exit 1; }
