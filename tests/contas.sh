@@ -67,6 +67,19 @@ igual 'registro: pessoal só orquestra' nao "$(carrega 'conta_tem_papel pessoal 
 igual 'registro: team revisa' sim "$(carrega 'conta_tem_papel team revisor && echo sim')"
 igual 'registro: id do Orca do opencode' opencode "$(carrega 'conta_campo minimax id')"
 
+# Agente sem a trava de comando remoto (fora de claude, codex e antigravity) só trabalha com papel escrito.
+printf 'k agente=kimi vagas=1\nk2 agente=kimi vagas=1 papeis=escritor\nc agente=codex\n' > "$HOME/.claude/agentes.conf"
+igual 'trava: kimi sem papeis não escreve' nao "$(carrega 'conta_tem_papel k escritor || echo nao')"
+igual 'trava: kimi sem papeis fora do pool' nao "$(carrega 'conta_no_pool k || echo nao')"
+igual 'trava: kimi com papel escrito escreve' sim "$(carrega 'conta_tem_papel k2 escritor && echo sim')"
+igual 'trava: codex mantém o padrão' sim "$(carrega 'conta_tem_papel c escritor && echo sim')"
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+pessoal agente=claude papeis=orquestra
+team    agente=claude config=~/.claude-team vagas=1 papeis=escritor,revisor
+claude-b agente=claude comando=claude-b config=~/.claude-b vagas=1 papeis=escritor,revisor
+codex   agente=codex vagas=1 papeis=escritor modelo=gpt-6.1-sol
+EOF
+
 # Comando de lançamento para orca-libera.sh --cria --command.
 lanca() { bash "$lib" lanca "$@" 2>"$tmp/erro"; }
 igual 'lança: team escritor' "CLAUDE_CONFIG_DIR=$HOME/.claude-team claude --dangerously-skip-permissions --agent fluxo-orca:escritor --model claude-sonnet-5-5" "$(lanca team escritor claude-sonnet-5-5)"

@@ -15,10 +15,11 @@ team     agente=claude config=~/.claude-team vagas=1 papeis=escritor,revisor
 claude-b agente=claude comando=claude-b config=~/.claude-b vagas=1 papeis=escritor,revisor
 codex    agente=codex vagas=1 modelo=gpt-6.1-sol
 kimi     agente=kimi vagas=1
-minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minimax
+minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minimax papeis=escritor
+# kimi sem papeis: só medido; minimax escreve porque o dev instalou as regras e a trava no opencode (GUIA 4b).
 ```
 
-- Chaves: `agente` (chave do catálogo, obrigatória), `config` (pasta `CLAUDE_CONFIG_DIR` de uma conta Claude), `comando`, `args`, `modelo`, `vagas` (0 = ilimitado), `papeis` (`escritor revisor verificador mecanico segunda-opiniao orquestra`; padrão `escritor,revisor,verificador,mecanico`; `orquestra` sozinho = medida, nunca escolhida), `medidor` (`claude`, `orca:<fornecedor>` ou `-`).
+- Chaves: `agente` (chave do catálogo, obrigatória), `config` (pasta `CLAUDE_CONFIG_DIR` de uma conta Claude), `comando`, `args`, `modelo`, `vagas` (0 = ilimitado), `papeis` (`escritor revisor verificador mecanico segunda-opiniao orquestra`; padrão `escritor,revisor,verificador,mecanico` só para `claude`, `codex` e `antigravity`, que têm a trava de comando remoto; os demais agentes nascem sem papel — só medição e fora do pool — e só trabalham com `papeis=` escrito, depois de instaladas neles as regras e a trava da fase 4b do GUIA; vazio ou só `orquestra` = medida, nunca escolhida), `medidor` (`claude`, `orca:<fornecedor>` ou `-`).
 - Contas Claude pessoais: quantas o dev tiver, cada uma com a sua pasta de config (mesmo layout da `~/.claude-team`, fase 4b do GUIA).
 - Sem linha de conta no arquivo, valem as padrão: `team` (`~/.claude-team`, 1 vaga), `pessoal` (ilimitada), `codex` (1), `agy` (1, só segunda opinião) e `claude-b` (`~/.claude-b`, só medida, se a pasta existir). Linhas `conta=N` mudam só as vagas.
 - `bash ~/.cache/contas.sh lista` mostra o registro efetivo; `contas.sh lanca <conta> <papel> [modelo]` imprime o comando para `orca-libera.sh --cria --command` (Claude ganha `--agent fluxo-orca:<papel>`, ou `--agent <plugin:agente>` quando o papel já vem assim, ex.: `auditoria-pre-subida:auditor`).
@@ -26,7 +27,7 @@ minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minima
 - Kimi e MiniMax: no catálogo e medidos pelo Orca, **não testados com conta real**. MiniMax não tem agente próprio no Orca: conta pelo `opencode` ou pelo `claude` com `ANTHROPIC_BASE_URL`.
 
 ## Medição
-`bash ~/.cache/limites.sh` (instalado e atualizado pelo hook de SessionStart do plugin) mede em paralelo cada conta do registro, uma linha por conta, e **sai com 3 se algum limite passar de 80%**. Conta cujo comando não está no PATH, ou cuja pasta de config não existe, é pulada:
+`bash ~/.cache/limites.sh` (instalado e atualizado pelo hook de SessionStart do plugin) mede em paralelo cada conta do registro, uma linha por conta, e **sai com 3 se algum limite passar de 80%**. Conta cujo comando não está no PATH, ou cuja pasta de config não existe, é pulada; conta Claude é conferida pelo `claude` e pela pasta de config, não pelo `comando` dela:
 
 | Medidor | Origem | Contas |
 |---|---|---|

@@ -60,6 +60,9 @@ wait
 
 # Saída do medidor: linhas humanas e a de máquina (#cand). Só awk: a seleção roda com o PATH mínimo.
 humanas() { awk '!/^#/' "$1" 2>/dev/null; }
+acima() { # Só as linhas com alguma porcentagem acima de 80 (conta com vários grupos, como o agy, alerta só pelo grupo que passou).
+  awk '!/^#/ { s = $0; while (match(s, /[0-9]+%/)) { if (substr(s, RSTART, RLENGTH - 1) + 0 > 80) { print; next }; s = substr(s, RSTART + RLENGTH) } }' "$1" 2>/dev/null
+}
 cand() { awk '/^#cand / { print; exit }' "$1" 2>/dev/null; }
 # Qualquer janela acima de 80%: sai com 3; com $1=1 imprime só as linhas das contas acima do limite.
 alerta() {
@@ -68,7 +71,7 @@ alerta() {
     read -r _ _ cu lo _ <<< "$(cand "$tmp/m.$i")"
     [ -n "$lo" ] || continue
     if [ "$cu" -gt 80 ] || [ "$lo" -gt 80 ]; then
-      bad=1; [ "$1" = 1 ] && humanas "$tmp/m.$i"
+      bad=1; [ "$1" = 1 ] && acima "$tmp/m.$i"
     fi
   done < "$tmp/medidas"
   [ "$bad" = 0 ] || return 3

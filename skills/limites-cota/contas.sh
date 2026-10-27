@@ -28,7 +28,11 @@ _contas_define() { # conta chave-do-catálogo
         _contas_set "$1" agente "$2"; _contas_set "$1" id "$id"; _contas_set "$1" comando "$cmd"
         _contas_set "$1" args "$args"; _contas_set "$1" medidor "$med"; _contas_set "$1" nota "$nota"
         _contas_set "$1" config ""; _contas_set "$1" modelo ""; _contas_set "$1" vagas 1
-        _contas_set "$1" papeis "$CONTAS_PAPEIS_PADRAO"
+        # Papel de trabalho por padrão só onde há a trava de comando remoto (guarda-externos, GUIA fase 4b); o resto, só se escrito.
+        case "$2" in
+            claude | codex | antigravity) _contas_set "$1" papeis "$CONTAS_PAPEIS_PADRAO" ;;
+            *) _contas_set "$1" papeis "" ;;
+        esac
         CONTAS="${CONTAS:+$CONTAS }$1"
         return 0
     done < "$CONTAS_CATALOGO"

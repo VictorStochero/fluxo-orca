@@ -17,7 +17,10 @@ if [ "$1 $2 $3" = 'account list --json' ]; then
     z5=$(( $(date -d '23:00' +%s) * 1000 )); zs=$(( ($(date +%s) + h * 3600) * 1000 ))
     [ -n "${POOL_CODEX_SEM_RESET:-}" ] && zs=null
     longa=weekly; min=10080; [ -n "${POOL_CODEX_MENSAL:-}" ] && { longa=monthly; min=43200; }
-    printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs"
+    agy=""
+    # Antigravity com um grupo acima de 80% e outro abaixo.
+    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":10,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":85,"windowMinutes":10080,"resetsAt":%s}]}' "$zs" "$zs")
+    printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}%s}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs" "$agy"
     exit 0
 fi
 [ "$1 $2 $3 $5" = 'orchestration worker-show --dispatch --json' ] || exit 2
@@ -123,7 +126,7 @@ rmdir "$HOME/.claude-b"
 # Registro do dev: contas pessoais e agentes fora da lista antiga.
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 dev2    agente=claude config=~/.claude-dev2 vagas=1
-minimax agente=opencode vagas=1 medidor=orca:minimax
+minimax agente=opencode vagas=1 medidor=orca:minimax papeis=escritor
 EOF
 confere_rc 0 'registro: livres das contas do dev' pool livres
 grep -qx 'dev2 1/1' "$tmp/saida" && grep -qx 'minimax 1/1' "$tmp/saida" && ! grep -q '^team ' "$tmp/saida" \
@@ -132,7 +135,7 @@ confere_rc 0 'registro: pega conta pessoal nova' pool pega dev2 ctx_d1
 confere_rc 75 'registro: conta pessoal nova cheia' pool pega dev2 ctx_d2
 confere_rc 0 'registro: pega agente sem medidor' pool pega minimax ctx_m1
 confere_rc 2 'registro: conta fora do registro rejeitada' pool pega team ctx_t1
-printf 'minimax agente=opencode vagas=1\n' > "$HOME/.claude/agentes.conf"
+printf 'minimax agente=opencode vagas=1 papeis=escritor\n' > "$HOME/.claude/agentes.conf"
 confere_rc 0 'registro: solta vaga de conta que saiu do registro' pool solta ctx_d1
 compgen -G "$HOME/.cache/agentes/dev2.lock*" >/dev/null && ruim 'vaga de conta removida ficou presa' || ok 'vaga de conta removida foi solta'
 pool solta ctx_m1
@@ -209,6 +212,9 @@ grep -q '^codex: 5h 95%' "$tmp/saida" && ok '5h do Codex no alerta' || ruim '5h 
     && ok '--alerta imprime só a linha acima de 80%' || { ruim '--alerta'; cat "$tmp/saida"; }
 POOL_SESSAO_USO=10 POOL_SEMANA_USO=90 confere_rc 3 '--alerta com semana do Claude acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
 grep -q '^pessoal: ' "$tmp/saida" && ok 'semana do Claude no alerta (segundo % usado da linha)' || ruim 'semana do Claude ignorada'
+POOL_AGY_ALTO=1 confere_rc 3 '--alerta com um grupo do agy acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
+[ "$(wc -l < "$tmp/saida")" = 1 ] && grep -q '^agy Claude and GPT models: semana 85%' "$tmp/saida" \
+    && ok '--alerta imprime só o grupo acima de 80%' || { ruim '--alerta com grupos do agy'; cat "$tmp/saida"; }
 confere_rc 0 '--alerta sem nada acima de 80%' bash "$tmp/seletor/limites.sh" --alerta
 [ -s "$tmp/saida" ] && ruim '--alerta imprimiu sem motivo' || ok '--alerta silencioso abaixo de 80%'
 
@@ -248,7 +254,8 @@ printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/bin/aider"; chmod +x "$tmp/bin/ai
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 pessoal agente=claude vagas=0 papeis=orquestra
 team    agente=claude config=~/.claude-team vagas=1
-aider1  agente=aider vagas=1
+aider1  agente=aider vagas=1 papeis=escritor
+aider2  agente=aider vagas=1
 codex   agente=codex vagas=1
 EOF
 confere_rc 0 'registro: medida vence a sem medidor no ritmo' seletor
@@ -263,11 +270,13 @@ grep -qx 'escritor: aider1 (sem medidor) reserva res-r9' "$tmp/saida" && [ "$(ca
 pool solta res-r9
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 escolha=ordem
-aider1  agente=aider vagas=1
+aider2  agente=aider vagas=1
+aider1  agente=aider vagas=1 papeis=escritor
 team    agente=claude config=~/.claude-team vagas=1
 EOF
 confere_rc 0 'registro: escolha=ordem' seletor
-grep -qx 'escritor: aider1 (sem medidor)' "$tmp/saida" && ok 'ordem do registro vence o ritmo' || { ruim 'escolha=ordem'; cat "$tmp/saida"; }
+grep -qx 'escritor: aider1 (sem medidor)' "$tmp/saida" \
+    && ok 'ordem do registro vence o ritmo, e agente sem trava e sem papel escrito (aider2) fica fora' || { ruim 'escolha=ordem'; cat "$tmp/saida"; }
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 cb agente=claude comando=claude-b-fora-do-path config=~/.claude-team vagas=1
 EOF
@@ -276,7 +285,7 @@ grep -qx 'escritor: cb (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" \
     && ok 'conta Claude medida pelo claude, não pelo atalho' || { ruim 'conta Claude com atalho sumiu'; cat "$tmp/saida"; }
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 escolha=ordem
-aider1  agente=aider vagas=1
+aider1  agente=aider vagas=1 papeis=escritor
 team    agente=claude config=~/.claude-team vagas=1
 EOF
 pool pega aider1 ctx_o1
