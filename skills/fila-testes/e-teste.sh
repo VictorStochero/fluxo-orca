@@ -11,7 +11,7 @@ v='(\\"[^"]*\\"|'"'[^']*'"'|[^[:space:];&|"]+)'
 cmd=$(printf '%s' "$cmd" | sed -E \
     -e "/git[[:space:]]+commit/ s/(^|[[:space:]])(-a?m|--message)([[:space:]]+|=)$v//g" \
     -e "s/--(body|subject|title)([[:space:]]+|=)$v//g" \
-    -e 's/[^;&|]*gs-teste\.sh[^;&|]*//g' \
+    -e 's/[^;&|]*(fila-teste|gs-teste)\.sh[^;&|]*//g' \
     -e 's/[^;&|]*(--list-tests|--collect-only|--listTests|vitest[[:space:]]+list)[^;&|]*//g' \
     -e 's/(pip|pip3|uv|poetry|pipenv|npm|pnpm|yarn|bun|composer)[[:space:]]+(install|add|i|ci|sync|remove|uninstall|require)[^;&|]*//g')
 s='(^|["[:space:];&|(/])'

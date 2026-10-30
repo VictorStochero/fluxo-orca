@@ -1,18 +1,19 @@
 #!/bin/bash
 # Semáforo de testes da máquina: até DOIS runs por fila (e no máximo TRÊS na máquina) entre todos os worktrees e sessões.
 # Uso, no cwd do projeto/worktree:
-#   bash ~/.cache/gs-teste.sh <argumentos do teste>     executor detectado pela stack
-#   bash ~/.cache/gs-teste.sh -- <comando completo>     executor explícito
+#   bash ~/.cache/fila-teste.sh <argumentos do teste>     executor detectado pela stack
+#   bash ~/.cache/fila-teste.sh -- <comando completo>     executor explícito
 # Executor detectado (o primeiro que valer):
-#   GS_TESTE_RUNNER (ambiente ou <principal>/.orca/worktree.conf), ex.: "docker compose exec -T web pytest"
+#   FILA_TESTE_RUNNER (ambiente ou <principal>/.orca/worktree.conf), ex.: "docker compose exec -T web pytest"
 #   Laravel (artisan): DDEV -> "ddev artisan test"; Sail -> "./vendor/bin/sail artisan test"; senão "php artisan test"
 #   Python (pyproject/requirements/Pipfile/pytest.ini): uv | poetry | pipenv | .venv -> pytest
 #   JS (package.json): pnpm | yarn | bun | npm -> script "test"
 #   Rust (Cargo.toml): cargo test; Go (go.mod): go test (sem argumentos, rode ./...)
 # Laravel: --parallel vira --processes=8 e, no fim, apaga os <banco>_test_N do MySQL/MariaDB do host.
 # Fila: Laravel no host = uma por porta de banco (3306 usa gs-teste.lockN, outras gs-teste-<porta>.lockN);
-# container (executor ddev/sail/docker/podman) = gs-teste-ctr.lockN; qualquer outro executor Laravel é host; Python/JS = gs-teste-geral.lockN. GS_TESTE_VAGAS e GS_TESTE_PROCESSOS sobrescrevem 2 e 8.
-# Teto global: além da vaga da fila, no máximo GS_TESTE_TETO (3) runs ao mesmo tempo na máquina (gs-teste-teto.lockN).
+# container (executor ddev/sail/docker/podman) = gs-teste-ctr.lockN; qualquer outro executor Laravel é host; Python/JS = gs-teste-geral.lockN. FILA_TESTE_VAGAS e FILA_TESTE_PROCESSOS sobrescrevem 2 e 8.
+# Teto global: além da vaga da fila, no máximo FILA_TESTE_TETO (3) runs ao mesmo tempo na máquina (gs-teste-teto.lockN).
+# As travas conservam os nomes para enxergar runs iniciados pela versão anterior.
 # Espera vaga até 5 min; sem vaga, sai com 75 (rode de novo). Imposto pelo hook fila-testes.sh do plugin fluxo-orca.
 eu="$(git rev-parse --show-toplevel 2>/dev/null || pwd) [$DB_DATABASE]"
 env_testing() { # $1 chave: .env.testing, senão .env
@@ -23,15 +24,16 @@ env_testing() { # $1 chave: .env.testing, senão .env
 }
 comum=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 # shellcheck source=/dev/null
-[ -n "$comum" ] && [ -z "$GS_TESTE_RUNNER" ] && [ -f "$(dirname "$comum")/.orca/worktree.conf" ] && . "$(dirname "$comum")/.orca/worktree.conf"
-VAGAS=${GS_TESTE_VAGAS:-2}
-TETO=${GS_TESTE_TETO:-3}
-PROCESSOS=${GS_TESTE_PROCESSOS:-8}
-modo=${GS_TESTE_FILA:-recurso}
+[ -n "$comum" ] && [ -z "${FILA_TESTE_RUNNER:-${GS_TESTE_RUNNER:-}}" ] && [ -f "$(dirname "$comum")/.orca/worktree.conf" ] && . "$(dirname "$comum")/.orca/worktree.conf"
+FILA_TESTE_RUNNER=${FILA_TESTE_RUNNER:-${GS_TESTE_RUNNER:-}}
+VAGAS=${FILA_TESTE_VAGAS:-${GS_TESTE_VAGAS:-2}}
+TETO=${FILA_TESTE_TETO:-${GS_TESTE_TETO:-3}}
+PROCESSOS=${FILA_TESTE_PROCESSOS:-${GS_TESTE_PROCESSOS:-8}}
+modo=${FILA_TESTE_FILA:-${GS_TESTE_FILA:-recurso}}
 case "$modo" in
     recurso) ;;
-    projeto) VAGAS=${GS_TESTE_VAGAS_PROJETO:-1} ;;
-    *) echo 'GS_TESTE_FILA deve ser recurso ou projeto.' >&2; exit 2 ;;
+    projeto) VAGAS=${FILA_TESTE_VAGAS_PROJETO:-${GS_TESTE_VAGAS_PROJETO:-1}} ;;
+    *) echo 'FILA_TESTE_FILA deve ser recurso ou projeto.' >&2; exit 2 ;;
 esac
 
 stack=outro
@@ -44,14 +46,14 @@ if [ "${1:-}" = "--" ]; then
 else
     if [ -f artisan ]; then
         stack=laravel
-        if [ -n "$GS_TESTE_RUNNER" ]; then runner=$GS_TESTE_RUNNER
+        if [ -n "$FILA_TESTE_RUNNER" ]; then runner=$FILA_TESTE_RUNNER
         elif [ -f .ddev/config.yaml ]; then runner="ddev artisan test"
         elif [ -x vendor/bin/sail ] && grep -qs 'sail' docker-compose.yml compose.yaml; then runner="./vendor/bin/sail artisan test"
         else runner="php artisan test"
         fi
     elif [ -f pyproject.toml ] || [ -f pytest.ini ] || [ -f Pipfile ] || ls requirements*.txt >/dev/null 2>&1; then
         stack=python
-        if [ -n "$GS_TESTE_RUNNER" ]; then runner=$GS_TESTE_RUNNER
+        if [ -n "$FILA_TESTE_RUNNER" ]; then runner=$FILA_TESTE_RUNNER
         elif [ -f uv.lock ]; then runner="uv run pytest"
         elif [ -f poetry.lock ]; then runner="poetry run pytest"
         elif [ -f Pipfile.lock ]; then runner="pipenv run pytest"
@@ -61,20 +63,20 @@ else
         fi
     elif [ -f package.json ]; then
         stack=js
-        if [ -n "$GS_TESTE_RUNNER" ]; then runner=$GS_TESTE_RUNNER
+        if [ -n "$FILA_TESTE_RUNNER" ]; then runner=$FILA_TESTE_RUNNER
         elif [ -f pnpm-lock.yaml ]; then runner="pnpm test"
         elif [ -f yarn.lock ]; then runner="yarn test"
         elif [ -f bun.lock ] || [ -f bun.lockb ]; then runner="bun run test"
         else runner="npm test --"
         fi
-    elif [ -n "$GS_TESTE_RUNNER" ]; then
-        runner=$GS_TESTE_RUNNER
+    elif [ -n "$FILA_TESTE_RUNNER" ]; then
+        runner=$FILA_TESTE_RUNNER
     elif [ -f Cargo.toml ]; then
         stack=rust; runner="cargo test"
     elif [ -f go.mod ]; then
         stack=go; runner="go test"
     else
-        echo "Stack não detectada: use bash ~/.cache/gs-teste.sh -- <comando de teste>" >&2
+        echo "Stack não detectada: use bash ~/.cache/fila-teste.sh -- <comando de teste>" >&2
         exit 2
     fi
     paralelo=0

@@ -9,7 +9,7 @@
 
 **O fluxo (2.11.0):** a sessão principal do Claude Code coordena; o trabalho pesado vai para **workers do Orca**, um worktree por tarefa, com banco e `.env` próprios; o gate de merge é a auditoria Opus quando o repositório versiona `.auditoria-pre-subida` (verificador só com achado), ou o revisor Opus obrigatório nos demais, sem duplicar os gates; testes rodam por **filas da máquina** (2 vagas por recurso, teto global de 3); regras impostas por **hooks**, não pela memória do modelo. Vale para Laravel, Python e JS/TS.
 
-Fila opcional por projeto: `GS_TESTE_FILA=projeto`, com `GS_TESTE_VAGAS_PROJETO=1` por padrão. Worktrees do mesmo projeto se revezam, projetos diferentes usam filas distintas, e `GS_TESTE_TETO` segue limitando a máquina. Sem essa opção, o modo `recurso` preserva as filas por porta/container/geral. Mensagens de espera e `FILA OCUPADA` identificam a fila e seus donos.
+Fila opcional por projeto: `FILA_TESTE_FILA=projeto`, com `FILA_TESTE_VAGAS_PROJETO=1` por padrão. Worktrees do mesmo projeto se revezam, projetos diferentes usam filas distintas, e `FILA_TESTE_TETO` segue limitando a máquina. Sem essa opção, o modo `recurso` preserva as filas por porta/container/geral. Mensagens de espera e `FILA OCUPADA` identificam a fila e seus donos. Chame `bash ~/.cache/fila-teste.sh`: `gs-teste.sh` e `GS_TESTE_*` continuam como compatibilidade, com prioridade para os novos nomes `FILA_TESTE_*`; as travas conservam os nomes durante a transição.
 
 O pacote de revisão/auditoria leva o pedido/issue ORIGINAL, o critério de pronto copiado do board, diff e interfaces, sem resumo ou justificativa do escritor ou da sessão principal. Na verificação, a sessão principal roda cada teste novo de correção com o código de produção do merge-base, exige falha, restaura HEAD e confere `git status` limpo. Pagamento, autorização/permissão, autenticação e alteração de dado de produção exigem segunda opinião de outra família sobre o diff, com “ache o caso que quebra”, mesmo com auditoria aprovada sem achados.
 
@@ -164,17 +164,17 @@ Conta cujo CLI não está instalado fica fora da seleção de escritor; o fluxo 
 ## Fase 6 — Por projeto
 Para cada projeto escolhido:
 1. **Orca**: `orca repo add --path <caminho>` e `orca repo set-base-ref --repo path:<caminho> --ref origin/<base>`. O usuário configura na tela do repo no Orca (sem CLI para isso), com o **mesmo texto em todos os repos** — passar os dois prontos para colar: Windows → setup `"%ProgramFiles%\Git\bin\bash.exe" "%USERPROFILE%\.cache\wt-setup.sh"` e archive `"%ProgramFiles%\Git\bin\bash.exe" "%USERPROFILE%\.cache\wt-archive.sh"`; Linux/macOS → `bash ~/.cache/wt-setup.sh` e `bash ~/.cache/wt-archive.sh`. Na mesma tela, configurar **aguardar o setup antes de iniciar o agente** (`wait-for-setup`), em vez de `start-immediately`, para que a tarefa só chegue ao agente depois do setup. Antes de tocar banco, o worker confirma o sucesso; setup falhou → `ask` ao coordenador com a saída, sem refazer migração por conta própria. Não usar `orca.yaml` fora do git para isso (skill `worktree-orca`).
-2. **`.orca/worktree.conf`** (no projeto; `.orca/` no `.git/info/exclude`) só com o que a detecção não acerta — opções na skill `worktree-orca`. Exemplos: `WT_SITES=herd` em Herd + Laragon; `WT_SEEDER=DemoSeeder`; `WT_MIGRAR="uv run alembic upgrade head"`; `GS_TESTE_RUNNER="docker compose exec -T web pytest"` para projeto em container.
+2. **`.orca/worktree.conf`** (no projeto; `.orca/` no `.git/info/exclude`) só com o que a detecção não acerta — opções na skill `worktree-orca`. Exemplos: `WT_SITES=herd` em Herd + Laragon; `WT_SEEDER=DemoSeeder`; `WT_MIGRAR="uv run alembic upgrade head"`; `FILA_TESTE_RUNNER="docker compose exec -T web pytest"` para projeto em container.
 3. **Stack**:
    - Laravel: `laravel/boost` (`composer require laravel/boost --dev` se faltar — **perguntar**, muda dependência do projeto) e `php artisan boost:install --skills --no-interaction` (sem `--mcp`).
    - Python/JS: conferir que o gerenciador do lockfile e a versão do runtime pedida estão instalados (skills `stack-python`, `stack-js`).
-4. **Teste rápido**: `bash ~/.cache/gs-teste.sh` com um arquivo de teste pequeno do projeto (ou a listagem: `--list-tests`, `pytest --collect-only -q`, `vitest list`).
+4. **Teste rápido**: `bash ~/.cache/fila-teste.sh` com um arquivo de teste pequeno do projeto (ou a listagem: `--list-tests`, `pytest --collect-only -q`, `vitest list`).
 
 ## Fase 7 — Verificação
 Reabrir o Claude Code e conferir, relatando cada item (ok / pendente + motivo):
 1. `claude plugin list`: `fluxo-orca`, `auditoria-pre-subida`, `ponytail`, `code-review`, `code-simplifier`, `playwright`, `claude-md-management`, `chrome-devtools-mcp` (+ `laravel-worktree` se houver Laravel) habilitados, **nenhum `superpowers`**; `/skills` mostra `delegacao`, `fila-testes`, `worktree-orca`, `stack-*`, `orca-cli`, `orchestration`, `auditoria-pre-subida:auditar`.
-2. `~/.cache/gs-teste.sh`, `~/.cache/e-teste.sh`, `~/.cache/wt-setup.sh`, `~/.cache/wt-archive.sh`, `~/.cache/wt-lib.sh`, `~/.cache/limites.sh`, `~/.cache/orca-espera.sh`, `~/.cache/fim-worker.sh` e `~/.claude/agents/somente-leitura.json` existem (hook de SessionStart).
-3. Num projeto, o comando de teste direto (`php artisan test`, `pytest`, `pnpm test`…) é **bloqueado** pelo hook com a mensagem da fila; `bash ~/.cache/gs-teste.sh <listagem>` passa.
+2. `~/.cache/fila-teste.sh`, `~/.cache/e-teste.sh`, `~/.cache/wt-setup.sh`, `~/.cache/wt-archive.sh`, `~/.cache/wt-lib.sh`, `~/.cache/limites.sh`, `~/.cache/orca-espera.sh`, `~/.cache/fim-worker.sh` e `~/.claude/agents/somente-leitura.json` existem (hook de SessionStart).
+3. Num projeto, o comando de teste direto (`php artisan test`, `pytest`, `pnpm test`…) é **bloqueado** pelo hook com a mensagem da fila; `bash ~/.cache/fila-teste.sh <listagem>` passa.
 4. Um `sed -i` qualquer é bloqueado pelo hook `bloqueia-bulk`.
 5. `bash ~/.cache/limites.sh` imprime ao menos a linha `pessoal`.
 6. `orca status --json` responde; cada projeto aparece em `orca repo list`.

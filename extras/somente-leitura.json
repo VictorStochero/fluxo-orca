@@ -15,7 +15,7 @@
       "Bash(php artisan migrate*)", "Bash(php artisan db:*)", "Bash(composer *)", "Bash(npm *)",
       "Bash(pnpm *)", "Bash(yarn *)", "Bash(bun *)", "Bash(pip *)", "Bash(uv *)", "Bash(poetry *)",
       "Bash(alembic *)", "Bash(python manage.py migrate*)", "Bash(npx prisma*)",
-      "Bash(vendor/bin/pint*)", "Bash(php vendor/bin/pint*)", "Bash(bash ~/.cache/gs-teste.sh*)",
+      "Bash(vendor/bin/pint*)", "Bash(php vendor/bin/pint*)", "Bash(bash ~/.cache/fila-teste.sh*)", "Bash(bash ~/.cache/gs-teste.sh*)",
       "Bash(gh pr merge *)", "Bash(gh pr create *)", "Bash(gh issue *)", "Bash(gh project *)",
       "PowerShell(Remove-Item *)", "PowerShell(Set-Content *)", "PowerShell(git commit *)", "PowerShell(git push *)"
     ]

@@ -12,15 +12,15 @@ description: Use antes de escrever, revisar ou testar código PHP num projeto La
 
 ## Validar (após cada etapa)
 1. `vendor/bin/pint --dirty --format agent`.
-2. Teste de regressão pela fila: `bash ~/.cache/gs-teste.sh --compact <arquivo>`; pasta ou suíte em paralelo: `bash ~/.cache/gs-teste.sh --parallel --compact <path>` (um path).
+2. Teste de regressão pela fila: `bash ~/.cache/fila-teste.sh --compact <arquivo>`; pasta ou suíte em paralelo: `bash ~/.cache/fila-teste.sh --parallel --compact <path>` (um path).
 3. PHPStan/Larastan nos arquivos tocados, se houver `phpstan.neon`.
 4. `composer dump-autoload` ao criar/renomear classe; `php artisan route:list --except-vendor` ao mexer em rotas/Resources.
 5. Listar a suíte sem rodar: `php artisan test --list-tests` (em suíte grande leva minutos).
 
 ## Testes
-- Banco de teste próprio por worktree (`.env.testing` com `DB_DATABASE=<banco>_test`); `--parallel` cria `<banco>_test_N` (o `gs-teste.sh` apaga ao terminar).
+- Banco de teste próprio por worktree (`.env.testing` com `DB_DATABASE=<banco>_test`); `--parallel` cria `<banco>_test_N` (o `fila-teste.sh` apaga ao terminar).
 - Multi-tenant (`config/tenancy.php`, stancl/tenancy): `TENANCY_DB_PREFIX` exclusivo por worktree e por ambiente de teste, senão os bancos `tenant_<id>` de um worktree são os do outro. Domínios (`CENTRAL_DOMAIN`, `TENANT_BASE_DOMAIN`, `SESSION_DOMAIN`) seguem o host do worktree; subdomínio de tenant precisa de DNS curinga local (DDEV e `*.localhost` do modo nativo resolvem; Laragon exige entrada no `hosts` por subdomínio; nas demais, conferir na referência da ferramenta em `ambiente-local`).
-- DDEV/Sail: o `gs-teste.sh` detecta e roda dentro do container.
+- DDEV/Sail: o `fila-teste.sh` detecta e roda dentro do container.
 
 ## Worktree
 - Pelo Orca: `wt-setup.sh` (skill `worktree-orca`) faz `.env`, bancos, `composer install`, `npm ci`/build, `migrate --seed` (ou `WT_SEEDER`), `migrate --env=testing`, `storage:link`, `boost:install` e lista a suíte.
