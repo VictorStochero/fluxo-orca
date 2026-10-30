@@ -164,7 +164,12 @@ EOF
 chmod +x "$tmp/bin/claude" "$tmp/bin/codex"
 cp "$tmp/bin/codex" "$tmp/bin/agy"
 export PATH="$tmp/bin:$PATH"
+export LIMITES_CACHE_MIN=0
 seletor() { bash "$tmp/seletor/limites.sh" --escritor; }
+printf '\necho chamada >> "$POOL_ESTADOS/medicoes"\n' >> "$tmp/bin/claude"
+LIMITES_CACHE_MIN=5 confere_rc 0 'cache: primeira medição' seletor
+LIMITES_CACHE_MIN=5 confere_rc 0 'cache: segunda chamada' seletor
+[ "$(wc -l < "$POOL_ESTADOS/medicoes")" = 2 ] && ok 'cache mede cada conta uma vez' || ruim 'cache repetiu medição'
 confere_rc 0 'seleção com vagas' seletor
 grep -qx 'escritor: team (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" \
     && ok 'escolhe maior ritmo' || ruim 'maior ritmo incorreto'

@@ -36,13 +36,38 @@ instalada() { # O binário da conta (sem as atribuições VAR=) está no PATH e 
   [ -z "$cfg" ] || [ -d "$cfg" ]
 }
 
+cache_min=${LIMITES_CACHE_MIN:-5}
+[[ "$cache_min" =~ ^[0-9]+$ ]] || { echo 'LIMITES_CACHE_MIN deve ser inteiro (0 desliga).' >&2; exit 2; }
+cache_dir="$HOME/.cache/agentes"
+legivel() {
+  awk -v conta="$2" '/^#cand / && NF == 6 && $2 == conta && $3 ~ /^[0-9]+$/ && $3 <= 100 && $4 ~ /^[0-9]+$/ && $4 <= 100 && ($5 == "-" || $5 ~ /^[0-9]+$/) && $6 ~ /^[0-9]+$/ && $6 > 0 { ok=1 }
+    END { exit !ok }' "$1" 2>/dev/null
+}
+mede() {
+  local i=$1 c=$2 med=$3 arq
+  arq="$cache_dir/medida.$c"
+  case "$med" in
+    claude) CONTA_CONFIG=$(conta_campo "$c" config) bash "$aqui/medidores/claude.sh" "$c" > "$tmp/m.$i" 2>&1 ;;
+    orca:*) bash "$aqui/medidores/orca.sh" "$c" "${med#orca:}" > "$tmp/m.$i" 2>&1 ;;
+  esac
+  if [ "$cache_min" -gt 0 ] && legivel "$tmp/m.$i" "$c"; then
+    mkdir -p "$cache_dir" && cat "$tmp/m.$i" > "$arq.$$" && mv "$arq.$$" "$arq"
+  fi
+}
+
 : > "$tmp/medidas"; n=0; precisa_orca=0
 for c in $CONTAS; do
   med=$(conta_campo "$c" medidor)
   [ "$med" = - ] && continue
   instalada "$c" || continue
   printf '%s %s %s\n' "$n" "$c" "$med" >> "$tmp/medidas"
-  case "$med" in orca:*) precisa_orca=1 ;; esac
+  arq="$cache_dir/medida.$c"
+  if [ "$cache_min" -gt 0 ] && [ -f "$arq" ] && legivel "$arq" "$c" \
+    && [ -n "$(find "$arq" -mmin "-$cache_min" -print 2>/dev/null)" ]; then
+    cat "$arq" > "$tmp/m.$n"
+  else
+    case "$med" in orca:*) precisa_orca=1 ;; esac
+  fi
   n=$((n + 1))
 done
 if [ "$precisa_orca" = 1 ]; then
@@ -51,10 +76,8 @@ if [ "$precisa_orca" = 1 ]; then
   export MEDIDOR_ORCA_JSON="$tmp/orca.json"
 fi
 while read -r i c med; do
-  case "$med" in
-    claude) CONTA_CONFIG=$(conta_campo "$c" config) bash "$aqui/medidores/claude.sh" "$c" > "$tmp/m.$i" 2>&1 & ;;
-    orca:*) bash "$aqui/medidores/orca.sh" "$c" "${med#orca:}" > "$tmp/m.$i" 2>&1 & ;;
-  esac
+  [ -s "$tmp/m.$i" ] && continue
+  mede "$i" "$c" "$med" &
 done < "$tmp/medidas"
 wait
 

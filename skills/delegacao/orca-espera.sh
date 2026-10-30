@@ -20,7 +20,7 @@ trap 'rm -f "$tmp" "$lista"' EXIT
 parado=${ORCA_ESPERA_PARADO_MIN:-10}
 [[ "$parado" =~ ^[1-9][0-9]*$ ]] || { echo "ORCA_ESPERA_PARADO_MIN deve ser um inteiro positivo." >&2; exit 2; }
 fim=$(( $(date +%s) + max * 60 ))
-cota_min=${ORCA_ESPERA_COTA_MIN:-10}
+cota_min=${ORCA_ESPERA_COTA_MIN:-20}
 [[ "$cota_min" =~ ^[0-9]+$ ]] || { echo "ORCA_ESPERA_COTA_MIN deve ser inteiro (0 desliga)." >&2; exit 2; }
 avisadas="$dir/.cota-avisada.${run[1]:-geral}"; consulta="$avisadas.consulta"
 
