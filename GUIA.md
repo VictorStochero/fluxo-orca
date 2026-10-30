@@ -18,6 +18,7 @@ Papéis Claude só leitura usam sempre `--settings ~/.claude/agents/somente-leit
 ```text
 escolha=ritmo
 teto=4
+ram_min=3
 pessoal agente=claude peso=5 vagas=1 papeis=orquestra,revisor,verificador
 team agente=claude config=~/.claude-team peso=1 vagas=2 papeis=escritor
 codex agente=codex vagas=1 papeis=escritor
@@ -25,6 +26,8 @@ agy agente=antigravity vagas=1 papeis=segunda-opiniao
 ```
 
 `peso` (inteiro ≥ 1, padrão 1) multiplica o ritmo; `escolha=ordem` ignora. `teto` (padrão 0, ilimitado) vale também para contas com `vagas=0`; `livres` acrescenta `maquina livres/teto`, que não é uma conta. `CONTAS_ADVISOR` (padrão `opus`, vazio desliga) define o advisor dos escritores Claude; `LIMITES_CACHE_MIN` (padrão 5, 0 desliga) controla o cache das medições legíveis. `ORCA_ESPERA_COTA_MIN` passa a 20 minutos. Escolha da segunda opinião: `limites.sh --segunda --familia <claude|gpt|gemini>`, por grupo do agy e outra família do escritor.
+
+`ram_min=<GB>` (padrão 0, desligado; decimal com ponto) define `RAM_MIN_GB`: `vaga-agente.sh pega` consulta a RAM disponível no Orca após o teto e recusa a reserva com exit 75 abaixo do mínimo; leitura indisponível ou ilegível só avisa. Antes de cada onda, rode `bash ~/.cache/orca-ram.sh` para ver RAM disponível e sessões com CPU 0 por memória; workers concluídos e retidos vêm com sugestão de `orca-libera.sh`, sem executar liberação. `orca-espera.sh` avisa uma vez por queda abaixo do mínimo configurado.
 
 ## Fase 1 — Diagnóstico (só leitura)
 Rodar e anotar:

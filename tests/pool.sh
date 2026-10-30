@@ -23,6 +23,11 @@ if [ "$1 $2 $3" = 'account list --json' ]; then
     printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}%s}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs" "$agy"
     exit 0
 fi
+[ "$1 $2 $3" = 'diagnostics memory --json' ] && {
+    case "${POOL_RAM_FALHA:-}" in fora) exit 1 ;; invalido) echo 'json inválido'; exit 0 ;; esac
+    printf '{"ok":true,"result":{"host":{"availableMemory":%s}}}\n' "$(( ${POOL_RAM_GB:-4} * 1073741824 ))"
+    exit 0
+}
 [ "$1 $2 $3 $5" = 'orchestration worker-show --dispatch --json' ] || exit 2
 estado=$(cat "$POOL_ESTADOS/$4" 2>/dev/null || echo pending)
 case "$estado" in
@@ -54,6 +59,26 @@ pool_sem_associativo() {
         source "$1" "${@:2}"
     ' bash "$raiz/skills/limites-cota/vaga-agente.sh" "$@"
 }
+printf 'ram_min=3\na agente=claude vagas=1\ni agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
+POOL_RAM_GB=2 confere_rc 75 'RAM: abaixo do mínimo bloqueia' pool pega a ctx_ram
+grep -q 'POOL CHEIO: memória (2,0 GB livres, mínimo 3)' "$tmp/saida" && ok 'RAM: diagnóstico' || ruim 'RAM: diagnóstico incorreto'
+POOL_RAM_GB=2 confere_rc 75 'RAM: conta ilimitada também respeita mínimo' pool pega i ctx_ram
+POOL_RAM_GB=4 confere_rc 0 'RAM: acima do mínimo libera' pool pega a ctx_ram
+pool solta ctx_ram
+POOL_RAM_FALHA=fora confere_rc 0 'RAM: Orca fora não bloqueia' pool pega a ctx_ram
+pool solta ctx_ram
+POOL_RAM_FALHA=invalido confere_rc 0 'RAM: JSON inválido não bloqueia' pool pega a ctx_ram
+pool solta ctx_ram
+printf 'a agente=claude vagas=1\n' > "$HOME/.claude/agentes.conf"
+POOL_RAM_GB=0 confere_rc 0 'RAM: ausente não muda comportamento' pool pega a ctx_ram
+pool solta ctx_ram
+printf 'ram_min=3\nteto=1\na agente=claude vagas=1\n' > "$HOME/.claude/agentes.conf"
+POOL_RAM_GB=2 confere_rc 75 'RAM: bloqueia dentro da trava da máquina' pool pega a ctx_ram
+POOL_RAM_GB=4 confere_rc 0 'RAM: bloqueio devolve a trava da máquina' pool pega a ctx_ram
+pool solta ctx_ram
+rm "$HOME/.claude/agentes.conf"
+if [ "${POOL_SOMENTE_RAM:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?; fi
+
 printf 'team=2\npessoal=0\ncodex=3\nagy=5\n' > "$HOME/.claude/agentes.conf"
 confere_rc 0 'pool funciona sem arrays associativos' pool_sem_associativo livres
 for esperado in 'team 2/2' 'pessoal 0/0' 'codex 3/3' 'agy 5/5'; do
@@ -408,6 +433,8 @@ grep -qx 'escritor: pessoal (ritmo 0.7 · 70% livre, zera em 168h)' "$tmp/saida"
 confere_rc 0 'hook instala scripts em HOME temporário' env CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh"
 cmp -s "$raiz/skills/limites-cota/vaga-agente.sh" "$HOME/.cache/vaga-agente.sh" \
     && ok 'script do pool instalado' || ruim 'instalação do pool'
+cmp -s "$raiz/skills/delegacao/orca-ram.sh" "$HOME/.cache/orca-ram.sh" \
+    && ok 'relatório de RAM instalado' || ruim 'instalação do relatório de RAM'
 cmp -s "$raiz/skills/limites-cota/medidores/orca.sh" "$HOME/.cache/medidores/orca.sh" && [ -f "$HOME/.cache/contas.sh" ] \
     && [ -f "$HOME/.cache/agentes-catalogo.conf" ] && ok 'registro e medidores instalados' || ruim 'instalação do registro e dos medidores'
 

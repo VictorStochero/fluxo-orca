@@ -95,13 +95,15 @@ _contas_linha() { # Conta do dev: nome chave=valor ..., valor com espaço entre 
 contas_carrega() {
     local linha legado=() proprias=0 i conta f
     for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do unset "$(_contas_var "$conta" "$f")"; done; done
-    CONTAS=""; ESCOLHA=ritmo; CONTAS_TETO=0
+    CONTAS=""; ESCOLHA=ritmo; CONTAS_TETO=0; RAM_MIN_GB=0
     if [ -f "$CONTAS_CONF" ]; then
         while IFS= read -r linha || [ -n "$linha" ]; do
             linha=${linha%$'\r'}
             [[ "$linha" =~ ^[[:space:]]*(#.*)?$ ]] && continue
             if [[ "$linha" =~ ^[[:space:]]*escolha=([a-z]*)[[:space:]]*$ ]]; then
                 case "${BASH_REMATCH[1]}" in ritmo | ordem) ESCOLHA=${BASH_REMATCH[1]} ;; *) _contas_erro 'escolha inválida' "$linha"; return ;; esac
+            elif [[ "$linha" =~ ^[[:space:]]*ram_min=([0-9]+([.][0-9]+)?)[[:space:]]*$ ]]; then
+                RAM_MIN_GB=${BASH_REMATCH[1]}
             elif [[ "$linha" =~ ^[[:space:]]*teto=(.*)$ ]]; then
                 [[ "${BASH_REMATCH[1]}" =~ ^([0-9]+)[[:space:]]*$ ]] || { _contas_erro 'teto inválido' "$linha"; return; }
                 CONTAS_TETO=$((10#${BASH_REMATCH[1]}))

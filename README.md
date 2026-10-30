@@ -9,13 +9,14 @@ Papéis Claude só leitura usam sempre `--settings ~/.claude/agents/somente-leit
 ```text
 escolha=ritmo
 teto=4
+ram_min=3
 pessoal agente=claude peso=5 vagas=1 papeis=orquestra,revisor,verificador
 team agente=claude config=~/.claude-team peso=1 vagas=2 papeis=escritor
 codex agente=codex vagas=1 papeis=escritor
 agy agente=antigravity vagas=1 papeis=segunda-opiniao
 ```
 
-`peso` multiplica o ritmo (`escolha=ordem` ignora); `teto=0` deixa a máquina ilimitada. `CONTAS_ADVISOR` define o advisor do escritor Claude (padrão `opus`, vazio desliga); `LIMITES_CACHE_MIN` controla o cache de cota (padrão 5, 0 desliga). O alerta do coordenador mede a cada 20 minutos. Segunda opinião: `limites.sh --segunda --familia <claude|gpt|gemini>`, com preferência por Gemini do agy, grupo misto do agy e Codex, conforme cota e família.
+`peso` multiplica o ritmo (`escolha=ordem` ignora); `teto=0` deixa a máquina ilimitada. `ram_min` define a RAM disponível mínima em GB para novas reservas (0 desliga); falha de leitura avisa sem bloquear. Antes da onda, `bash ~/.cache/orca-ram.sh` mostra sessões ociosas por memória e sugere liberações de workers concluídos e retidos; só lê, nunca fecha nada. `CONTAS_ADVISOR` define o advisor do escritor Claude (padrão `opus`, vazio desliga); `LIMITES_CACHE_MIN` controla o cache de cota (padrão 5, 0 desliga). O alerta do coordenador mede cota a cada 20 minutos e avisa uma vez por queda de RAM abaixo do mínimo. Segunda opinião: `limites.sh --segunda --familia <claude|gpt|gemini>`, com preferência por Gemini do agy, grupo misto do agy e Codex, conforme cota e família.
 
 ## Instalar
 Para separar projetos que usam o mesmo banco, `FILA_TESTE_FILA=projeto` usa uma fila por projeto, compartilhada pelos worktrees, com `FILA_TESTE_VAGAS_PROJETO=1` por padrão. O teto da máquina continua valendo; o modo padrão `recurso` permanece por porta/container/geral. Use `bash ~/.cache/fila-teste.sh`; o atalho `gs-teste.sh` e as variáveis `GS_TESTE_*` continuam aceitos por compatibilidade, com prioridade para `FILA_TESTE_*`. Os nomes das travas permanecem iguais.

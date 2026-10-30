@@ -95,7 +95,7 @@ case "${1:-}" in
         conta_no_pool "$conta" || erro 'conta desconhecida'
         valida_dispatch "$dispatch"
         total=$(conta_campo "$conta" vagas)
-        [ "$total" = 0 ] && [ "$CONTAS_TETO" = 0 ] && exit 0
+        [ "$total" = 0 ] && [ "$CONTAS_TETO" = 0 ] && [ "$RAM_MIN_GB" = 0 ] && exit 0
         mkdir -p "$dir" || exit 2
         [ "$CONTAS_TETO" = 0 ] || trava_maquina
         ocupadas=0
@@ -111,6 +111,13 @@ case "${1:-}" in
             [ "$maquina_ocupadas" -ge "$CONTAS_TETO" ] && { echo "POOL CHEIO: teto da máquina ($CONTAS_TETO)" >&2; exit 75; }
             [ "$total" = 0 ] && total=$CONTAS_TETO
         fi
+        if [ "$RAM_MIN_GB" != 0 ]; then
+            ram="$(dirname "$0")/../delegacao/orca-ram.sh"
+            [ -f "$ram" ] || ram="$(dirname "$0")/orca-ram.sh"
+            bash "$ram" --portao "$RAM_MIN_GB"
+            [ $? = 75 ] && exit 75
+        fi
+        [ "$total" = 0 ] && exit 0
         [ "$ocupadas" -ge "$total" ] && { echo "POOL CHEIO: $conta" >&2; exit 75; }
         for ((i=1; i<=total; i++)); do
             v="$dir/$conta.lock$i"

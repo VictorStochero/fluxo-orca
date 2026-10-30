@@ -23,6 +23,23 @@ fim=$(( $(date +%s) + max * 60 ))
 cota_min=${ORCA_ESPERA_COTA_MIN:-20}
 [[ "$cota_min" =~ ^[0-9]+$ ]] || { echo "ORCA_ESPERA_COTA_MIN deve ser inteiro (0 desliga)." >&2; exit 2; }
 avisadas="$dir/.cota-avisada.${run[1]:-geral}"; consulta="$avisadas.consulta"
+contas_lib="$(dirname "$0")/../limites-cota/contas.sh"
+[ -f "$contas_lib" ] || contas_lib="$(dirname "$0")/contas.sh"
+source "$contas_lib" && contas_carrega || exit 2
+ram_avisada="$dir/.ram-avisada.${run[1]:-geral}"
+memoria() {
+    [ "$RAM_MIN_GB" = 0 ] && return 1
+    local rc
+    bash "$(dirname "$0")/orca-ram.sh" --portao "$RAM_MIN_GB" 2>/dev/null; rc=$?
+    if [ "$rc" = 75 ]; then
+        [ "$(cat "$ram_avisada" 2>/dev/null)" = "$RAM_MIN_GB" ] && return 1
+        printf '%s\n' "$RAM_MIN_GB" > "$ram_avisada"
+        echo "!! memória abaixo de $RAM_MIN_GB GB: rode bash ~/.cache/orca-ram.sh"
+        return 0
+    fi
+    [ "$rc" = 0 ] && rm -f "$ram_avisada"
+    return 1
+}
 
 # Fornecedor que passou de 80% em alguma janela: avisa antes de estourar, uma vez até cair abaixo e subir de novo.
 # O intervalo vale entre rearmes (mtime de $consulta): o limites.sh leva 30–60 s e não pode rodar a cada rearme.
@@ -190,6 +207,7 @@ EOF
 }
 
 while [ "$(date +%s)" -lt "$fim" ]; do
+    memoria && exit 0
     restante=$(( fim - $(date +%s) )); espera=60
     [ "$restante" -lt "$espera" ] && espera=$restante
     [ "$espera" -le 0 ] && break
