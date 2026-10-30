@@ -1,4 +1,10 @@
 {
+  "enabledPlugins": {
+    "playwright@anthropic-plugin-directory": false,
+    "playwright@claude-plugins-official": false,
+    "chrome-devtools-mcp@claude-plugins-official": false,
+    "chrome-devtools-mcp@anthropic-plugin-directory": false
+  },
   "permissions": {
     "deny": [
       "Edit", "Write", "NotebookEdit",
