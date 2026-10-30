@@ -59,6 +59,7 @@ cp "$raiz/hooks/guarda-externos.sh" "$raiz/skills/fila-testes/e-teste.sh" "$tmp/
 
 json() { # comando -> JSON de PreToolUse com o comando escapado
     local c=${1//\\/\\\\}; c=${c//\"/\\\"}
+    c=${c//$'\n'/\\n}; c=${c//$'\r'/\\r}
     printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$c"
 }
 confere() { # esperado(BLOQ|LIVRE) comando
@@ -107,6 +108,18 @@ for busca in grep egrep fgrep rg 'git grep' findstr Select-String; do
     confere BLOQ "php artisan $subcomando | $busca x"
     confere BLOQ "$busca artisan README.md; php artisan $subcomando"
 done
+
+for busca in grep egrep fgrep rg 'git grep' findstr Select-String; do
+    confere BLOQ "$busca x README.md"$'\n'"php artisan $subcomando"
+    confere BLOQ "$busca x README.md"$'\r\n'"php artisan $subcomando"
+done
+executor=pytest
+confere BLOQ $'cd app\n'"python -m $executor"
+for nome_fila in fila-teste gs-teste; do
+    confere BLOQ "php artisan $subcomando # $nome_fila.sh"
+    confere LIVRE "bash ~/.cache/$nome_fila.sh -- python -m $executor"
+done
+if [ "${FILA_SOMENTE_AUDITORIA:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?; fi
 
 # Codex manda o comando como lista.
 printf '{"tool_input":{"command":["bash","-lc","pytest -x"]}}' | bash "$tmp/guarda-externos.sh" codex | grep -q '"deny"' \

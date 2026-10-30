@@ -214,7 +214,7 @@ if [ "$n" -gt 0 ]; then
     i=-1
     for ((j = 0; j < n; j++)); do
       if bash "$aqui/vaga-agente.sh" pega "${eleg_c[$j]}" "$RESERVA" 2>/dev/null; then
-        # Conta ilimitada não cria vaga: sem sufixo, não há o que trocar depois do start.
+        # Conta ilimitada só cria vaga com teto>0: sem trava, não há o que trocar depois do start.
         i=$j; grep -qxF "$RESERVA" "$HOME/.cache/agentes/${eleg_c[$j]}".lock*/dispatch 2>/dev/null && sufixo=" reserva $RESERVA"
         break
       fi

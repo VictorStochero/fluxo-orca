@@ -19,9 +19,10 @@ Papéis Claude só leitura usam sempre `--settings ~/.claude/agents/somente-leit
 escolha=ritmo
 teto=4
 ram_min=3
-pessoal agente=claude peso=5 vagas=1 papeis=orquestra,revisor,verificador
-team agente=claude config=~/.claude-team peso=1 vagas=2 papeis=escritor
-codex agente=codex vagas=1 papeis=escritor
+pessoal agente=claude peso=10 vagas=1 papeis=orquestra,escritor,revisor,verificador
+team agente=claude config=~/.claude-team peso=1 vagas=1 papeis=escritor
+claude-b agente=claude config=~/.claude-b peso=5 vagas=2 papeis=escritor,revisor
+codex agente=codex peso=1 vagas=1 papeis=escritor
 agy agente=antigravity vagas=1 papeis=segunda-opiniao
 ```
 

@@ -11,16 +11,20 @@ v='(\\"[^"]*\\"|'"'[^']*'"'|[^[:space:];&|"]+)'
 cmd=$(printf '%s' "$cmd" | sed -E \
     -e "/git[[:space:]]+commit/ s/(^|[[:space:]])(-a?m|--message)([[:space:]]+|=)$v//g" \
     -e "s/--(body|subject|title)([[:space:]]+|=)$v//g" \
-    -e 's/[^;&|]*(fila-teste|gs-teste)\.sh[^;&|]*//g' \
     -e 's/[^;&|]*(--list-tests|--collect-only|--listTests|vitest[[:space:]]+list)[^;&|]*//g' \
-    -e 's/(pip|pip3|uv|poetry|pipenv|npm|pnpm|yarn|bun|composer)[[:space:]]+(install|add|i|ci|sync|remove|uninstall|require)[^;&|]*//g')
+    -e 's/(pip|pip3|uv|poetry|pipenv|npm|pnpm|yarn|bun|composer)[[:space:]]+(install|add|i|ci|sync|remove|uninstall|require)[^;&|]*//g' \
+    -e 's/\\[nr]/;/g')
 s='(^|["[:space:];&|(/])'
 cmd=$(printf '%s\n' "$cmd" | awk '
     function emite() {
-        if (trecho !~ /^[[:space:]]*(grep|egrep|fgrep|rg|git[[:space:]]+grep|findstr|Select-String)([[:space:]]|$)/) print trecho
+        busca = (trecho ~ /^[[:space:]]*(grep|egrep|fgrep|rg|git[[:space:]]+grep|findstr|Select-String)([[:space:]]|$)/)
+        fila = (trecho ~ /^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*bash[[:space:]]+("([^"]*\/)?(fila-teste|gs-teste)[.]sh"|([^[:space:]]*\/)?(fila-teste|gs-teste)[.]sh)([[:space:]]|$)/)
+        if (!busca && !fila) print trecho
         trecho=""
     }
     {
+        sub(/^"(command|cmd)"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(bash|sh)"[[:space:]]*,[[:space:]]*"-(lc|c)"[[:space:]]*,[[:space:]]*"/, "")
+        sub(/"[[:space:]]*\]$/, "")
         sub(/^"(command|cmd)"[[:space:]]*:[[:space:]]*"/, "")
         sub(/"$/, ""); gsub(/\\"/, "\"")
         for (i=1; i<=length($0); i++) {
