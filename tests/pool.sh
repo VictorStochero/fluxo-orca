@@ -366,6 +366,23 @@ printf 'escolha=ordem\nteam agente=claude config=~/.claude-team\npessoal agente=
 confere_rc 0 'peso: ordem ignora o peso' seletor
 grep -q '^escritor: team ' "$tmp/saida" && ok 'ordem preservada' || ruim 'peso mudou ordem'
 
+# Teto também conta contas ilimitadas e vagas fora do registro atual.
+printf 'teto=2\na agente=claude vagas=1\nb agente=claude vagas=1\nc agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'teto: primeira conta' pool pega a ctx_t1
+confere_rc 0 'teto: segunda conta' pool pega b ctx_t2
+confere_rc 0 'teto: idempotência quando cheio' pool pega a ctx_t1
+confere_rc 75 'teto: bloqueia ilimitada' pool pega c ctx_t3
+grep -q 'POOL CHEIO: teto da máquina (2)' "$tmp/saida" && ok 'diagnóstico do teto' || ruim 'diagnóstico incorreto'
+pool livres > "$tmp/livres"
+grep -qx 'maquina 0/2' "$tmp/livres" && ok 'livres mostra teto' || ruim 'teto ausente'
+echo completed > "$POOL_ESTADOS/ctx_t1"
+confere_rc 0 'teto: morta libera para ilimitada' pool pega c ctx_t3
+[ -f "$HOME/.cache/agentes/c.lock1/dispatch" ] && ok 'ilimitada contada no teto' || ruim 'ilimitada sem trava'
+confere_rc 75 'teto: ilimitada ocupa teto' pool pega c ctx_t4
+printf 'teto=2\nc agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
+confere_rc 75 'teto: conta removida continua ocupando' pool pega c ctx_t4
+pool solta ctx_t2; pool solta ctx_t3
+rm "$HOME/.claude/agentes.conf"
 rmdir "$HOME/.claude-team"
 mkdir -p "$tmp/pessoal-bin"
 cp "$tmp/bin/claude" "$tmp/pessoal-bin/"
