@@ -131,8 +131,8 @@ n=0; cand_q=0; cand_vaga=0
     eleg_c[$n]=$c; eleg_r[$n]=$r; eleg_g[$n]=$g; eleg_h[$n]=$h; eleg_t[$n]=$t; n=$((n + 1))
   done
 } < <(awk -v agora="$agora" -v escolha="$ESCOLHA" '
-  FNR == NR { split($2, v, "/"); livre[$1] = (v[2] == 0 || v[1] > 0); next }
-  { q++; k = $1; if (!livre[k]) next
+  FNR == NR { split($2, v, "/"); if ($1 == "maquina") cheia = (v[1] == 0); else livre[$1] = (v[2] == 0 || v[1] > 0); next }
+  { q++; k = $1; if (cheia || !livre[k]) next
     tem_vaga = 1
     if ($2 == "s") { o++; oc[o] = k; ot[o] = "s"; next }
     curta = $3; longa = $4; h = -1; if ($5 != "-") h = ($5 - agora) / 3600

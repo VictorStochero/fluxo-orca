@@ -92,7 +92,8 @@ lanca nenhuma escritor >/dev/null; igual 'lança: conta desconhecida' 2 $?
 # Erros: linha inválida para tudo, com a linha na mensagem.
 for linha in 'Team! agente=claude' 'x agente=inexistente' 'x agente=claude cor=azul' 'x agente=claude vagas=muitas' \
              'x config=~/.y' 'x agente=claude papeis=chefe' 'x agente=claude medidor=balanca' 'escolha=sorteio' \
-             'team=abc' 'outra=2' 'x agente=claude modelo="sem fim'; do
+             'x agente=claude peso=0' 'x agente=claude peso=-1' 'x agente=claude peso=1.5' \
+             'teto=-1' 'teto=abc' 'team=abc' 'outra=2' 'x agente=claude modelo="sem fim'; do
     printf '%s\n' "$linha" > "$HOME/.claude/agentes.conf"
     igual "erro: $linha" 2 "$(rc_carrega)"
     grep -qF "$linha" "$tmp/erro" || ruim "erro sem a linha: $linha"
