@@ -14,6 +14,7 @@ comeca() { case "$3" in "$2"*) ok "$1" ;; *) ruim "$1: esperado começar com [$2
 
 cat > "$tmp/bin/claude" <<'EOF'
 #!/usr/bin/env bash
+case " $* " in *' --strict-mcp-config '*) ;; *) exit 2 ;; esac
 [ -n "${MED_SEM_SEMANA:-}" ] && { echo 'Current session: 12% used'; exit 0; }
 uso_c=30; uso_l=40; [ -n "$CLAUDE_CONFIG_DIR" ] && { uso_c=10; uso_l=6; }
 printf 'Current session: %s%% used, resets %s (America/Sao_Paulo)\nCurrent week (all models): %s%% used, resets %s (America/Sao_Paulo)\n' \
