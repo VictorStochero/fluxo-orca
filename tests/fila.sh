@@ -55,6 +55,13 @@ for c in 'php artisan test --list-tests' 'pytest --collect-only' 'npx vitest lis
     confere LIVRE "$c"
 done
 
+subcomando=test
+for busca in grep egrep fgrep rg 'git grep' findstr Select-String; do
+    confere LIVRE "$busca -l -E \"artisan $subcomando|pest|phpunit\" *.yml"
+    confere BLOQ "php artisan $subcomando | $busca x"
+    confere BLOQ "$busca artisan README.md; php artisan $subcomando"
+done
+
 # Codex manda o comando como lista.
 printf '{"tool_input":{"command":["bash","-lc","pytest -x"]}}' | bash "$tmp/guarda-externos.sh" codex | grep -q '"deny"' \
     && ok "BLOQ: command em lista (Codex)" || ruim "command em lista (Codex) passou"

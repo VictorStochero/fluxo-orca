@@ -15,6 +15,25 @@ cmd=$(printf '%s' "$cmd" | sed -E \
     -e 's/[^;&|]*(--list-tests|--collect-only|--listTests|vitest[[:space:]]+list)[^;&|]*//g' \
     -e 's/(pip|pip3|uv|poetry|pipenv|npm|pnpm|yarn|bun|composer)[[:space:]]+(install|add|i|ci|sync|remove|uninstall|require)[^;&|]*//g')
 s='(^|["[:space:];&|(/])'
+cmd=$(printf '%s\n' "$cmd" | awk '
+    function emite() {
+        if (trecho !~ /^[[:space:]]*(grep|egrep|fgrep|rg|git[[:space:]]+grep|findstr|Select-String)([[:space:]]|$)/) print trecho
+        trecho=""
+    }
+    {
+        sub(/^"(command|cmd)"[[:space:]]*:[[:space:]]*"/, "")
+        sub(/"$/, ""); gsub(/\\"/, "\"")
+        for (i=1; i<=length($0); i++) {
+            c=substr($0,i,1)
+            if (escape) { trecho=trecho c; escape=0; continue }
+            if (c == "\\" && aspas != sprintf("%c",39)) { trecho=trecho c; escape=1; continue }
+            if (c == "\"" || c == sprintf("%c",39)) {
+                if (aspas == c) aspas=""; else if (aspas == "") aspas=c
+            }
+            if (aspas == "" && c ~ /[;&|]/) emite(); else trecho=trecho c
+        }
+        emite()
+    }')
 e='([[:space:]"\\]|$)'
 if printf '%s' "$cmd" | grep -qE "artisan[[:space:]]+test|vendor/bin/(pest|phpunit)|pestphp/pest/bin/pest|sail[[:space:]]+(test|pest)$e|${s}pytest$e|-m[[:space:]]+(pytest|unittest)|manage\.py[[:space:]]+test|${s}(vitest|jest)$e|${s}(npm|pnpm|yarn|bun)[[:space:]]+(run[[:space:]]+)?test(:[[:alnum:]:_-]+)?$e|${s}composer[[:space:]]+(run(-script)?[[:space:]]+)?test$e|${s}(cargo|go)[[:space:]]+test$e"; then
     exit 0
