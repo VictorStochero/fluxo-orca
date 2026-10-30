@@ -7,7 +7,7 @@ export MSYS_NO_PATHCONV=1
 w() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 # Sem as variáveis do Orca: os hooks do claude -p reportariam fim de turno pelo agente do painel que mediu.
 usage=$( (for v in $(compgen -e | grep '^ORCA_'); do unset "$v"; done
-    # --bare perde a autenticação no Windows; --strict-mcp-config evita MCPs e preserva o login.
+    # --bare não traz a cota de assinatura no Windows; --strict-mcp-config preserva o /usage sem MCPs.
     if [ -n "${CONTA_CONFIG:-}" ]; then
         env CLAUDE_CONFIG_DIR="$(w "$CONTA_CONFIG")" claude --strict-mcp-config --settings "$(w "$HOME/.claude/settings.json")" --model haiku -p "/usage"
     else
