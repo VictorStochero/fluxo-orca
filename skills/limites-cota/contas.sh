@@ -13,22 +13,25 @@ conta_tem_papel() { case ",$(conta_campo "$1" papeis)," in *",$2,"*) return 0 ;;
 conta_existe() { case " $CONTAS " in *" $1 "*) return 0 ;; esac; return 1; }
 # Só medida (sem papel, ou só orquestra) não ocupa vaga: fica fora do pool.
 conta_no_pool() { conta_existe "$1" && case ",$(conta_campo "$1" papeis)," in ,, | ,orquestra,) return 1 ;; esac; }
-CONTAS_CAMPOS="agente id comando args config modelo vagas peso papeis medidor nota"
+CONTAS_CAMPOS="agente id comando args config modelo vagas peso papeis medidor pre fim regras skills testado nota"
+CONTAS_PAPEIS_TRABALHO=" escritor revisor verificador mecanico "
 _contas_erro() { echo "contas: $1: $2" >&2; return 2; }
 
 _contas_define() { # conta chave-do-catálogo
-    local l id cmd args med nota
+    local l id cmd args med pre fim regras skills testado nota
     # "a-b" e "a_b" usam a mesma variável: contam como repetidas.
     conta_existe "$1" || [ -n "$(conta_campo "$1" agente)" ] && return 3
     while IFS= read -r l || [ -n "$l" ]; do
         l=${l%$'\r'}
         case "$l" in '' | '#'*) continue ;; esac
         [ "${l%%|*}" = "$2" ] || continue
-        IFS='|' read -r _ id cmd args med nota <<< "$l"
+        IFS='|' read -r _ id cmd args med pre fim regras skills testado nota <<< "$l"
         _contas_set "$1" agente "$2"; _contas_set "$1" id "$id"; _contas_set "$1" comando "$cmd"
         _contas_set "$1" args "$args"; _contas_set "$1" medidor "$med"; _contas_set "$1" nota "$nota"
         _contas_set "$1" config ""; _contas_set "$1" modelo ""; _contas_set "$1" vagas 1
         _contas_set "$1" peso 1
+        _contas_set "$1" pre "$pre"; _contas_set "$1" fim "$fim"; _contas_set "$1" regras "$regras"
+        _contas_set "$1" skills "$skills"; _contas_set "$1" testado "$testado"
         # Papel de trabalho por padrão só onde há a trava de comando remoto (guarda-externos, GUIA fase 4b); o resto, só se escrito.
         case "$2" in
             claude | codex | antigravity) _contas_set "$1" papeis "$CONTAS_PAPEIS_PADRAO" ;;
@@ -51,7 +54,7 @@ _contas_padrao() { # As contas de antes do registro, na mesma ordem.
     fi
 }
 
-_contas_valida() { # chave valor linha
+_contas_valida() { # chave valor linha conta
     case "$1" in
         vagas) [[ "$2" =~ ^[0-9]+$ ]] || _contas_erro 'vagas inválidas' "$3" ;;
         peso) [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -ge 1 ] || _contas_erro 'peso inválido' "$3" ;;
@@ -61,6 +64,10 @@ _contas_valida() { # chave valor linha
             while [ -n "$resto" ]; do
                 p=${resto%%,*}; resto=${resto#*,}
                 case "$CONTAS_PAPEIS" in *" $p "*) ;; *) _contas_erro "papel desconhecido ($p)" "$3"; return ;; esac
+                # Worker autônomo sem a trava de comando remoto (hook antes de comando) só dá segunda opinião.
+                case "$CONTAS_PAPEIS_TRABALHO" in *" $p "*)
+                    [ "$(conta_campo "$4" pre)" = sim ] || { _contas_erro "$(conta_campo "$4" agente) sem trava de comando: só segunda-opiniao" "$3"; return; } ;;
+                esac
             done ;;
         comando | args | config | modelo) ;;
         *) _contas_erro "chave desconhecida ($1)" "$3" ;;
@@ -86,7 +93,7 @@ _contas_linha() { # Conta do dev: nome chave=valor ..., valor com espaço entre 
     esac
     for ((i = 0; i < ${#pares[@]}; i += 2)); do
         chave=${pares[i]}; valor=${pares[i + 1]}
-        _contas_valida "$chave" "$valor" "$linha" || return
+        _contas_valida "$chave" "$valor" "$linha" "$nome" || return
         [ "$chave" = config ] && [ "${valor:0:2}" = "~/" ] && valor=$HOME/${valor:2}
         _contas_set "$nome" "$chave" "$valor"
     done
@@ -123,6 +130,13 @@ contas_carrega() {
     return 0
 }
 
+conta_aviso() { # Conta de trabalho em agente sem hook de fim de turno: o orca-espera.sh é quem cobra o worker_done.
+    local p
+    [ "$(conta_campo "$1" fim)" = sim ] && return 1
+    for p in $CONTAS_PAPEIS_TRABALHO; do conta_tem_papel "$1" "$p" && { echo 'sem fim de turno: coordenador cobra worker_done'; return 0; }; done
+    return 1
+}
+
 contas_lanca() { # conta papel [modelo] → comando para orca-libera.sh --cria --command
     local cfg linha modelo
     conta_existe "$1" || { echo "contas: conta desconhecida: $1" >&2; return 2; }
@@ -147,8 +161,10 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
         lanca) [ $# -ge 3 ] || { echo 'uso: contas.sh lanca <conta> <papel> [modelo]' >&2; exit 2; }
                contas_lanca "$2" "$3" "${4:-}" ;;
         lista) for c in $CONTAS; do
-                   printf '%s agente=%s vagas=%s peso=%s papeis=%s medidor=%s\n' "$c" "$(conta_campo "$c" agente)" \
+                   printf '%s agente=%s vagas=%s peso=%s papeis=%s medidor=%s' "$c" "$(conta_campo "$c" agente)" \
                        "$(conta_campo "$c" vagas)" "$(conta_campo "$c" peso)" "$(conta_campo "$c" papeis)" "$(conta_campo "$c" medidor)"
+                   aviso=$(conta_aviso "$c") && printf ' aviso=%s' "$aviso"
+                   echo
                done ;;
         *) echo 'uso: contas.sh lanca <conta> <papel> [modelo] | lista' >&2; exit 2 ;;
     esac
