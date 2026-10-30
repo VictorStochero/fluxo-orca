@@ -19,7 +19,7 @@ if [ "$1 $2 $3" = 'account list --json' ]; then
     longa=weekly; min=10080; [ -n "${POOL_CODEX_MENSAL:-}" ] && { longa=monthly; min=43200; }
     agy=""
     # Antigravity com um grupo acima de 80% e outro abaixo.
-    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":10,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":85,"windowMinutes":10080,"resetsAt":%s}]}' "$zs" "$zs")
+    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s}]}' "${POOL_AGY_GEMINI:-10}" "$zs" "${POOL_AGY_MISTO:-85}" "$zs")
     printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}%s}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs" "$agy"
     exit 0
 fi
@@ -355,6 +355,18 @@ compgen -G "$HOME/.cache/agentes/pessoal.lock*" >/dev/null && ruim 'pessoal ilim
 unset POOL_TEAM_SEMANA_USO POOL_CODEX_SEMANA
 
 pool solta ctx_s1 2>/dev/null
+# Segunda opinião escolhe cada grupo, preservando a diversidade de família.
+POOL_AGY_ALTO=1 confere_rc 0 'segunda: Gemini mesmo com misto alto' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy gemini-models modelo=gemini-4-argon-high ' "$tmp/saida" && ok 'segunda prefere Gemini' || ruim 'Gemini livre excluído'
+POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 POOL_AGY_MISTO=20 confere_rc 0 'segunda: misto GPT contra Claude' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy claude-and-gpt-models modelo=gpt-oss-120b-medium ' "$tmp/saida" && ok 'segunda usa GPT no misto' || ruim 'família do misto incorreta'
+POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 POOL_AGY_MISTO=20 confere_rc 0 'segunda: misto Claude contra GPT' bash "$tmp/seletor/limites.sh" --segunda --familia gpt
+grep -q '^segunda: agy claude-and-gpt-models modelo=claude-opus-5-5-high ' "$tmp/saida" && ok 'segunda usa Claude no misto' || ruim 'Claude do misto excluído'
+POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 confere_rc 0 'segunda: fallback codex' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: codex - modelo=gpt-6.1-sol ' "$tmp/saida" && ok 'segunda cai para codex' || ruim 'fallback codex ausente'
+POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 confere_rc 75 'segunda: GPT sem outra família livre' bash "$tmp/seletor/limites.sh" --segunda --familia gpt
+grep -qx 'segunda: nenhuma (cota)' "$tmp/saida" && ok 'segunda esgotada informa cota' || ruim 'diagnóstico da segunda'
+
 # Peso altera o ritmo, mas a ordem explícita continua soberana.
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 team agente=claude config=~/.claude-team

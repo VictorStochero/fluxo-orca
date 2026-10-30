@@ -8,11 +8,14 @@ export MSYS_NO_PATHCONV=1
 aqui=$(dirname "$0")
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
-SOLO=0; RESERVA=""; ALERTA=0
+SOLO=0; RESERVA=""; ALERTA=0; SEGUNDA=0; FAMILIA=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --escritor) SOLO=1 ;;
     --alerta) ALERTA=1 ;;
+    --segunda) SEGUNDA=1 ;;
+    --familia)
+      case "${2:-}" in claude | gpt | gemini) FAMILIA=$2; shift ;; *) echo 'família inválida: claude|gpt|gemini' >&2; exit 2 ;; esac ;;
     --reserva)
       [ $# -ge 2 ] || { echo 'uso: limites.sh [--escritor [--reserva <tag>]] | --alerta' >&2; exit 2; }
       RESERVA="res-$2"; shift ;;
@@ -21,6 +24,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$RESERVA" ] && [ $SOLO = 0 ] && { echo 'uso: limites.sh [--escritor [--reserva <tag>]] | --alerta' >&2; exit 2; }
+[ -n "$FAMILIA" ] && [ "$SEGUNDA" = 0 ] && { echo '--familia exige --segunda' >&2; exit 2; }
+[ "$SEGUNDA" = 1 ] && [ $((SOLO + ALERTA)) != 0 ] && { echo '--segunda não combina com --escritor ou --alerta' >&2; exit 2; }
 
 source "$aqui/contas.sh" || exit 2
 # Registro inválido: a tabela ainda mede as contas padrão; a escolha cai no erro do pool, que lê o mesmo registro.
@@ -100,12 +105,60 @@ alerta() {
   [ "$bad" = 0 ] || return 3
 }
 [ "$ALERTA" = 1 ] && { alerta 1; exit $?; }
-if [ $SOLO = 0 ]; then
+if [ $SOLO = 0 ] && [ "$SEGUNDA" = 0 ]; then
   while read -r i _; do humanas "$tmp/m.$i"; done < "$tmp/medidas"
 fi
 
 bash "$aqui/vaga-agente.sh" livres > "$tmp/pool"
 rc=$?
+if [ "$SEGUNDA" = 1 ]; then
+  [ "$rc" = 0 ] || exit "$rc"
+  : > "$tmp/segunda"
+  for c in $CONTAS; do
+    agente=$(conta_campo "$c" agente)
+    if ! conta_tem_papel "$c" segunda-opiniao; then
+      [ "$agente" = codex ] && [ "$FAMILIA" != gpt ] && conta_no_pool "$c" || continue
+    fi
+    instalada "$c" || continue
+    i=$(awk -v c="$c" '$2 == c { print $1 }' "$tmp/medidas")
+    if [ "$agente" = antigravity ]; then
+      while read -r _ _ grupo cu lo ep dur; do
+        case "$grupo" in
+          gemini-models) [ "$FAMILIA" = gemini ] && continue; ordem=0; modelo=gemini-4-argon-high ;;
+          claude-and-gpt-models)
+            ordem=1; modelo=claude-opus-5-5-high
+            [ "$FAMILIA" != claude ] || modelo=gpt-oss-120b-medium ;;
+          *) continue ;;
+        esac
+        printf '%s %s %s %s %s %s %s %s\n' "$ordem" "$c" "$grupo" "$modelo" "$cu" "$lo" "$ep" "$dur" >> "$tmp/segunda"
+      done < <(awk '/^#grupo /' "$tmp/m.$i" 2>/dev/null)
+    else
+      case "$agente" in
+        codex) [ "$FAMILIA" = gpt ] && continue; ordem=2; modelo=gpt-6.1-sol ;;
+        claude) [ "$FAMILIA" = claude ] && continue; ordem=3; modelo=opus ;;
+        gemini) [ "$FAMILIA" = gemini ] && continue; ordem=3; modelo=gemini-4-argon-high ;;
+        *) continue ;;
+      esac
+      [ -z "$(conta_campo "$c" modelo)" ] || modelo=$(conta_campo "$c" modelo)
+      read -r _ _ cu lo ep dur <<< "$(cand "$tmp/m.$i")"
+      [ -n "$lo" ] && printf '%s %s - %s %s %s %s %s\n' "$ordem" "$c" "$modelo" "$cu" "$lo" "$ep" "$dur" >> "$tmp/segunda"
+    fi
+  done
+  awk -v agora="$(date +%s)" '
+    FNR == NR { split($2,v,"/"); if ($1 == "maquina") cheia=(v[1] == 0); else livre[$1]=(v[2] == 0 || v[1] > 0); next }
+    { if (cheia || !livre[$2]) next
+      h=-1; if ($7 != "-") h=($7-agora)/3600
+      if ($5 > 80 || !($6 <= 80 || ($6 <= 95 && h >= 0 && h < 24))) next
+      if (!achou || $1 < melhor) { achou=1; melhor=$1; conta=$2; grupo=$3; modelo=$4; folga=100-$6; horas=h }
+    }
+    END {
+      if (!achou) { print "segunda: nenhuma (cota)"; exit 75 }
+      printf "segunda: %s %s modelo=%s (%d%% livre", conta,grupo,modelo,folga
+      if (horas >= 0) printf ", zera em %.0fh", horas
+      print ")"
+    }' "$tmp/pool" "$tmp/segunda"
+  exit $?
+fi
 if [ "$rc" != 0 ]; then
   [ $SOLO = 1 ] && exit "$rc"
   echo "AVISO: erro do pool (status $rc); seleção de escritor indisponível" >&2
@@ -139,7 +192,7 @@ n=0; cand_q=0; cand_vaga=0
     if (curta > 80) next
     if (!(longa <= 80 || (longa <= 95 && h >= 0 && h < 24))) next
     frac = 1; if (h >= 0) { frac = h / $6; if (frac < 0.01) frac = 0.01; else if (frac > 1) frac = 1 }
-    o++; oc[o] = k; ot[o] = "m"; orr[o] = (100 - longa) / (100 * frac); og[o] = 100 - longa; oh[o] = h
+    o++; oc[o] = k; ot[o] = "m"; orr[o] = (100 - longa) / (100 * frac) * ((escolha == "ordem") ? 1 : $7); og[o] = 100 - longa; oh[o] = h
   }
   END {
     printf "info %d %d\n", q + 0, tem_vaga + 0
@@ -168,6 +221,8 @@ if [ "$n" -gt 0 ]; then
     done
     if [ "$i" -lt 0 ]; then echo "escritor: nenhum (pool cheio)"; exit 75; fi
   fi
+  peso=$(conta_campo "${eleg_c[$i]}" peso)
+  [ "$peso" = 1 ] || sufixo=" · peso $peso$sufixo"
   if [ "${eleg_t[$i]}" = s ]; then
     printf 'escritor: %s (sem medidor)%s\n' "${eleg_c[$i]}" "$sufixo"
   elif [ "$(awk -v h="${eleg_h[$i]}" 'BEGIN { print (h >= 0) ? 1 : 0 }')" = 1 ]; then
@@ -185,5 +240,3 @@ fi
 fi
 [ $SOLO = 1 ] && exit "$rc"
 alerta 0
-  peso=$(conta_campo "${eleg_c[$i]}" peso)
-  [ "$peso" = 1 ] || sufixo=" · peso $peso$sufixo"
