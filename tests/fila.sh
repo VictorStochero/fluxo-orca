@@ -69,6 +69,17 @@ confere() { # esperado(BLOQ|LIVRE) comando
     if [ "$r1" = "$esp" ] && [ "$r2" = "$esp" ]; then ok "$esp: $c"; else ruim "esperado $esp, claude=$r1 externos=$r2: $c"; fi
 }
 
+subcomando=test
+ativo='$(php artisan '"$subcomando"')'
+marca=$(printf '\140')
+for busca in grep egrep fgrep rg 'git grep' findstr Select-String; do
+    confere BLOQ "$busca \"$ativo\" README.md"
+    confere BLOQ "$busca \"${marca}php artisan $subcomando${marca}\" README.md"
+    confere LIVRE "$busca '$ativo' README.md"
+    confere LIVRE "$busca \"\\$ativo\" README.md"
+done
+if [ "${FILA_SOMENTE_SUBSTITUICOES:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?; fi
+
 for c in 'php artisan test' 'npm ci && npm test' 'pytest -x' 'composer test' 'cargo test' 'bash -c "pytest"' \
          'npx vitest run' 'php vendor/pestphp/pest/bin/pest' 'python -m unittest' 'pnpm exec vitest run' 'go test ./...' \
          'git commit -m "x" && pytest' 'python -m pytest -m "not slow"'; do

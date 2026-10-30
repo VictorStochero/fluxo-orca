@@ -17,10 +17,10 @@ cmd=$(printf '%s' "$cmd" | sed -E \
 s='(^|["[:space:];&|(/])'
 cmd=$(printf '%s\n' "$cmd" | awk '
     function emite() {
-        busca = (trecho ~ /^[[:space:]]*(grep|egrep|fgrep|rg|git[[:space:]]+grep|findstr|Select-String)([[:space:]]|$)/)
+        busca = (!substituicao && trecho ~ /^[[:space:]]*(grep|egrep|fgrep|rg|git[[:space:]]+grep|findstr|Select-String)([[:space:]]|$)/)
         fila = (trecho ~ /^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*bash[[:space:]]+("([^"]*\/)?(fila-teste|gs-teste)[.]sh"|([^[:space:]]*\/)?(fila-teste|gs-teste)[.]sh)([[:space:]]|$)/)
         if (!busca && !fila) print trecho
-        trecho=""
+        trecho=""; substituicao=0
     }
     {
         sub(/^"(command|cmd)"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(bash|sh)"[[:space:]]*,[[:space:]]*"-(lc|c)"[[:space:]]*,[[:space:]]*"/, "")
@@ -29,8 +29,10 @@ cmd=$(printf '%s\n' "$cmd" | awk '
         sub(/"$/, ""); gsub(/\\"/, "\"")
         for (i=1; i<=length($0); i++) {
             c=substr($0,i,1)
+            if (c == "\\" && substr($0,i+1,1) == "\\") i++
             if (escape) { trecho=trecho c; escape=0; continue }
             if (c == "\\" && aspas != sprintf("%c",39)) { trecho=trecho c; escape=1; continue }
+            if (aspas != sprintf("%c",39) && ((c == "$" && substr($0,i+1,1) == "(") || c == sprintf("%c",96))) substituicao=1
             if (c == "\"" || c == sprintf("%c",39)) {
                 if (aspas == c) aspas=""; else if (aspas == "") aspas=c
             }
