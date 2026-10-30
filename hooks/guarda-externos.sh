@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse dos CLIs despachados sem humano (agy, codex): nega comando remoto, bulk replace e teste fora da fila.
-# Uso: guarda-externos.sh [exit2|agy|codex] — exit2 = stderr + exit 2 (padrão genérico); agy = JSON {"decision":...}; codex = JSON hookSpecificOutput deny (exit 2 o Codex trata como falha e deixa passar).
+# Uso: guarda-externos.sh [exit2|agy|codex|gemini] — exit2 = stderr + exit 2 (padrão genérico; Kimi, ZCode, plugin do opencode); agy = JSON {"decision":...}; codex = JSON hookSpecificOutput deny (exit 2 o Codex trata como falha e deixa passar); gemini = JSON {"decision":"deny"} só quando nega (stdout sem mais nada).
 formato=${1:-exit2}
 in=$(cat)
 motivo=""
@@ -18,6 +18,10 @@ if [ "$formato" = agy ]; then
     else
         printf '{"decision":"ask"}\n'
     fi
+    exit 0
+fi
+if [ "$formato" = gemini ]; then
+    [ -n "$motivo" ] && printf '{"decision":"deny","reason":"%s"}\n' "$motivo"
     exit 0
 fi
 if [ "$formato" = codex ]; then
