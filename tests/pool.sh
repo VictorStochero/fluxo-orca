@@ -355,6 +355,17 @@ compgen -G "$HOME/.cache/agentes/pessoal.lock*" >/dev/null && ruim 'pessoal ilim
 unset POOL_TEAM_SEMANA_USO POOL_CODEX_SEMANA
 
 pool solta ctx_s1 2>/dev/null
+# Peso altera o ritmo, mas a ordem explícita continua soberana.
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+team agente=claude config=~/.claude-team
+pessoal agente=claude peso=5 vagas=0
+EOF
+confere_rc 0 'peso: plano maior vence' seletor
+grep -q '^escritor: pessoal .*peso 5' "$tmp/saida" && ok 'peso multiplica o ritmo' || ruim 'peso ignorado'
+printf 'escolha=ordem\nteam agente=claude config=~/.claude-team\npessoal agente=claude peso=5 vagas=0\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'peso: ordem ignora o peso' seletor
+grep -q '^escritor: team ' "$tmp/saida" && ok 'ordem preservada' || ruim 'peso mudou ordem'
+
 rmdir "$HOME/.claude-team"
 mkdir -p "$tmp/pessoal-bin"
 cp "$tmp/bin/claude" "$tmp/pessoal-bin/"
