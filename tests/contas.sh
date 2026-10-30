@@ -83,7 +83,9 @@ EOF
 
 # Comando de lançamento para orca-libera.sh --cria --command.
 lanca() { bash "$lib" lanca "$@" 2>"$tmp/erro"; }
-igual 'lança: team escritor' "CLAUDE_CONFIG_DIR=$HOME/.claude-team claude --dangerously-skip-permissions --agent fluxo-orca:escritor --model claude-sonnet-5-5" "$(lanca team escritor claude-sonnet-5-5)"
+igual 'lança: team escritor' "CLAUDE_CONFIG_DIR=$HOME/.claude-team claude --dangerously-skip-permissions --agent fluxo-orca:escritor --advisor opus --model claude-sonnet-5-5" "$(lanca team escritor claude-sonnet-5-5)"
+igual 'lança: advisor próprio' "CLAUDE_CONFIG_DIR=$HOME/.claude-team claude --dangerously-skip-permissions --agent fluxo-orca:escritor --advisor sonnet" "$(CONTAS_ADVISOR=sonnet lanca team fluxo-orca:escritor)"
+igual 'lança: advisor vazio desliga' "CLAUDE_CONFIG_DIR=$HOME/.claude-team claude --dangerously-skip-permissions --agent fluxo-orca:escritor" "$(CONTAS_ADVISOR= lanca team escritor)"
 igual 'lança: codex usa o modelo da conta' 'codex --dangerously-bypass-approvals-and-sandbox --model gpt-6.1-sol' "$(lanca codex escritor)"
 igual 'lança: claude-b com comando próprio' "CLAUDE_CONFIG_DIR=$HOME/.claude-b claude-b --dangerously-skip-permissions --agent fluxo-orca:revisor" "$(lanca claude-b revisor)"
 igual 'lança: agente de outro plugin' "CLAUDE_CONFIG_DIR=$HOME/.claude-team claude --dangerously-skip-permissions --agent auditoria-pre-subida:auditor --model claude-opus-5-5" "$(lanca team auditoria-pre-subida:auditor claude-opus-5-5)"
@@ -109,7 +111,7 @@ igual 'recarga limpa o registro anterior' 'team pessoal codex agy' "$(carrega 'C
 
 # Caminho com espaço sai escapado na linha de lançamento.
 printf 'sp agente=claude config="~/conta com espaço"\n' > "$HOME/.claude/agentes.conf"
-igual 'lança: config com espaço' "CLAUDE_CONFIG_DIR=$(printf '%q' "$HOME/conta com espaço") claude --dangerously-skip-permissions --agent fluxo-orca:escritor" "$(bash "$lib" lanca sp escritor 2>&1)"
+igual 'lança: config com espaço' "CLAUDE_CONFIG_DIR=$(printf '%q' "$HOME/conta com espaço") claude --dangerously-skip-permissions --agent fluxo-orca:escritor --advisor opus" "$(bash "$lib" lanca sp escritor 2>&1)"
 
 # Bash 3.2: nada de arrays associativos.
 printf 'dev2 agente=claude config=~/.claude-dev2 vagas=1\n' > "$HOME/.claude/agentes.conf"
