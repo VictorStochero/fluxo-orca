@@ -7,7 +7,22 @@
 > 4. **Nunca rode `ssh`, `scp`, `rsync`, `sftp` ou `forge` contra servidor** durante a instalação.
 > 5. Ao fim de cada fase, uma linha de status; no fim, a verificação da fase 7 item por item, com o que ficou pendente e por quê.
 
-**O fluxo:** a sessão principal do Claude Code coordena; o trabalho pesado vai para **workers do Orca**, um worktree por tarefa, com banco e `.env` próprios; todo diff passa por um **revisor Opus** antes do merge; testes rodam por **filas da máquina** (2 vagas por recurso, teto global de 3); regras impostas por **hooks**, não pela memória do modelo. Vale para Laravel, Python e JS/TS.
+**O fluxo (2.11.0):** a sessão principal do Claude Code coordena; o trabalho pesado vai para **workers do Orca**, um worktree por tarefa, com banco e `.env` próprios; o gate de merge é a auditoria Opus quando o repositório versiona `.auditoria-pre-subida` (verificador só com achado), ou o revisor Opus obrigatório nos demais, sem duplicar os gates; testes rodam por **filas da máquina** (2 vagas por recurso, teto global de 3); regras impostas por **hooks**, não pela memória do modelo. Vale para Laravel, Python e JS/TS.
+
+O pacote de revisão/auditoria leva o pedido/issue ORIGINAL, o critério de pronto copiado do board, diff e interfaces, sem resumo ou justificativa do escritor ou da sessão principal. Na verificação, a sessão principal roda cada teste novo de correção com o código de produção do merge-base, exige falha, restaura HEAD e confere `git status` limpo. Pagamento, autorização/permissão, autenticação e alteração de dado de produção exigem segunda opinião de outra família sobre o diff, com “ache o caso que quebra”, mesmo com auditoria aprovada sem achados.
+
+Papéis Claude só leitura usam sempre `--settings ~/.claude/agents/somente-leitura.json`, que desabilita os MCPs de navegador. A conta principal pode assumir `revisor` e `verificador`; só `orquestra` continua fora do pool. Exemplo de `~/.claude/agentes.conf`:
+
+```text
+escolha=ritmo
+teto=4
+pessoal agente=claude peso=5 vagas=1 papeis=orquestra,revisor,verificador
+team agente=claude config=~/.claude-team peso=1 vagas=2 papeis=escritor
+codex agente=codex vagas=1 papeis=escritor
+agy agente=antigravity vagas=1 papeis=segunda-opiniao
+```
+
+`peso` (inteiro ≥ 1, padrão 1) multiplica o ritmo; `escolha=ordem` ignora. `teto` (padrão 0, ilimitado) vale também para contas com `vagas=0`; `livres` acrescenta `maquina livres/teto`, que não é uma conta. `CONTAS_ADVISOR` (padrão `opus`, vazio desliga) define o advisor dos escritores Claude; `LIMITES_CACHE_MIN` (padrão 5, 0 desliga) controla o cache das medições legíveis. `ORCA_ESPERA_COTA_MIN` passa a 20 minutos. Escolha da segunda opinião: `limites.sh --segunda --familia <claude|gpt|gemini>`, por grupo do agy e outra família do escritor.
 
 ## Fase 1 — Diagnóstico (só leitura)
 Rodar e anotar:

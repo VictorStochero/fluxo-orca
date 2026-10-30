@@ -1,6 +1,21 @@
 # fluxo-orca
 
-Plugin do Claude Code (pt-BR) com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), todo diff passa por um revisor Opus antes do merge e os testes rodam por filas da máquina (2 vagas por recurso, teto global de 3). Hooks impõem as regras.
+Plugin do Claude Code (pt-BR), versão **2.11.0**, com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), o merge passa por um gate Opus e os testes rodam por filas da máquina (2 vagas por recurso, teto global de 3). Hooks impõem as regras.
+
+O gate é a auditoria em repositório que versiona `.auditoria-pre-subida` (auditor Opus, verificador só com achado); nos demais, o revisor Opus é obrigatório. O pacote contém pedido/issue original, critério copiado do board, diff e interfaces, sem resumo ou justificativa de quem pede o merge. A sessão principal prova cada teste novo de correção falhando no código do merge-base. Pagamento, autorização/permissão, autenticação e alteração de dado de produção exigem segunda opinião de outra família sobre o diff: “ache o caso que quebra”.
+
+Papéis Claude só leitura usam sempre `--settings ~/.claude/agents/somente-leitura.json`, sem MCP de navegador. A conta principal pode revisar/verificar; conta com só `orquestra` continua fora do pool. Exemplo de `~/.claude/agentes.conf`:
+
+```text
+escolha=ritmo
+teto=4
+pessoal agente=claude peso=5 vagas=1 papeis=orquestra,revisor,verificador
+team agente=claude config=~/.claude-team peso=1 vagas=2 papeis=escritor
+codex agente=codex vagas=1 papeis=escritor
+agy agente=antigravity vagas=1 papeis=segunda-opiniao
+```
+
+`peso` multiplica o ritmo (`escolha=ordem` ignora); `teto=0` deixa a máquina ilimitada. `CONTAS_ADVISOR` define o advisor do escritor Claude (padrão `opus`, vazio desliga); `LIMITES_CACHE_MIN` controla o cache de cota (padrão 5, 0 desliga). O alerta do coordenador mede a cada 20 minutos. Segunda opinião: `limites.sh --segunda --familia <claude|gpt|gemini>`, com preferência por Gemini do agy, grupo misto do agy e Codex, conforme cota e família.
 
 ## Instalar
 
