@@ -60,13 +60,19 @@ _contas_valida() { # chave valor linha conta
         peso) [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -ge 1 ] || _contas_erro 'peso inválido' "$3" ;;
         medidor) [[ "$2" =~ ^(claude|-|orca:[A-Za-z]+)$ ]] || _contas_erro 'medidor desconhecido' "$3" ;;
         papeis)
-            local p resto=$2,
+            local p ag resto=$2,
             while [ -n "$resto" ]; do
                 p=${resto%%,*}; resto=${resto#*,}
                 case "$CONTAS_PAPEIS" in *" $p "*) ;; *) _contas_erro "papel desconhecido ($p)" "$3"; return ;; esac
-                # Worker autônomo sem a trava de comando remoto (hook antes de comando) só dá segunda opinião.
+                # Worker autônomo sem a trava de comando remoto (hook antes de comando) só dá segunda opinião; a trava só documentada
+                # (testado=-) também não basta: claude, codex e antigravity têm a trava provada, os demais precisam da prova do GUIA.
                 case "$CONTAS_PAPEIS_TRABALHO" in *" $p "*)
-                    [ "$(conta_campo "$4" pre)" = sim ] || { _contas_erro "$(conta_campo "$4" agente) sem trava de comando: só segunda-opiniao" "$3"; return; } ;;
+                    ag=$(conta_campo "$4" agente)
+                    [ "$(conta_campo "$4" pre)" = sim ] || { _contas_erro "$ag sem trava de comando: só segunda-opiniao" "$3"; return; }
+                    case "$ag" in claude | codex | antigravity) ;; *)
+                        [[ "$(conta_campo "$4" testado)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
+                            || { _contas_erro "$ag: trava só documentada, rode a prova do GUIA fase 4b e registre testado=<data>" "$3"; return; } ;;
+                    esac ;;
                 esac
             done ;;
         comando | args | config | modelo) ;;

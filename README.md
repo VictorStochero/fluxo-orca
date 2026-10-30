@@ -47,17 +47,17 @@ O Claude diagnostica o sistema, as ferramentas e os projetos, instala o que cons
 
 ## Outros agentes: worker e coordenador
 
-`skills/limites-cota/instala-agente.sh <agente> [--aplicar]` instala regras, skills, trava de comando remoto e fim-worker no formato de cada agente; `instalar.sh --agente <id> [--aplicar]` faz o mesmo para quem coordena **sem Claude Code** (GUIA, "Coordenar sem Claude Code"; sem os hooks do plugin, travas só onde o agente tem hook). O papel de trabalho (escritor, mecânico, revisor, verificador) só vale em agente com trava (`pre=sim`).
+`skills/limites-cota/instala-agente.sh <agente> [--aplicar]` instala regras, skills, trava de comando remoto e fim-worker no formato de cada agente; `instalar.sh --agente <id> [--aplicar]` faz o mesmo para quem coordena **sem Claude Code** (GUIA, "Coordenar sem Claude Code"; sem os hooks do plugin, travas só onde o agente tem hook). O papel de trabalho (escritor, mecânico, revisor, verificador) só vale em agente com trava (`pre=sim`) **e** com `testado=<data>` no catálogo (prova de despacho do GUIA, fase 4b, passo 7); claude, codex e antigravity estão isentos. `pre=sim` com `testado=-` → o `contas.sh` recusa o papel (`<agente>: trava só documentada, rode a prova do GUIA fase 4b e registre testado=<data>`) e o agente só dá segunda opinião; sem fim de turno (`fim=nao`) a conta entra com aviso.
 
 | Agente | Papel hoje | Trava (`pre`) | Fim de turno (`fim`) | Testado |
 |--------|------------|---------------|----------------------|---------|
 | claude | trabalho + orquestra (plugin) | sim | sim | em uso |
 | codex | trabalho | sim | sim | em uso |
 | antigravity (agy) | segunda opinião (padrão) | sim | não | em uso |
-| gemini | trabalho | sim (`BeforeTool`) | sim (`AfterAgent`) | **não testado** |
-| kimi | trabalho | sim (`PreToolUse`) | sim (`Stop`) | **não testado** |
-| zcode | trabalho | sim (`PreToolUse`, exige `hooks.enabled`) | não | **não testado** |
-| opencode / opencode2 (e MiniMax por ele) | trabalho, com aviso | sim (plugin `tool.execute.before`) | não | **não testado** |
+| gemini | segunda opinião até a prova | sim (`BeforeTool`) | sim (`AfterAgent`) | **não testado** |
+| kimi | segunda opinião até a prova | sim (`PreToolUse`) | sim (`Stop`) | **não testado** |
+| zcode | segunda opinião até a prova | sim (`PreToolUse`, exige `hooks.enabled`) | não | **não testado** |
+| opencode / opencode2 (e MiniMax por ele) | segunda opinião até a prova | sim (plugin `tool.execute.before`) | não | **não testado** |
 | cursor-agent | segunda opinião | não (hooks só documentados no app) | não | **não testado** |
 | demais do catálogo | só medição / segunda opinião | desconhecido | desconhecido | — |
 
