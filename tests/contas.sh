@@ -26,6 +26,7 @@ igual 'catálogo sem chave repetida' '' "$dup"
 # Sem agentes.conf: as contas de hoje, na ordem de hoje.
 igual 'padrão: contas' 'team pessoal codex agy' "$(carrega 'echo $CONTAS')"
 igual 'padrão: escolha' 'ritmo' "$(carrega 'echo $ESCOLHA')"
+igual 'padrão: peso' 1 "$(carrega 'conta_campo team peso')"
 igual 'padrão: team usa ~/.claude-team' "$HOME/.claude-team" "$(carrega 'conta_campo team config')"
 igual 'padrão: pessoal ilimitada' 0 "$(carrega 'conta_campo pessoal vagas')"
 igual 'padrão: codex uma vaga' 1 "$(carrega 'conta_campo codex vagas')"

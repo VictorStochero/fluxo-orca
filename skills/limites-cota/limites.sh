@@ -120,7 +120,7 @@ for c in $CONTAS; do
   i=$(awk -v c="$c" '$2 == c { print $1 }' "$tmp/medidas")
   linha=$(cand "$tmp/m.$i"); [ -n "$linha" ] || continue
   read -r _ _ cu lo ep dur <<< "$linha"
-  echo "$c m $cu $lo $ep $dur" >> "$tmp/cand"
+  echo "$c m $cu $lo $ep $dur $(conta_campo "$c" peso)" >> "$tmp/cand"
 done
 
 # Medida elegível: curta <= 80 e longa <= 80, ou <= 95 com reset da longa em < 24 h. Ritmo = (100 - longa) / (100 * fração
@@ -185,3 +185,5 @@ fi
 fi
 [ $SOLO = 1 ] && exit "$rc"
 alerta 0
+  peso=$(conta_campo "${eleg_c[$i]}" peso)
+  [ "$peso" = 1 ] || sufixo=" · peso $peso$sufixo"

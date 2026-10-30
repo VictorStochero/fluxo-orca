@@ -13,7 +13,7 @@ conta_tem_papel() { case ",$(conta_campo "$1" papeis)," in *",$2,"*) return 0 ;;
 conta_existe() { case " $CONTAS " in *" $1 "*) return 0 ;; esac; return 1; }
 # Só medida (sem papel, ou só orquestra) não ocupa vaga: fica fora do pool.
 conta_no_pool() { conta_existe "$1" && case ",$(conta_campo "$1" papeis)," in ,, | ,orquestra,) return 1 ;; esac; }
-CONTAS_CAMPOS="agente id comando args config modelo vagas papeis medidor nota"
+CONTAS_CAMPOS="agente id comando args config modelo vagas peso papeis medidor nota"
 _contas_erro() { echo "contas: $1: $2" >&2; return 2; }
 
 _contas_define() { # conta chave-do-catálogo
@@ -28,6 +28,7 @@ _contas_define() { # conta chave-do-catálogo
         _contas_set "$1" agente "$2"; _contas_set "$1" id "$id"; _contas_set "$1" comando "$cmd"
         _contas_set "$1" args "$args"; _contas_set "$1" medidor "$med"; _contas_set "$1" nota "$nota"
         _contas_set "$1" config ""; _contas_set "$1" modelo ""; _contas_set "$1" vagas 1
+        _contas_set "$1" peso 1
         # Papel de trabalho por padrão só onde há a trava de comando remoto (guarda-externos, GUIA fase 4b); o resto, só se escrito.
         case "$2" in
             claude | codex | antigravity) _contas_set "$1" papeis "$CONTAS_PAPEIS_PADRAO" ;;
@@ -53,6 +54,7 @@ _contas_padrao() { # As contas de antes do registro, na mesma ordem.
 _contas_valida() { # chave valor linha
     case "$1" in
         vagas) [[ "$2" =~ ^[0-9]+$ ]] || _contas_erro 'vagas inválidas' "$3" ;;
+        peso) [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -ge 1 ] || _contas_erro 'peso inválido' "$3" ;;
         medidor) [[ "$2" =~ ^(claude|-|orca:[A-Za-z]+)$ ]] || _contas_erro 'medidor desconhecido' "$3" ;;
         papeis)
             local p resto=$2,
@@ -139,8 +141,8 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
         lanca) [ $# -ge 3 ] || { echo 'uso: contas.sh lanca <conta> <papel> [modelo]' >&2; exit 2; }
                contas_lanca "$2" "$3" "${4:-}" ;;
         lista) for c in $CONTAS; do
-                   printf '%s agente=%s vagas=%s papeis=%s medidor=%s\n' "$c" "$(conta_campo "$c" agente)" \
-                       "$(conta_campo "$c" vagas)" "$(conta_campo "$c" papeis)" "$(conta_campo "$c" medidor)"
+                   printf '%s agente=%s vagas=%s peso=%s papeis=%s medidor=%s\n' "$c" "$(conta_campo "$c" agente)" \
+                       "$(conta_campo "$c" vagas)" "$(conta_campo "$c" peso)" "$(conta_campo "$c" papeis)" "$(conta_campo "$c" medidor)"
                done ;;
         *) echo 'uso: contas.sh lanca <conta> <papel> [modelo] | lista' >&2; exit 2 ;;
     esac
