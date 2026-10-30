@@ -59,7 +59,7 @@ cp "$raiz/hooks/guarda-externos.sh" "$raiz/skills/fila-testes/e-teste.sh" "$tmp/
 
 json() { # comando -> JSON de PreToolUse com o comando escapado
     local c=${1//\\/\\\\}; c=${c//\"/\\\"}
-    c=${c//$'\n'/\\n}; c=${c//$'\r'/\\r}
+    c=${c//$'\n'/'\n'}; c=${c//$'\r'/'\r'}
     printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$c"
 }
 confere() { # esperado(BLOQ|LIVRE) comando
@@ -70,6 +70,27 @@ confere() { # esperado(BLOQ|LIVRE) comando
 }
 
 subcomando=test
+executor=pytest
+json $'a\nb\rc' > "$tmp/json-codificado"
+grep -qF 'a\nb\rc' "$tmp/json-codificado" && ok 'JSON preserva escapes LF/CR' || ruim 'JSON não preserva escapes LF/CR'
+for nome_fila in fila-teste gs-teste; do
+    confere LIVRE "& 'C:/Program Files/Git/bin/bash.exe' -lc 'bash ~/.cache/$nome_fila.sh -- php artisan $subcomando'"
+    confere LIVRE "bash.exe C:/Users/x/.cache/$nome_fila.sh -- python -m $executor"
+    confere LIVRE "bash C:\\Users\\x\\.cache\\$nome_fila.sh -- python -m $executor"
+    confere LIVRE "/usr/bin/bash ~/.cache/$nome_fila.sh -- python -m $executor"
+    confere LIVRE "bash -lc \"bash ~/.cache/$nome_fila.sh -- python -m $executor\""
+    confere LIVRE "sh ~/.cache/$nome_fila.sh -- python -m $executor"
+    confere LIVRE "~/.cache/$nome_fila.sh -- python -m $executor"
+    printf -v corpo "@'\n%s\n'@ | & 'C:/Program Files/Git/bin/bash.exe' -s" "bash ~/.cache/$nome_fila.sh -- python -m $executor"
+    confere LIVRE "$corpo"
+    entrada=$(printf '{"command":["powershell.exe","-Command","bash ~/.cache/%s.sh -- python -m %s"]}' "$nome_fila" "$executor")
+    printf '%s' "$entrada" | bash "$raiz/hooks/fila-testes.sh" 2>/dev/null; rc=$?
+    if [ "$rc" = 2 ] || printf '%s' "$entrada" | bash "$tmp/guarda-externos.sh" codex 2>/dev/null | grep -q '"deny"'; then ruim "lista PowerShell: $nome_fila"; else ok "lista PowerShell: $nome_fila"; fi
+    confere BLOQ "php artisan $subcomando # bash ~/.cache/$nome_fila.sh"
+    confere BLOQ "bash -lc \"bash ~/.cache/$nome_fila.sh -- python -m $executor; $executor\""
+done
+if [ "${FILA_SOMENTE_INVOLUCROS:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?; fi
+
 ativo='$(php artisan '"$subcomando"')'
 marca=$(printf '\140')
 for busca in grep egrep fgrep rg 'git grep' findstr Select-String; do
@@ -125,7 +146,10 @@ for busca in grep egrep fgrep rg 'git grep' findstr Select-String; do
     confere BLOQ "$busca x README.md"$'\r\n'"php artisan $subcomando"
 done
 executor=pytest
-confere BLOQ $'cd app\n'"python -m $executor"
+confere BLOQ $'cd app\n'"$executor -x"
+confere BLOQ $'composer install\n'"php artisan $subcomando"
+confere BLOQ $'npm ci\n'"npm $subcomando"
+confere BLOQ $'vendor/bin/pest --list-tests\n'"php artisan $subcomando"
 for nome_fila in fila-teste gs-teste; do
     confere BLOQ "php artisan $subcomando # $nome_fila.sh"
     confere LIVRE "bash ~/.cache/$nome_fila.sh -- python -m $executor"

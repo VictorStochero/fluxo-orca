@@ -9,8 +9,10 @@ echo "$*" >> "$RAM_CENARIO/chamadas"
 case "$1 $2" in
     'diagnostics memory') cat "$RAM_CENARIO/memoria.json" ;;
     'orchestration check')
+        [ -n "${RAM_TESTA_INVALIDO:-}" ] && { echo '{"ok":true,"result":{"deliveryId":"d_ram","messages":[{"type":"worker_done"}]}}'; exit 0; }
         case "$*" in *--ack*) echo '{"ok":true,"result":{}}' ;; *) echo '{"ok":true,"result":{"deliveryId":"d_ram","messages":[{"type":"heartbeat"}]}}' ;; esac ;;
     'orchestration worker-list')
+        [ -n "${RAM_TESTA_INVALIDO:-}" ] && { echo '{"ok":true,"result":{"workers":[]}}'; exit 0; }
         case "$*" in *--cursor*) cat "$RAM_CENARIO/pagina2.json" ;; *) cat "$RAM_CENARIO/pagina1.json" ;; esac ;;
     *) exit 2 ;;
 esac
@@ -51,4 +53,7 @@ confere grep -q '!! memória abaixo de 3 GB: rode bash ~/.cache/orca-ram.sh' "$t
 limite() { if command -v timeout >/dev/null 2>&1; then timeout "$@"; else perl -e 'alarm shift; exec @ARGV' "$@"; fi; }
 limite 5 bash "$raiz/skills/delegacao/orca-espera.sh" --max-min 1 > "$tmp/alerta" 2>&1
 if grep -q '!! memória abaixo' "$tmp/alerta"; then echo 'FALHA repetiu alerta'; falhas=$((falhas + 1)); fi
+printf 'ram_min=inválido\n' > "$HOME/.claude/agentes.conf"
+RAM_TESTA_INVALIDO=1 bash "$raiz/skills/delegacao/orca-espera.sh" --max-min 1 > "$tmp/alerta" 2>&1
+[ $? = 0 ] && grep -q '== worker_done' "$tmp/alerta" || { echo 'FALHA registro inválido derrubou espera'; falhas=$((falhas + 1)); }
 [ "$falhas" = 0 ] && echo 'TUDO OK' || exit 1

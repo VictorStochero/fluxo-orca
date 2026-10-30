@@ -24,6 +24,7 @@ if [ "$1 $2 $3" = 'account list --json' ]; then
     exit 0
 fi
 [ "$1 $2 $3" = 'diagnostics memory --json' ] && {
+    touch "$POOL_ESTADOS/ram-consultada"
     case "${POOL_RAM_FALHA:-}" in fora) exit 1 ;; invalido) echo 'json inválido'; exit 0 ;; esac
     printf '{"ok":true,"result":{"host":{"availableMemory":%s}}}\n' "$(( ${POOL_RAM_GB:-4} * 1073741824 ))"
     exit 0
@@ -64,6 +65,9 @@ POOL_RAM_GB=2 confere_rc 75 'RAM: abaixo do mínimo bloqueia' pool pega a ctx_ra
 grep -q 'POOL CHEIO: memória (2,0 GB livres, mínimo 3)' "$tmp/saida" && ok 'RAM: diagnóstico' || ruim 'RAM: diagnóstico incorreto'
 POOL_RAM_GB=2 confere_rc 75 'RAM: conta ilimitada também respeita mínimo' pool pega i ctx_ram
 POOL_RAM_GB=4 confere_rc 0 'RAM: acima do mínimo libera' pool pega a ctx_ram
+rm -f "$POOL_ESTADOS/ram-consultada"
+POOL_RAM_GB=0 confere_rc 75 'RAM: conta cheia dispensa consulta' pool pega a ctx_ram2
+grep -q 'POOL CHEIO: a' "$tmp/saida" && [ ! -e "$POOL_ESTADOS/ram-consultada" ] && ok 'RAM: vaga da conta antes da consulta' || ruim 'RAM: consultou conta cheia'
 pool solta ctx_ram
 POOL_RAM_FALHA=fora confere_rc 0 'RAM: Orca fora não bloqueia' pool pega a ctx_ram
 pool solta ctx_ram

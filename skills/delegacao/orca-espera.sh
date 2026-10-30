@@ -25,7 +25,7 @@ cota_min=${ORCA_ESPERA_COTA_MIN:-20}
 avisadas="$dir/.cota-avisada.${run[1]:-geral}"; consulta="$avisadas.consulta"
 contas_lib="$(dirname "$0")/../limites-cota/contas.sh"
 [ -f "$contas_lib" ] || contas_lib="$(dirname "$0")/contas.sh"
-source "$contas_lib" && contas_carrega || exit 2
+source "$contas_lib" 2>/dev/null && contas_carrega 2>/dev/null || RAM_MIN_GB=0
 ram_avisada="$dir/.ram-avisada.${run[1]:-geral}"
 memoria() {
     [ "$RAM_MIN_GB" = 0 ] && return 1

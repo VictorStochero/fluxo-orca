@@ -14,9 +14,12 @@ teto=4
 ram_min=3
 pessoal  agente=claude peso=10 vagas=1 papeis=orquestra,escritor,revisor,verificador
 team     agente=claude config=~/.claude-team peso=1 vagas=1 papeis=escritor,revisor
-claude-b agente=claude config=~/.claude-b peso=5 vagas=2 papeis=escritor,revisor
+claude-b agente=claude comando=claude-b config=~/.claude-b peso=5 vagas=2 papeis=escritor,revisor
 codex    agente=codex peso=1 vagas=1 modelo=gpt-6.1-sol
 agy      agente=antigravity vagas=1 papeis=segunda-opiniao
+kimi     agente=kimi vagas=1
+minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minimax papeis=escritor
+# kimi sem papeis: só medido; minimax escreve porque o dev instalou as regras e a trava no opencode (GUIA 4b).
 ```
 
 - Chaves: `agente` (chave do catálogo, obrigatória), `config` (pasta `CLAUDE_CONFIG_DIR` de uma conta Claude), `comando`, `args`, `modelo`, `vagas` (0 = ilimitado), `papeis` (`escritor revisor verificador mecanico segunda-opiniao orquestra`; padrão `escritor,revisor,verificador,mecanico` só para `claude`, `codex` e `antigravity`, que têm a trava de comando remoto; os demais agentes nascem sem papel — só medição e fora do pool — e só trabalham com `papeis=` escrito, depois de instaladas neles as regras e a trava da fase 4b do GUIA; vazio ou só `orquestra` = medida, nunca escolhida), `medidor` (`claude`, `orca:<fornecedor>` ou `-`).

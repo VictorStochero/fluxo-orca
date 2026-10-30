@@ -111,6 +111,7 @@ case "${1:-}" in
             [ "$maquina_ocupadas" -ge "$CONTAS_TETO" ] && { echo "POOL CHEIO: teto da máquina ($CONTAS_TETO)" >&2; exit 75; }
             [ "$total" = 0 ] && total=$CONTAS_TETO
         fi
+        [ "$total" != 0 ] && [ "$ocupadas" -ge "$total" ] && { echo "POOL CHEIO: $conta" >&2; exit 75; }
         if [ "$RAM_MIN_GB" != 0 ]; then
             ram="$(dirname "$0")/../delegacao/orca-ram.sh"
             [ -f "$ram" ] || ram="$(dirname "$0")/orca-ram.sh"
@@ -118,7 +119,6 @@ case "${1:-}" in
             [ $? = 75 ] && exit 75
         fi
         [ "$total" = 0 ] && exit 0
-        [ "$ocupadas" -ge "$total" ] && { echo "POOL CHEIO: $conta" >&2; exit 75; }
         for ((i=1; i<=total; i++)); do
             v="$dir/$conta.lock$i"
             if mkdir "$v" 2>/dev/null; then
