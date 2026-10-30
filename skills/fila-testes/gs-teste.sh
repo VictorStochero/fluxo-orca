@@ -27,6 +27,12 @@ comum=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 VAGAS=${GS_TESTE_VAGAS:-2}
 TETO=${GS_TESTE_TETO:-3}
 PROCESSOS=${GS_TESTE_PROCESSOS:-8}
+modo=${GS_TESTE_FILA:-recurso}
+case "$modo" in
+    recurso) ;;
+    projeto) VAGAS=${GS_TESTE_VAGAS_PROJETO:-1} ;;
+    *) echo 'GS_TESTE_FILA deve ser recurso ou projeto.' >&2; exit 2 ;;
+esac
 
 stack=outro
 args=()
@@ -88,7 +94,12 @@ porta=${porta:-3306}
 mkdir -p "$HOME/.cache"
 executor=${runner%% *}
 [ -z "$executor" ] && executor=${args[0]:-}
-if [ $stack != laravel ]; then
+if [ "$modo" = projeto ]; then
+    principal=${comum:+$(dirname "$comum")}
+    nome=$(basename "${principal:-$(pwd)}")
+    nome=$(printf '%s' "$nome" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C tr -c 'a-z0-9_-' '_')
+    trava=$HOME/.cache/gs-teste-proj-$nome.lock
+elif [ $stack != laravel ]; then
     trava=$HOME/.cache/gs-teste-geral.lock
 elif case "${executor##*/}" in ddev|sail|docker|podman) true ;; *) false ;; esac; then
     trava=$HOME/.cache/gs-teste-ctr.lock
@@ -125,7 +136,7 @@ remove_morta() { # trava pid_esperado
 limite=$((SECONDS + 300))
 # Pega uma vaga em <base>1..<n> e põe o caminho em $L. checa_dono=1: espera se este mesmo dono já ocupa vaga da fila.
 pega_vaga() { # base vagas checa_dono
-    local base=$1 n=$2 checa=$3 i v d p dono idade mesmo
+    local base=$1 n=$2 checa=$3 i v d p dono idade mesmo avisou=0 ocupantes
     L=""
     while [ -z "$L" ]; do
         mesmo=0
@@ -149,7 +160,12 @@ pega_vaga() { # base vagas checa_dono
             fi
         done
         [ -n "$L" ] && break
-        if [ $SECONDS -ge $limite ]; then echo "FILA OCUPADA — rode de novo"; exit 75; fi
+        ocupantes=""
+        for v in "$base"[0-9]*; do
+            [ -d "$v" ] && ocupantes="$ocupantes $(cat "$v/dono" 2>/dev/null)"
+        done
+        if [ $SECONDS -ge $limite ]; then echo "FILA OCUPADA — ${base##*/}:$ocupantes — rode de novo"; exit 75; fi
+        if [ "$avisou" = 0 ]; then echo "Aguardando fila ${base##*/}:$ocupantes" >&2; avisou=1; fi
         sleep 5
     done
     echo $$ > "$L/pid"; echo "$eu desde $(date +%T): $runner ${args[*]}" > "$L/dono"

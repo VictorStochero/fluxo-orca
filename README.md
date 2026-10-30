@@ -18,6 +18,8 @@ agy agente=antigravity vagas=1 papeis=segunda-opiniao
 `peso` multiplica o ritmo (`escolha=ordem` ignora); `teto=0` deixa a máquina ilimitada. `CONTAS_ADVISOR` define o advisor do escritor Claude (padrão `opus`, vazio desliga); `LIMITES_CACHE_MIN` controla o cache de cota (padrão 5, 0 desliga). O alerta do coordenador mede a cada 20 minutos. Segunda opinião: `limites.sh --segunda --familia <claude|gpt|gemini>`, com preferência por Gemini do agy, grupo misto do agy e Codex, conforme cota e família.
 
 ## Instalar
+Para separar projetos que usam o mesmo banco, `GS_TESTE_FILA=projeto` usa uma fila por projeto, compartilhada pelos worktrees, com `GS_TESTE_VAGAS_PROJETO=1` por padrão. O teto da máquina continua valendo; o modo padrão `recurso` permanece por porta/container/geral.
+
 
 Instale o Claude Code e mande para ele:
 

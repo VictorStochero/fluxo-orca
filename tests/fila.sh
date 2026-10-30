@@ -8,6 +8,29 @@ falhas=0
 ok() { echo "ok   $1"; }
 ruim() { echo "FALHA $1"; falhas=$((falhas + 1)); }
 
+projeto() (
+    export HOME="$tmp/projeto-home" FILAS_REGISTRO="$tmp/filas"
+    mkdir -p "$HOME" "$tmp/Projeto A" "$tmp/projeto-b"
+    for p in "$tmp/Projeto A" "$tmp/projeto-b"; do
+        git -C "$p" init -q -b main
+        git -C "$p" -c user.name=t -c user.email=t@t commit -q --allow-empty -m inicial
+    done
+    git -C "$tmp/Projeto A" worktree add -q --detach "$tmp/worktree-a"
+    git -C "$tmp/Projeto A" worktree add -q --detach "$tmp/worktree-b"
+    cat > "$tmp/confere-fila.sh" <<'E'
+for v in "$HOME"/.cache/gs-teste-proj-*.lock[0-9]*; do
+    [ -d "$v" ] && printf '%s\n' "${v##*/}" >> "$FILAS_REGISTRO"
+done
+E
+    for p in "$tmp/worktree-a" "$tmp/worktree-b" "$tmp/projeto-b"; do
+        (cd "$p" && GS_TESTE_FILA=projeto bash "$raiz/skills/fila-testes/gs-teste.sh" -- bash "$tmp/confere-fila.sh") || exit 1
+    done
+    esperado=$(printf 'gs-teste-proj-projeto_a.lock1\ngs-teste-proj-projeto_a.lock1\ngs-teste-proj-projeto-b.lock1')
+    [ "$(cat "$FILAS_REGISTRO" 2>/dev/null)" = "$esperado" ]
+)
+if projeto; then ok 'projeto: worktrees compartilham fila e projetos distintos têm filas distintas'; else ruim 'filas por projeto'; fi
+if [ "${FILA_SOMENTE_PROJETO:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?; fi
+
 # Guarda dos externos roda de ~/.cache, ao lado do e-teste.sh.
 cp "$raiz/hooks/guarda-externos.sh" "$raiz/skills/fila-testes/e-teste.sh" "$tmp/"
 
