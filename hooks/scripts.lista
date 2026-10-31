@@ -14,5 +14,6 @@ skills/delegacao/orca-ram.sh
 skills/delegacao/orca-libera.sh
 skills/delegacao/orca-inicia.sh
 skills/delegacao/orca-tela.sh
+skills/delegacao/painel.sh
 hooks/guarda-externos.sh
 hooks/fim-worker.sh
