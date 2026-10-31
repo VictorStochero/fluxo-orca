@@ -21,7 +21,9 @@ agy agente=antigravity vagas=1 papeis=segunda-opiniao
 
 Para separar projetos que usam o mesmo banco, `FILA_TESTE_FILA=projeto` usa uma fila por projeto, compartilhada pelos worktrees, com `FILA_TESTE_VAGAS_PROJETO=1` por padrão. O teto da máquina continua valendo; o modo padrão `recurso` permanece por porta/container/geral. Use `bash ~/.cache/fila-teste.sh`; o atalho `gs-teste.sh` e as variáveis `GS_TESTE_*` continuam aceitos por compatibilidade, com prioridade para `FILA_TESTE_*`. Os nomes das travas permanecem iguais.
 
-## Instalar
+## Passe para a IA
+
+### Instalar
 
 Instale o Claude Code e mande para ele:
 
@@ -33,6 +35,12 @@ O Claude diagnostica o sistema, as ferramentas e os projetos, instala o que cons
 /plugin marketplace add VictorStochero/claude-plugins
 /plugin install fluxo-orca@stochero
 ```
+
+### Atualizar
+
+Máquina já instalada: mande para o Claude Code (ou para o agente que coordena):
+
+> Siga a seção "Atualizar (máquina já instalada)" do https://github.com/VictorStochero/fluxo-orca/blob/main/GUIA.md e atualize esta máquina, com a "Ação manual ao atualizar" de cada versão que pulei.
 
 ## Conteúdo
 
