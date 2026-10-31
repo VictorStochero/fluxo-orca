@@ -30,6 +30,14 @@ agy agente=antigravity vagas=1 papeis=segunda-opiniao
 
 `ram_min=<GB>` (padrão 0, desligado; decimal com ponto) define `RAM_MIN_GB`: `vaga-agente.sh pega` consulta a RAM disponível no Orca após o teto e recusa a reserva com exit 75 abaixo do mínimo; leitura indisponível ou ilegível só avisa. Antes de cada onda, rode `bash ~/.cache/orca-ram.sh` para ver RAM disponível e sessões com CPU 0 por memória; workers concluídos e retidos vêm com sugestão de `orca-libera.sh`, sem executar liberação. `orca-espera.sh` avisa uma vez por queda abaixo do mínimo configurado.
 
+## Atualizar (máquina já instalada)
+Sem repetir as fases; o que muda em cada versão e pede ação manual vai no aviso da versão (descrição do PR na `main`).
+1. `claude plugin marketplace update stochero`, depois `claude plugin update <plugin>@stochero` para cada plugin instalado do marketplace (`fluxo-orca`, `auditoria-pre-subida`, `laravel-worktree`).
+2. Fechar e reabrir **todas** as sessões do Claude Code: o SessionStart recopia para `~/.cache` os scripts de `hooks/scripts.lista` e o `~/.claude/agents/somente-leitura.json`; sessão aberta segue com os hooks da versão anterior.
+3. Agentes externos: `bash ~/.cache/instala-agente.sh <agente> --aplicar` para cada um (regras, skills e trava; idempotente). Com `[aviso] cópia antiga sem marcador`, remover a cópia e rodar de novo. Abrir o agente uma vez (Codex: aprovar em `/hooks` se pedir).
+4. Quem coordena sem Claude Code: `git -C ~/fluxo-orca pull` e `bash ~/fluxo-orca/instalar.sh --agente <id> --aplicar`.
+5. Conferir: `bash ~/.cache/contas.sh lista` aceita o `~/.claude/agentes.conf` e `bash ~/.cache/limites.sh` mede as contas.
+
 ## Fase 1 — Diagnóstico (só leitura)
 Rodar e anotar:
 - **Sistema**: Windows (versão; WSL?), Linux (distro: `/etc/os-release`), macOS (`sw_vers`). Arquitetura.
