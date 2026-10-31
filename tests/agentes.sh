@@ -35,6 +35,8 @@ igual 'exit2: teste fora da fila sai 2' 2 $?
 if command -v node >/dev/null 2>&1; then
     cp "$raiz/extras/opencode-guarda.js" "$tmp/guarda.mjs"
     cat > "$tmp/roda.mjs" <<'E'
+// os.homedir() no Windows lê USERPROFILE, não HOME: sem isto o plugin usaria o ~/.cache real.
+process.env.USERPROFILE = process.env.HOME
 const { FluxoGuarda } = await import(process.argv[2])
 const h = await FluxoGuarda()
 try { await h["tool.execute.before"]({ tool: "bash" }, { args: { command: process.argv[3] } }); console.log("passou") }
