@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse dos CLIs despachados sem humano (agy, codex): nega comando remoto, bulk replace e teste fora da fila.
-# Uso: guarda-externos.sh [exit2|agy|codex] — exit2 = stderr + exit 2 (padrão genérico); agy = JSON {"decision":...}; codex = JSON hookSpecificOutput deny (exit 2 o Codex trata como falha e deixa passar).
+# Uso: guarda-externos.sh [exit2|agy|codex|gemini] — exit2 = stderr + exit 2 (padrão genérico; Kimi, ZCode, plugin do opencode); agy = JSON {"decision":...}; codex = JSON hookSpecificOutput deny (exit 2 o Codex trata como falha e deixa passar); gemini = JSON {"decision":"deny"} só quando nega (stdout sem mais nada).
 formato=${1:-exit2}
 in=$(cat)
 motivo=""
@@ -10,7 +10,7 @@ elif printf '%s' "$in" | grep -qE '"replace_all"[[:space:]]*:[[:space:]]*true' \
     || printf '%s' "$in" | grep -qE '(^|[^[:alnum:]_-])(sed|perl)[[:space:]]+(-[[:alnum:]]*[[:space:]]+)*-[[:alnum:]]*i'; then
     motivo="Bulk replace bloqueado (sed -i, perl -i, replace_all): edite uma ocorrência por vez."
 elif printf '%s' "$in" | bash "$(dirname "$0")/e-teste.sh"; then
-    motivo="Teste bloqueado: rode pela fila única da máquina -> bash ~/.cache/gs-teste.sh <argumentos> (detecta a stack) ou bash ~/.cache/gs-teste.sh -- <comando> (se responder FILA OCUPADA, rode de novo)."
+    motivo="Teste bloqueado: rode pela fila única da máquina -> bash ~/.cache/fila-teste.sh <argumentos> (detecta a stack) ou bash ~/.cache/fila-teste.sh -- <comando> (se responder FILA OCUPADA, rode de novo)."
 fi
 if [ "$formato" = agy ]; then
     if [ -n "$motivo" ]; then
@@ -18,6 +18,10 @@ if [ "$formato" = agy ]; then
     else
         printf '{"decision":"ask"}\n'
     fi
+    exit 0
+fi
+if [ "$formato" = gemini ]; then
+    [ -n "$motivo" ] && printf '{"decision":"deny","reason":"%s"}\n' "$motivo"
     exit 0
 fi
 if [ "$formato" = codex ]; then

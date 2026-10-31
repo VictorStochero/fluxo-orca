@@ -1,14 +1,20 @@
-# Regras globais — agentes externos (Codex, opencode, Antigravity/agy)
+# Regras globais — qualquer agente (worker ou coordenador): Codex, Gemini, Kimi, opencode, ZCode, Antigravity/agy…
 
-Fonte única em `~/.agents/AGENTS.md`; `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md` e `~/.gemini/config/AGENTS.md` são links para este arquivo. Equivalente ao `~/.claude/CLAUDE.md` do Claude Code.
+Instalado pelo `instalar.sh --agente <id>` (ou `skills/limites-cota/instala-agente.sh <id>`) no arquivo global de regras do agente, dentro do bloco `fluxo-orca:inicio … fluxo-orca:fim` (reexecutar atualiza só o bloco). Equivalente ao `~/.claude/CLAUDE.md` do Claude Code.
 
-Skills em `~/.agents/skills` (cópia das skills do plugin `fluxo-orca`, mantida pelo hook de SessionStart do Claude Code, + `orca-cli`, `orchestration`, `computer-use` do Orca) — carregar quando a tarefa tocar o assunto: `ambiente-local` (perfil em `~/.claude/ambiente.md`), `board-github` (boards em `~/.claude/boards.md`), `fila-testes` (todo teste pela fila da máquina; estado da fila), `limites-cota` (uso das contas, pool de agentes e escolha do escritor), `worktree-orca`, `stack-*`; metodologia: `systematic-debugging` antes de corrigir bug, `test-driven-development`, `verification-before-completion` antes de declarar pronto, `receiving-code-review`.
+Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das skills do plugin `fluxo-orca` + `orca-cli`, `orchestration`, `computer-use` do Orca); agente sem diretório de skills recebe o índice com o caminho de cada `SKILL.md` — ler o arquivo sob demanda. Carregar quando a tarefa tocar o assunto: `ambiente-local` (perfil em `~/.claude/ambiente.md`), `board-github` (boards em `~/.claude/boards.md`), `fila-testes` (todo teste pela fila da máquina; estado da fila), `limites-cota` (uso das contas, pool de agentes e escolha do escritor), `worktree-orca`, `stack-*`; metodologia: `systematic-debugging` antes de corrigir bug, `test-driven-development`, `verification-before-completion` antes de declarar pronto, `receiving-code-review`.
 
 ## Idioma
 - **SEMPRE ESCREVER EM ptBR** — respostas, commits, PRs, issues, comentários. Código e nomes técnicos seguem o projeto.
 
-## Antigravity (agy)
-- Papel único: **segunda opinião read-only** (revisão, contraprova). Não editar arquivos, não rodar testes, build, migração ou git que escreve; responder com veredito e achados verificáveis.
+## Segunda opinião (agy e agente sem trava de comando)
+- Antigravity (agy) e todo agente sem hook antes de comando (ex.: cursor-agent) têm papel único: **segunda opinião read-only** (revisão, contraprova). Não editar arquivos, não rodar testes, build, migração ou git que escreve; responder com veredito e achados verificáveis.
+
+## Como coordenador (sessão principal sem Claude Code)
+- Equivalentes genéricos das ferramentas do Claude Code: **pergunta interativa ao usuário** (`AskUserQuestion`) = o recurso de pergunta/escolha do seu agente; sem ele, uma pergunta no texto com contexto para decidir e a opção recomendada marcada, uma decisão por vez. **Consulta curta read-only** (`Agent tool`/Explore) = o subagente ou a busca somente leitura do seu agente. **Trabalho** (escritor, revisor, auditoria) = worker do Orca pela skill `orchestration`, nunca na própria sessão.
+- Hooks do plugin (bloqueio de bulk replace, de teste fora da fila, de despacho fora do Orca, de SQL fora de transação) **não existem fora do Claude Code**: valem como regra escrita, que você cumpre sozinho. A trava de comando remoto só existe onde o agente tem hook (`instala-agente.sh` mostra). Conferir antes de despachar: `bash ~/.cache/limites.sh --escritor` e `bash ~/.cache/vaga-agente.sh livres`.
+- Antes de despachar: skill `delegacao` (worktree por tarefa, pacote de revisão, merge só depois do gate) e `limites-cota` (quem escreve). Antes de declarar pronto: reexecutar os testes pela fila e conferir o diff arquivo a arquivo — relatório de worker é indício, não prova.
+- Ação remota (servidor, produção): mostrar o comando exato, o alvo e o efeito, e esperar aprovação expressa do usuário, um comando por vez.
 
 ## Como worker do Orca
 - Prompt com preâmbulo de Task/Dispatch IDs = worker supervisionado: seguir o preâmbulo, uma tarefa só, `worker_done` uma vez com resumo de 3 frases, hash do commit, divergências e `--outcome succeeded|failed`.
@@ -29,7 +35,7 @@ Skills em `~/.agents/skills` (cópia das skills do plugin `fluxo-orca`, mantida 
 - Censo e auditoria com busca nativa (rg/grep sem pipe que resuma) — quanto mais limpa a resposta, mais suspeita.
 
 ## Testes e validação
-- **Testes só pela fila**: `bash ~/.cache/gs-teste.sh <argumentos>` (exit 75 = `FILA OCUPADA`, rodar de novo). Nunca o comando de teste direto. Um arquivo por chamada.
+- **Testes só pela fila**: `bash ~/.cache/fila-teste.sh <argumentos>` (exit 75 = `FILA OCUPADA`, rodar de novo). Nunca o comando de teste direto. Um arquivo por chamada.
 - **Relatório e log fora do repo**: evidência vai no `worker_done` e no PR; arquivo de apoio em `~/.cache/handoff/<tarefa>/`, nunca versionado (`reports/`, `*.log`).
 - Nenhuma chamada passa de 10 min: dividir por arquivo e **commitar antes de verificação longa**. Gravar o relatório em arquivo desde o primeiro achado.
 - Após cada etapa: formatador/linter da stack nos arquivos tocados; teste de regressão (sem teste no caminho, criar um mínimo); falhou → não declarar concluído.

@@ -19,10 +19,16 @@ if [ "$1 $2 $3" = 'account list --json' ]; then
     longa=weekly; min=10080; [ -n "${POOL_CODEX_MENSAL:-}" ] && { longa=monthly; min=43200; }
     agy=""
     # Antigravity com um grupo acima de 80% e outro abaixo.
-    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":10,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":85,"windowMinutes":10080,"resetsAt":%s}]}' "$zs" "$zs")
+    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s}]}' "${POOL_AGY_GEMINI:-10}" "$zs" "${POOL_AGY_MISTO:-85}" "$zs")
     printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}%s}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs" "$agy"
     exit 0
 fi
+[ "$1 $2 $3" = 'diagnostics memory --json' ] && {
+    touch "$POOL_ESTADOS/ram-consultada"
+    case "${POOL_RAM_FALHA:-}" in fora) exit 1 ;; invalido) echo 'json inválido'; exit 0 ;; esac
+    printf '{"ok":true,"result":{"host":{"availableMemory":%s}}}\n' "$(( ${POOL_RAM_GB:-4} * 1073741824 ))"
+    exit 0
+}
 [ "$1 $2 $3 $5" = 'orchestration worker-show --dispatch --json' ] || exit 2
 estado=$(cat "$POOL_ESTADOS/$4" 2>/dev/null || echo pending)
 case "$estado" in
@@ -54,6 +60,29 @@ pool_sem_associativo() {
         source "$1" "${@:2}"
     ' bash "$raiz/skills/limites-cota/vaga-agente.sh" "$@"
 }
+printf 'ram_min=3\na agente=claude vagas=1\ni agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
+POOL_RAM_GB=2 confere_rc 75 'RAM: abaixo do mínimo bloqueia' pool pega a ctx_ram
+grep -q 'POOL CHEIO: memória (2,0 GB livres, mínimo 3)' "$tmp/saida" && ok 'RAM: diagnóstico' || ruim 'RAM: diagnóstico incorreto'
+POOL_RAM_GB=2 confere_rc 75 'RAM: conta ilimitada também respeita mínimo' pool pega i ctx_ram
+POOL_RAM_GB=4 confere_rc 0 'RAM: acima do mínimo libera' pool pega a ctx_ram
+rm -f "$POOL_ESTADOS/ram-consultada"
+POOL_RAM_GB=0 confere_rc 75 'RAM: conta cheia dispensa consulta' pool pega a ctx_ram2
+grep -q 'POOL CHEIO: a' "$tmp/saida" && [ ! -e "$POOL_ESTADOS/ram-consultada" ] && ok 'RAM: vaga da conta antes da consulta' || ruim 'RAM: consultou conta cheia'
+pool solta ctx_ram
+POOL_RAM_FALHA=fora confere_rc 0 'RAM: Orca fora não bloqueia' pool pega a ctx_ram
+pool solta ctx_ram
+POOL_RAM_FALHA=invalido confere_rc 0 'RAM: JSON inválido não bloqueia' pool pega a ctx_ram
+pool solta ctx_ram
+printf 'a agente=claude vagas=1\n' > "$HOME/.claude/agentes.conf"
+POOL_RAM_GB=0 confere_rc 0 'RAM: ausente não muda comportamento' pool pega a ctx_ram
+pool solta ctx_ram
+printf 'ram_min=3\nteto=1\na agente=claude vagas=1\n' > "$HOME/.claude/agentes.conf"
+POOL_RAM_GB=2 confere_rc 75 'RAM: bloqueia dentro da trava da máquina' pool pega a ctx_ram
+POOL_RAM_GB=4 confere_rc 0 'RAM: bloqueio devolve a trava da máquina' pool pega a ctx_ram
+pool solta ctx_ram
+rm "$HOME/.claude/agentes.conf"
+if [ "${POOL_SOMENTE_RAM:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?; fi
+
 printf 'team=2\npessoal=0\ncodex=3\nagy=5\n' > "$HOME/.claude/agentes.conf"
 confere_rc 0 'pool funciona sem arrays associativos' pool_sem_associativo livres
 for esperado in 'team 2/2' 'pessoal 0/0' 'codex 3/3' 'agy 5/5'; do
@@ -123,7 +152,17 @@ grep -q '^claude-b ' "$tmp/saida" && ruim 'claude-b só medida apareceu no pool'
 confere_rc 2 'claude-b só medida: pega rejeitada' pool pega claude-b ctx_cb
 rmdir "$HOME/.claude-b"
 
-# Registro do dev: contas pessoais e agentes fora da lista antiga.
+# Registro do dev: contas pessoais e agentes fora da lista antiga. Agente novo só trabalha com a trava provada (testado=data no catálogo).
+while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in
+        '' | '#'*) printf '%s\n' "$l" ;;
+        *) IFS='|' read -r c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 <<< "$l"
+           c6=sim; c10=2026-10-30 # qualquer agente do catálogo, para o pool não depender da regra de trava
+           printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6" "$c7" "$c8" "$c9" "$c10" "$c11" ;;
+    esac
+done < "$raiz/skills/limites-cota/agentes-catalogo.conf" > "$tmp/catalogo-provado.conf"
+export CONTAS_CATALOGO="$tmp/catalogo-provado.conf"
+mkdir -p "$HOME/.cache"; for ag in opencode aider; do date +%F > "$HOME/.cache/trava-$ag.ok"; done
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 dev2    agente=claude config=~/.claude-dev2 vagas=1
 minimax agente=opencode vagas=1 medidor=orca:minimax papeis=escritor
@@ -164,7 +203,12 @@ EOF
 chmod +x "$tmp/bin/claude" "$tmp/bin/codex"
 cp "$tmp/bin/codex" "$tmp/bin/agy"
 export PATH="$tmp/bin:$PATH"
+export LIMITES_CACHE_MIN=0
 seletor() { bash "$tmp/seletor/limites.sh" --escritor; }
+printf '\necho chamada >> "$POOL_ESTADOS/medicoes"\n' >> "$tmp/bin/claude"
+LIMITES_CACHE_MIN=5 confere_rc 0 'cache: primeira medição' seletor
+LIMITES_CACHE_MIN=5 confere_rc 0 'cache: segunda chamada' seletor
+[ "$(wc -l < "$POOL_ESTADOS/medicoes")" = 2 ] && ok 'cache mede cada conta uma vez' || ruim 'cache repetiu medição'
 confere_rc 0 'seleção com vagas' seletor
 grep -qx 'escritor: team (ritmo 1.8 · 90% livre, zera em 84h)' "$tmp/saida" \
     && ok 'escolhe maior ritmo' || ruim 'maior ritmo incorreto'
@@ -350,6 +394,46 @@ compgen -G "$HOME/.cache/agentes/pessoal.lock*" >/dev/null && ruim 'pessoal ilim
 unset POOL_TEAM_SEMANA_USO POOL_CODEX_SEMANA
 
 pool solta ctx_s1 2>/dev/null
+# Segunda opinião escolhe cada grupo, preservando a diversidade de família.
+POOL_AGY_ALTO=1 confere_rc 0 'segunda: Gemini mesmo com misto alto' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy gemini-models modelo=gemini-4-argon-high ' "$tmp/saida" && ok 'segunda prefere Gemini' || ruim 'Gemini livre excluído'
+POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 POOL_AGY_MISTO=20 confere_rc 0 'segunda: misto GPT contra Claude' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy claude-and-gpt-models modelo=gpt-oss-120b-medium ' "$tmp/saida" && ok 'segunda usa GPT no misto' || ruim 'família do misto incorreta'
+POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 POOL_AGY_MISTO=20 confere_rc 0 'segunda: misto Claude contra GPT' bash "$tmp/seletor/limites.sh" --segunda --familia gpt
+grep -q '^segunda: agy claude-and-gpt-models modelo=claude-opus-5-5-high ' "$tmp/saida" && ok 'segunda usa Claude no misto' || ruim 'Claude do misto excluído'
+POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 confere_rc 0 'segunda: fallback codex' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: codex - modelo=gpt-6.1-sol ' "$tmp/saida" && ok 'segunda cai para codex' || ruim 'fallback codex ausente'
+POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 confere_rc 75 'segunda: GPT sem outra família livre' bash "$tmp/seletor/limites.sh" --segunda --familia gpt
+grep -qx 'segunda: nenhuma (cota)' "$tmp/saida" && ok 'segunda esgotada informa cota' || ruim 'diagnóstico da segunda'
+
+# Peso altera o ritmo, mas a ordem explícita continua soberana.
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+team agente=claude config=~/.claude-team
+pessoal agente=claude peso=5 vagas=0
+EOF
+confere_rc 0 'peso: plano maior vence' seletor
+grep -q '^escritor: pessoal .*peso 5' "$tmp/saida" && ok 'peso multiplica o ritmo' || ruim 'peso ignorado'
+printf 'escolha=ordem\nteam agente=claude config=~/.claude-team\npessoal agente=claude peso=5 vagas=0\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'peso: ordem ignora o peso' seletor
+grep -q '^escritor: team ' "$tmp/saida" && ok 'ordem preservada' || ruim 'peso mudou ordem'
+
+# Teto também conta contas ilimitadas e vagas fora do registro atual.
+printf 'teto=2\na agente=claude vagas=1\nb agente=claude vagas=1\nc agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'teto: primeira conta' pool pega a ctx_t1
+confere_rc 0 'teto: segunda conta' pool pega b ctx_t2
+confere_rc 0 'teto: idempotência quando cheio' pool pega a ctx_t1
+confere_rc 75 'teto: bloqueia ilimitada' pool pega c ctx_t3
+grep -q 'POOL CHEIO: teto da máquina (2)' "$tmp/saida" && ok 'diagnóstico do teto' || ruim 'diagnóstico incorreto'
+pool livres > "$tmp/livres"
+grep -qx 'maquina 0/2' "$tmp/livres" && ok 'livres mostra teto' || ruim 'teto ausente'
+echo completed > "$POOL_ESTADOS/ctx_t1"
+confere_rc 0 'teto: morta libera para ilimitada' pool pega c ctx_t3
+[ -f "$HOME/.cache/agentes/c.lock1/dispatch" ] && ok 'ilimitada contada no teto' || ruim 'ilimitada sem trava'
+confere_rc 75 'teto: ilimitada ocupa teto' pool pega c ctx_t4
+printf 'teto=2\nc agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
+confere_rc 75 'teto: conta removida continua ocupando' pool pega c ctx_t4
+pool solta ctx_t2; pool solta ctx_t3
+rm "$HOME/.claude/agentes.conf"
 rmdir "$HOME/.claude-team"
 mkdir -p "$tmp/pessoal-bin"
 cp "$tmp/bin/claude" "$tmp/pessoal-bin/"
@@ -363,6 +447,8 @@ grep -qx 'escritor: pessoal (ritmo 0.7 · 70% livre, zera em 168h)' "$tmp/saida"
 confere_rc 0 'hook instala scripts em HOME temporário' env CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh"
 cmp -s "$raiz/skills/limites-cota/vaga-agente.sh" "$HOME/.cache/vaga-agente.sh" \
     && ok 'script do pool instalado' || ruim 'instalação do pool'
+cmp -s "$raiz/skills/delegacao/orca-ram.sh" "$HOME/.cache/orca-ram.sh" \
+    && ok 'relatório de RAM instalado' || ruim 'instalação do relatório de RAM'
 cmp -s "$raiz/skills/limites-cota/medidores/orca.sh" "$HOME/.cache/medidores/orca.sh" && [ -f "$HOME/.cache/contas.sh" ] \
     && [ -f "$HOME/.cache/agentes-catalogo.conf" ] && ok 'registro e medidores instalados' || ruim 'instalação do registro e dos medidores'
 

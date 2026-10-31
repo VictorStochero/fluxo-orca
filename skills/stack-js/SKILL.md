@@ -21,7 +21,7 @@ description: Use antes de escrever, revisar ou testar código num projeto JavaSc
 ## Validar (após cada etapa)
 1. Formatar e lintar os arquivos tocados com o configurado: `eslint --fix <arquivos>` + `prettier --write <arquivos>`, ou `biome check --write <arquivos>`.
 2. Tipos: o script `typecheck` ou `tsc --noEmit` (com `tsconfig.json`).
-3. Teste de regressão pela fila: `bash ~/.cache/gs-teste.sh <arquivo ou filtro>` (detecta o gerenciador e roda o script `test`); comando explícito: `bash ~/.cache/gs-teste.sh -- pnpm vitest run <arquivo>`.
+3. Teste de regressão pela fila: `bash ~/.cache/fila-teste.sh <arquivo ou filtro>` (detecta o gerenciador e roda o script `test`); comando explícito: `bash ~/.cache/fila-teste.sh -- pnpm vitest run <arquivo>`.
 4. Listar sem rodar: `vitest list` ou `jest --listTests`.
 5. Front com tela: validar no navegador (skill `orca-cli`), com perfil real.
 

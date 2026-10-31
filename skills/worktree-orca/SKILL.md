@@ -48,7 +48,7 @@ WT_SEM_SEED=1                      # Laravel: só migrate
 WT_BUILD=0                         # Laravel: sem npm run build
 WT_COPIAR=".mcp.json .claude/settings.local.json"   # arquivos locais copiados do principal
 WT_PORTA_BASE=8000                 # nativo: porta = base + 1..900
-GS_TESTE_RUNNER="docker compose exec -T web pytest" # comando de teste da fila (skill fila-testes)
+FILA_TESTE_RUNNER="docker compose exec -T web pytest" # comando de teste da fila (skill fila-testes)
 WT_POS_SETUP() { php artisan tenants:seed --force; }  # passo extra no fim
 ```
 

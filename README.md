@@ -1,6 +1,25 @@
 # fluxo-orca
 
-Plugin do Claude Code (pt-BR) com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), todo diff passa por um revisor Opus antes do merge e os testes rodam por filas da máquina (2 vagas por recurso, teto global de 3). Hooks impõem as regras.
+Plugin do Claude Code (pt-BR), versão **2.11.0**, com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), o merge passa por um gate Opus e os testes rodam por filas da máquina (2 vagas por recurso, teto global de 3). Hooks impõem as regras.
+
+O gate é a auditoria em repositório que versiona `.auditoria-pre-subida` (auditor Opus, verificador só com achado); nos demais, o revisor Opus é obrigatório. O pacote contém pedido/issue original, critério copiado do board, diff e interfaces, sem resumo ou justificativa de quem pede o merge. A sessão principal prova cada teste novo de correção falhando no código do merge-base. Pagamento, autorização/permissão, autenticação e alteração de dado de produção exigem segunda opinião de outra família sobre o diff: “ache o caso que quebra”.
+
+Papéis Claude só leitura usam sempre `--settings ~/.claude/agents/somente-leitura.json`, sem MCP de navegador. A conta principal pode revisar/verificar; conta com só `orquestra` continua fora do pool. Exemplo de `~/.claude/agentes.conf`:
+
+```text
+escolha=ritmo
+teto=4
+ram_min=3
+pessoal agente=claude peso=10 vagas=1 papeis=orquestra,escritor,revisor,verificador
+team agente=claude config=~/.claude-team peso=1 vagas=1 papeis=escritor
+claude-b agente=claude config=~/.claude-b peso=5 vagas=2 papeis=escritor,revisor
+codex agente=codex peso=1 vagas=1 papeis=escritor
+agy agente=antigravity vagas=1 papeis=segunda-opiniao
+```
+
+`peso` multiplica o ritmo (`escolha=ordem` ignora); `teto=0` deixa a máquina ilimitada. `ram_min` define a RAM disponível mínima em GB para novas reservas (0 desliga); falha de leitura avisa sem bloquear. Antes da onda, `bash ~/.cache/orca-ram.sh` mostra sessões ociosas por memória e sugere liberações de workers concluídos e retidos; só lê, nunca fecha nada. `CONTAS_ADVISOR` define o advisor do escritor Claude (padrão `opus`, vazio desliga); `LIMITES_CACHE_MIN` controla o cache de cota (padrão 5, 0 desliga). O alerta do coordenador mede cota a cada 20 minutos e avisa uma vez por queda de RAM abaixo do mínimo. Segunda opinião: `limites.sh --segunda --familia <claude|gpt|gemini>`, com preferência por Gemini do agy, grupo misto do agy e Codex, conforme cota e família.
+
+Para separar projetos que usam o mesmo banco, `FILA_TESTE_FILA=projeto` usa uma fila por projeto, compartilhada pelos worktrees, com `FILA_TESTE_VAGAS_PROJETO=1` por padrão. O teto da máquina continua valendo; o modo padrão `recurso` permanece por porta/container/geral. Use `bash ~/.cache/fila-teste.sh`; o atalho `gs-teste.sh` e as variáveis `GS_TESTE_*` continuam aceitos por compatibilidade, com prioridade para `FILA_TESTE_*`. Os nomes das travas permanecem iguais.
 
 ## Instalar
 
@@ -24,9 +43,27 @@ O Claude diagnostica o sistema, as ferramentas e os projetos, instala o que cons
 | Metodologia | `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `receiving-code-review` |
 | Agentes | `escritor` (Sonnet), `revisor` e `verificador` (Opus, só leitura) |
 | Hooks | `fila-testes`, `bloqueia-bulk`, `despacho-orca`, `guia-laravel`, `exige-transacao` (SQL de alteração via ssh/forge só em transação, COMMIT após ensaio com ROLLBACK), `instala-scripts`, `fim-worker` (worker do Orca não encerra sem `worker_done`); `guarda-externos` para os agentes externos |
-| Scripts (em `~/.cache`) | `gs-teste.sh` (fila: 2 vagas por recurso, teto global `GS_TESTE_TETO` de 3) + `e-teste.sh` (detector de comando de teste, compartilhado com Codex/agy pelo `guarda-externos.sh`), `wt-setup.sh`/`wt-archive.sh`/`wt-lib.sh` (worktree pelo Orca), `orca-espera.sh` (espera do coordenador: ack, estado real dos workers), `orca-inicia.sh` (`worker-start` com saída de uma linha; recibo em `~/.cache/orca-recibos/`), `orca-tela.sh` (últimas linhas úteis da tela de um terminal), `orca-libera.sh` (fecha o ciclo do worker: release, aba criada pelo `--cria` e vaga do pool), `vaga-agente.sh` (pool de agentes por conta da máquina), `contas.sh` + `agentes-catalogo.conf` (registro de contas sobre o catálogo dos 45 agentes do Orca, lido do `~/.claude/agentes.conf`), `limites.sh` + `medidores/` (cota por conta: `/usage` das contas Claude e `orca account list` para Codex, Antigravity, Kimi, MiniMax e demais; Kimi e MiniMax não testados com conta real), `guarda-externos.sh`, `fim-worker.sh` |
+| Scripts (em `~/.cache`) | `fila-teste.sh` (fila: 2 vagas por recurso, teto global `FILA_TESTE_TETO` de 3) + `e-teste.sh` (detector de comando de teste, compartilhado com Codex/agy pelo `guarda-externos.sh`), `wt-setup.sh`/`wt-archive.sh`/`wt-lib.sh` (worktree pelo Orca), `orca-espera.sh` (espera do coordenador: ack, estado real dos workers), `orca-inicia.sh` (`worker-start` com saída de uma linha; recibo em `~/.cache/orca-recibos/`), `orca-tela.sh` (últimas linhas úteis da tela de um terminal), `orca-libera.sh` (fecha o ciclo do worker: release, aba criada pelo `--cria` e vaga do pool), `vaga-agente.sh` (pool de agentes por conta da máquina), `contas.sh` + `agentes-catalogo.conf` (registro de contas sobre o catálogo dos 45 agentes do Orca, lido do `~/.claude/agentes.conf`), `limites.sh` + `medidores/` (cota por conta: `/usage` das contas Claude e `orca account list` para Codex, Antigravity, Kimi, MiniMax e demais; Kimi e MiniMax não testados com conta real), `guarda-externos.sh`, `fim-worker.sh`, `orca-ram.sh` (RAM e sessões ociosas pelo Orca), `instala-agente.sh` (atalho para o instalador do plugin, pela raiz gravada em `fluxo-orca-raiz`) |
 | Agentes externos (opcional) | Codex e agy como workers do Orca, com as mesmas regras (`AGENTS.global.md`), as skills copiadas para `~/.agents/skills` e a trava de comando remoto; segunda conta Claude para escritores. Só entra o que estiver instalado (GUIA, fase 4b) |
 | Extras | `CLAUDE.global.md` (modelo de `~/.claude/CLAUDE.md`), `AGENTS.global.md` (modelo de `~/.agents/AGENTS.md`), `somente-leitura.json` |
+
+## Outros agentes: worker e coordenador
+
+`skills/limites-cota/instala-agente.sh <agente> [--aplicar]` instala regras, skills, trava de comando remoto e fim-worker no formato de cada agente; `instalar.sh --agente <id> [--aplicar]` faz o mesmo para quem coordena **sem Claude Code** (GUIA, "Coordenar sem Claude Code"; sem os hooks do plugin, travas só onde o agente tem hook). O papel de trabalho (escritor, mecânico, revisor, verificador) só vale em agente com trava (`pre=sim`) **e** com `testado=<data>` no catálogo (prova de despacho do GUIA, fase 4b, passo 7); claude, codex e antigravity estão isentos. Além disso, o carimbo `~/.cache/trava-<agente>.ok` desta máquina (gravado pelo `instala-agente.sh --aplicar`) precisa existir; sem ele, `<agente>: trava não instalada nesta máquina — rode bash ~/.cache/instala-agente.sh <agente> --aplicar`. `pre=sim` com `testado=-` → o `contas.sh` recusa o papel (`<agente>: trava só documentada, rode a prova do GUIA fase 4b e registre testado=<data>`) e o agente só dá segunda opinião; sem fim de turno (`fim=nao`) a conta entra com aviso.
+
+| Agente | Papel hoje | Trava (`pre`) | Fim de turno (`fim`) | Testado |
+|--------|------------|---------------|----------------------|---------|
+| claude | trabalho + orquestra (plugin) | sim | sim | em uso |
+| codex | trabalho | sim | sim | em uso |
+| antigravity (agy) | segunda opinião (padrão) | sim | não | em uso |
+| gemini | segunda opinião até a prova | sim (`BeforeTool`) | sim (`AfterAgent`) | **não testado** |
+| kimi | segunda opinião até a prova | sim (`PreToolUse`) | sim (`Stop`) | **não testado** |
+| zcode | segunda opinião até a prova | sim (`PreToolUse`, exige `hooks.enabled`) | não | **não testado** |
+| opencode / opencode2 (e MiniMax por ele) | segunda opinião até a prova | sim (plugin `tool.execute.before`) | não | **não testado** |
+| cursor-agent | segunda opinião | não (hooks só documentados no app) | não | **não testado** |
+| demais do catálogo | só medição / segunda opinião | desconhecido | desconhecido | — |
+
+"Em uso" = já rodava antes do catálogo ter a coluna `testado` (que fica `-` até a prova de despacho do GUIA, fase 4b, passo 7). As capacidades dos agentes não testados vêm da documentação oficial, citada no cabeçalho de `agentes-catalogo.conf`.
 
 ## Licença
 

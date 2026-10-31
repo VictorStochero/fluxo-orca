@@ -7,7 +7,7 @@
 - `ddev config --project-name=<pasta>`, `ddev start|stop`, `ddev delete --omit-snapshot --yes <projeto>` (sem `--yes` trava pedindo confirmação). URL `https://<projeto>.ddev.site` (curinga de subdomínio incluso).
 - `ddev composer`, `ddev artisan`, `ddev npm`, `ddev exec <cmd>`, `ddev mysql`. Banco isolado por projeto (host `db`, usuário/senha `db`).
 - **Podman e Docker rootless: experimentais desde o DDEV 1.25.0** (Linux e WSL2 principalmente); o DDEV detecta o motor pelo contexto do Docker. No macOS o Podman não abre 80/443 — DDEV usa portas alternativas.
-- Fila e worktree: `gs-teste.sh` roda `ddev artisan test`; `wt-setup.sh`/`wt-archive.sh` fazem `ddev config/start` e `ddev delete`.
+- Fila e worktree: `fila-teste.sh` roda `ddev artisan test`; `wt-setup.sh`/`wt-archive.sh` fazem `ddev config/start` e `ddev delete`.
 
 ## Sail
 - `./vendor/bin/sail up -d|down -v`, `sail artisan`, `sail composer`, `sail npm`, `sail test`. Precisa de `composer install` no host (ou container descartável) para existir `vendor/bin/sail`.
@@ -16,7 +16,7 @@
 
 ## Compose próprio (Python, JS, Laravel sem Sail)
 - Isolar por worktree com `-p <pasta>` (`docker compose -p <pasta> up -d`) e portas por variável no `.env`.
-- Testes: `GS_TESTE_RUNNER="docker compose exec -T <serviço> <comando de teste>"` no `.orca/worktree.conf` (`-T`: sem TTY, senão trava fora do terminal).
+- Testes: `FILA_TESTE_RUNNER="docker compose exec -T <serviço> <comando de teste>"` no `.orca/worktree.conf` (`-T`: sem TTY, senão trava fora do terminal).
 - Setup: `WT_INSTALAR`, `WT_MIGRAR`, `WT_POS_SETUP` com `docker compose -p <pasta> …`; limpeza: `docker compose -p <pasta> down -v` (o `wt-archive.sh` não enxerga banco em container).
 
 ## Servidor de teste separado

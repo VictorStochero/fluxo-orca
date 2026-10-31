@@ -5,7 +5,7 @@
 #   WT_SITES=herd|laragon|lerd|flyenv|nativo|ddev   (auto se vazio; serve o site e define a URL)
 #   WT_BASE=origin/<branch>   WT_COPIAR=".mcp.json .claude/settings.local.json"   WT_BUILD=0
 #   WT_INSTALAR="<cmd>"  WT_MIGRAR="<cmd>"  WT_SEED="<cmd>"  WT_SEEDER=<Classe Laravel>  WT_SEM_SEED=1
-#   WT_PORTA_BASE=8000   WT_POS_SETUP() { ...; }   GS_TESTE_RUNNER="<cmd de teste>" (lido pela fila)
+#   WT_PORTA_BASE=8000   WT_POS_SETUP() { ...; }   FILA_TESTE_RUNNER="<cmd de teste>" (lido pela fila)
 # Banco: <pasta com _> e <banco>_test (no servidor do .env.testing, se for outro); toda chave do .env que apontava para o banco do principal passa ao do worktree.
 # Multi-tenant Laravel (config/tenancy.php): TENANCY_DB_PREFIX=<banco>_tenant_ / <banco>_test_tenant_.
 

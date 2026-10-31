@@ -46,7 +46,7 @@ Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele n�
 
 ## Validação (após cada etapa significativa)
 1. Formatador e linter da stack nos arquivos tocados (skill da stack).
-2. Teste de regressão pela fila (`bash ~/.cache/gs-teste.sh ...`, imposta por hook); sem teste no caminho, criar um mínimo.
+2. Teste de regressão pela fila (`bash ~/.cache/fila-teste.sh ...`, imposta por hook); sem teste no caminho, criar um mínimo.
 3. Checagem de tipos/estática nos arquivos modificados, se houver config, e os extras da skill da stack.
 4. Mudança de UI: navegador com perfil real, nunca administrador.
 

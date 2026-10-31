@@ -14,6 +14,7 @@ comeca() { case "$3" in "$2"*) ok "$1" ;; *) ruim "$1: esperado começar com [$2
 
 cat > "$tmp/bin/claude" <<'EOF'
 #!/usr/bin/env bash
+case " $* " in *' --strict-mcp-config '*) ;; *) exit 2 ;; esac
 [ -n "${MED_SEM_SEMANA:-}" ] && { echo 'Current session: 12% used'; exit 0; }
 uso_c=30; uso_l=40; [ -n "$CLAUDE_CONFIG_DIR" ] && { uso_c=10; uso_l=6; }
 printf 'Current session: %s%% used, resets %s (America/Sao_Paulo)\nCurrent week (all models): %s%% used, resets %s (America/Sao_Paulo)\n' \
@@ -71,6 +72,8 @@ saida=$(bash "$med/orca.sh" agy antigravity)
 igual 'orca: um grupo por linha' 2 "$(printf '%s\n' "$saida" | grep -vc '^#')"
 comeca 'orca: grupo Gemini' 'agy Gemini Models: 5h 2% (zera 23:00) · semana 10% (zera ' "$(printf '%s\n' "$saida" | grep 'Gemini')"
 igual 'orca: #cand pelo pior grupo (Claude, 85% na semana)' '#cand agy 1 85' "$(printf '%s\n' "$saida" | grep '^#cand' | cut -d' ' -f1-4)"
+igual 'orca: #grupo Gemini independente' '#grupo agy gemini-models 2 10' "$(printf '%s\n' "$saida" | grep '^#grupo agy gemini-models ' | cut -d' ' -f1-5)"
+igual 'orca: #grupo misto independente' '#grupo agy claude-and-gpt-models 1 85' "$(printf '%s\n' "$saida" | grep '^#grupo agy claude-and-gpt-models ' | cut -d' ' -f1-5)"
 igual 'orca: fornecedor ausente' 'x: ilegível (sem dados do Orca para nada)' "$(bash "$med/orca.sh" x nada)"
 
 # Sem cache: chama o Orca; Orca fora do ar vira ilegível.

@@ -14,7 +14,7 @@ fi
 # Com MSYS_NO_PATHCONV (o limites.sh exporta) o python do Windows não abriria o caminho POSIX.
 command -v cygpath >/dev/null 2>&1 && json=$(cygpath -w "$json")
 MED_ARQ="$json" MED_CONTA="$conta" MED_FORNECEDOR="$fornecedor" "$py" -I - <<'EOF'
-import json, os, sys, time
+import json, os, re, sys, time
 sys.stdout.reconfigure(encoding="utf-8")
 conta, forn = os.environ["MED_CONTA"], os.environ["MED_FORNECEDOR"]
 try:
@@ -56,6 +56,9 @@ for rotulo, curta, longa in grupos():
     print(f"{rotulo}: " + " · ".join(partes))
     longa = longa or curta; curta = curta or longa
     cand = (curta["uso"], longa["uso"], int(longa["zera"] / 1000) if longa["zera"] else "-", max(1, round(longa["min"] / 60)) if longa["min"] else 168)
+    if d.get("buckets"):
+        slug = re.sub(r"[^a-z0-9]+", "-", rotulo[len(conta) + 1:].lower()).strip("-")
+        print("#grupo %s %s %s %s %s %s" % ((conta, slug) + cand))
     if pior is None or max(cand[0], cand[1]) > max(pior[0], pior[1]): pior = cand
 if pior is None:
     print(f"{conta}: ilegível (sem janelas do Orca para {forn})"); sys.exit(0)

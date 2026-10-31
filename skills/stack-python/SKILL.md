@@ -20,7 +20,7 @@ description: Use antes de escrever, revisar ou testar código num projeto Python
 ## Validar (após cada etapa)
 1. Formatar e lintar os arquivos tocados com o que o projeto usa: `ruff format <arquivos>` + `ruff check --fix <arquivos>` (ou black/isort/flake8 se for o configurado).
 2. Tipos, se configurado: `mypy <arquivos>` ou `pyright <arquivos>`.
-3. Teste de regressão pela fila: `bash ~/.cache/gs-teste.sh <arquivo ou -k filtro>` (detecta uv/poetry/pipenv/venv e roda `pytest`); Django sem pytest: `bash ~/.cache/gs-teste.sh -- python manage.py test <app>`.
+3. Teste de regressão pela fila: `bash ~/.cache/fila-teste.sh <arquivo ou -k filtro>` (detecta uv/poetry/pipenv/venv e roda `pytest`); Django sem pytest: `bash ~/.cache/fila-teste.sh -- python manage.py test <app>`.
 4. Listar sem rodar: `pytest --collect-only -q`.
 5. Migração nova: `makemigrations --check` (Django) ou `alembic check`/`alembic upgrade head` num banco descartável.
 

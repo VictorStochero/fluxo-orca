@@ -60,6 +60,34 @@ recupera() {
     return 0
 }
 
+conta_maquina() {
+    local v
+    maquina_ocupadas=0
+    for v in "$dir"/*.lock[0-9]*; do
+        [ -d "$v" ] || continue
+        [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
+        recupera "$v"
+        [ -d "$v" ] && maquina_ocupadas=$((maquina_ocupadas + 1))
+    done
+}
+trava_maquina() { # Serializa a contagem e a reserva entre contas diferentes.
+    local tentativa pid
+    for ((tentativa=0; tentativa<100; tentativa++)); do
+        if mkdir "$dir/.maquina" 2>/dev/null; then
+            printf '%s\n' "$$" > "$dir/.maquina/dispatch"
+            trap 'remove_vaga "$dir/.maquina" "$$"' EXIT
+            return 0
+        fi
+        pid=$(cat "$dir/.maquina/dispatch" 2>/dev/null)
+        if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null; then
+            remove_vaga "$dir/.maquina" "$pid"
+        fi
+        sleep 0.1
+    done
+    echo 'POOL CHEIO: reserva da máquina em andamento' >&2
+    exit 75
+}
+
 case "${1:-}" in
     pega)
         [ "$#" = 3 ] || erro 'uso: pega <conta> <dispatch>'
@@ -67,8 +95,9 @@ case "${1:-}" in
         conta_no_pool "$conta" || erro 'conta desconhecida'
         valida_dispatch "$dispatch"
         total=$(conta_campo "$conta" vagas)
-        [ "$total" = 0 ] && exit 0
+        [ "$total" = 0 ] && [ "$CONTAS_TETO" = 0 ] && [ "$RAM_MIN_GB" = 0 ] && exit 0
         mkdir -p "$dir" || exit 2
+        [ "$CONTAS_TETO" = 0 ] || trava_maquina
         ocupadas=0
         for v in "$dir/$conta".lock[0-9]*; do
             [ -d "$v" ] || continue
@@ -77,7 +106,19 @@ case "${1:-}" in
             recupera "$v"
             [ -d "$v" ] && ocupadas=$((ocupadas + 1))
         done
-        [ "$ocupadas" -ge "$total" ] && { echo "POOL CHEIO: $conta" >&2; exit 75; }
+        if [ "$CONTAS_TETO" -gt 0 ]; then
+            conta_maquina
+            [ "$maquina_ocupadas" -ge "$CONTAS_TETO" ] && { echo "POOL CHEIO: teto da máquina ($CONTAS_TETO)" >&2; exit 75; }
+            [ "$total" = 0 ] && total=$CONTAS_TETO
+        fi
+        [ "$total" != 0 ] && [ "$ocupadas" -ge "$total" ] && { echo "POOL CHEIO: $conta" >&2; exit 75; }
+        if [ "$RAM_MIN_GB" != 0 ]; then
+            ram="$(dirname "$0")/../delegacao/orca-ram.sh"
+            [ -f "$ram" ] || ram="$(dirname "$0")/orca-ram.sh"
+            bash "$ram" --portao "$RAM_MIN_GB"
+            [ $? = 75 ] && exit 75
+        fi
+        [ "$total" = 0 ] && exit 0
         for ((i=1; i<=total; i++)); do
             v="$dir/$conta.lock$i"
             if mkdir "$v" 2>/dev/null; then
@@ -137,6 +178,11 @@ case "${1:-}" in
             [ "$total" = 0 ] && livres=0
             printf '%s %s/%s\n' "$conta" "$livres" "$total"
         done
+        if [ "$CONTAS_TETO" -gt 0 ]; then
+            conta_maquina
+            livres=$((CONTAS_TETO - maquina_ocupadas)); [ "$livres" -ge 0 ] || livres=0
+            printf 'maquina %s/%s\n' "$livres" "$CONTAS_TETO"
+        fi
         ;;
     *) erro 'uso: pega <conta> <dispatch> | solta <dispatch> | troca <provisório> <dispatch> | livres' ;;
 esac
