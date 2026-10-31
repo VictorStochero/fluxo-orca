@@ -22,7 +22,7 @@ case "$1 $2" in
     'orchestration worker-list') echo '{"ok":true,"result":{"workers":[
       {"dispatchId":"ctx_a","taskId":"task_a","runId":"run_1","workerState":"ready","dispatchStatus":"dispatched","projection":{"provider":{"id":"codex","model":"m1"}},"resource":{"worktreeId":"repo-id::C:/x/wt-a"}},
       {"dispatchId":"ctx_old","taskId":"task_o","runId":"run_1","workerState":"ready","dispatchStatus":"completed","resource":{"worktreeId":"repo-id::C:/x/wt-o"}}],
-      "page":{"hasMore":false,"nextCursor":null}}}' ;;
+      "page":{"hasMore":false,"nextCursor":null},"scope":{"source":"'"${PAINEL_STUB_ESCOPO:-all}"'"}}}' ;;
     *) exit 2 ;;
 esac
 STUB
@@ -63,6 +63,10 @@ igual 'workers: só os em andamento' 1 "$(j 'len(d["workers"])' "$tmp/e.json")"
 igual 'workers: objetivo' 'Objetivo do run' "$(j 'd["workers"][0]["objetivo"]' "$tmp/e.json")"
 igual 'workers: worktree' C:/x/wt-a "$(j 'd["workers"][0]["worktree"]' "$tmp/e.json")"
 igual 'workers: agente/modelo' 'codex m1' "$(j 'd["workers"][0]["agente"]+" "+d["workers"][0]["modelo"]' "$tmp/e.json")"
+igual 'workers: sem aviso de run vinculado' None "$(j 'd["aviso"]' "$tmp/e.json")"
+# Terminal com run vinculado: o Orca limita a lista ao run, e o painel avisa.
+PAINEL_STUB_ESCOPO=bound painel --json > "$tmp/b.json"
+igual 'workers: aviso de run vinculado' True "$(j '"run vinculado" in (d["aviso"] or "")' "$tmp/b.json")"
 
 # Orca falhando não derruba o painel.
 PAINEL_ORCA_FALHA=1 painel --json > "$tmp/f.json"; igual 'Orca fora: exit 0' 0 $?

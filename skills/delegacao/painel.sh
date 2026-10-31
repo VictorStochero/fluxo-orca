@@ -85,6 +85,9 @@ def lista_workers():
         d = orca_json("orchestration", "worker-list", *(["--cursor", cursor] if cursor else []), "--json")
         if d is None: break
         paginas.append(d)
+        # Terminal com run vinculado (coordenador): o Orca restringe a lista a esse run.
+        if ((d.get("result") or {}).get("scope") or {}).get("source") == "bound":
+            aviso.append("workers só do run vinculado a este terminal: gere o painel de um terminal sem run")
         p = (d.get("result") or {}).get("page") or {}
         # Histórico vem do mais novo ao mais antigo (milhares): para na primeira página sem dispatch em andamento.
         if not any(x.get("dispatchStatus") not in TERMINAIS for x in (d.get("result") or {}).get("workers") or []): break
@@ -93,6 +96,7 @@ def lista_workers():
         cursor = proximo
     return paginas
 
+aviso = []
 # As chamadas ao Orca são independentes: em paralelo, cada processo no Windows custa quase um segundo.
 with ThreadPoolExecutor(4) as ex:
     f_st = ex.submit(orca_json, "status", "--json")
@@ -101,7 +105,6 @@ with ThreadPoolExecutor(4) as ex:
     f_ws = ex.submit(lista_workers)
     st, mem, runs, paginas = f_st.result(), f_mem.result(), f_runs.result(), f_ws.result()
 
-aviso = []
 # saúde
 raiz = le(os.path.join(cache, "fluxo-orca-raiz")).strip()
 raiz_w = re.sub(r"^/([A-Za-z])/", r"\1:/", raiz)
