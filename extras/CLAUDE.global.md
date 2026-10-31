@@ -15,6 +15,9 @@ Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele n�
 - **Worktree, terminal, handoff, navegador embutido** → skill `orca-cli` (`orca tab|snapshot|click|fill|screenshot --page <id>`, `orca worktree`, `orca terminal`). Setup de worktree → skill `worktree-orca`. Playwright/Chrome DevTools só como fallback ou para trace/Lighthouse/heap.
 - **App nativo ou janela externa sem caminho programático** → skill `computer-use` (`orca computer`).
 - Comandos com `orca`, ou `ORCA_CLI_COMMAND` quando definido; guia da versão instalada em `orca skills get <skill>`.
+- **Worker não sobe nada**: worker só commita local; push, PR, merge e comentário remoto saem da sessão principal, depois da auditoria, com comando, alvo e efeito apresentados e aprovados um a um.
+- **Hook barrou o worker**: a sessão principal instala ou ativa o pré-requisito (ex.: skill da stack), encerra o dispatch parado e reenvia um worker novo com spec de retomada; nunca desativar, editar ou contornar o hook.
+- **Worktree filho do coordenador**: worktree de tarefa nasce filho do worktree da sessão coordenadora (`--parent-worktree path:<coordenador>`), nunca solto.
 - **Orca sempre limpo**: worktree cuja etapa nossa terminou e que não será reaberto é removido, mesmo que o QA ainda vá testar; workers e terminais encerrados são liberados. Nunca remover com alteração não commitada ou branch sem push.
 
 ## Modelos
@@ -26,6 +29,9 @@ Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele n�
 ## Decisões do usuário
 - **Toda decisão que cabe a ele vem como pergunta interativa** (`AskUserQuestion`), nunca como lista solta no texto. Cada pergunta carrega o contexto para decidir sem abrir o código: o que é, onde está, o que acontece em cada opção, e a recomendada marcada. Até 4 por vez.
 - **Worker do Orca** (prompt com preâmbulo de Task/Dispatch IDs) não abre pergunta local: usa o `ask` do preâmbulo, com o mesmo contexto e a recomendada; a sessão principal leva a decisão ao usuário por `AskUserQuestion` e devolve a resposta.
+- **Ordem do usuário não se reduz**: "aplicar a recomendada" vale para o que o usuário não decidiu; variante menor de uma ordem explícita vira pergunta, nunca decisão silenciosa.
+- **Resposta automática não é decisão**: `AskUserQuestion` que volta com todas as recomendadas sem resposta real do usuário é tratada como não respondida — perguntar de novo no texto e esperar; nada vai a worker nem a registro antes.
+- **Pergunta pendente não para o fluxo**: com pergunta aberta, seguir o ciclo de espera (`orca-espera.sh`) e despachar o que não depende da resposta, sem encerrar o turno parado.
 - **A recomendação sai destes critérios, nesta ordem, e a pergunta cita o que cada um diz:** (1) arquitetura — o guia/wiki do projeto (`wiki/arquitetura/`, `docs/` ou `doc/`) (vence o código vizinho; onde for omisso, decide-se pela regra análoga e o guia é complementado na mesma entrega); (2) skills — a skill da stack e as boas práticas que ela indica (ex.: `laravel-best-practices`) e as skills do projeto (`.claude/skills`, `.ai/skills`); (3) padrões do framework (ex.: "Laravel way", docs oficiais); (4) ponytail; (5) CLAUDE.md/AGENTS.md do projeto. Dados de produção (consulta só leitura) entram como evidência de risco — quem usa, quanto —, não como critério de arquitetura. Critério que não se aplica é omitido.
 
 ## Produção e ações remotas
