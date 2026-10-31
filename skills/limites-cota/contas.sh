@@ -71,7 +71,10 @@ _contas_valida() { # chave valor linha conta
                     [ "$(conta_campo "$4" pre)" = sim ] || { _contas_erro "$ag sem trava de comando: só segunda-opiniao" "$3"; return; }
                     case "$ag" in claude | codex | antigravity) ;; *)
                         [[ "$(conta_campo "$4" testado)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
-                            || { _contas_erro "$ag: trava só documentada, rode a prova do GUIA fase 4b e registre testado=<data>" "$3"; return; } ;;
+                            || { _contas_erro "$ag: trava só documentada, rode a prova do GUIA fase 4b e registre testado=<data>" "$3"; return; }
+                        # O catálogo é do repo; a trava é por máquina: o carimbo do instala-agente.sh prova que esta a tem.
+                        [ -s "$HOME/.cache/trava-$ag.ok" ] \
+                            || { _contas_erro "$ag: trava não instalada nesta máquina — rode bash ~/.cache/instala-agente.sh $ag --aplicar" "$3"; return; } ;;
                     esac ;;
                 esac
             done ;;

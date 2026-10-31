@@ -10,6 +10,6 @@ export const FluxoGuarda = async () => ({
       input: JSON.stringify({ tool: input.tool, tool_input: output.args }),
       encoding: "utf8",
     })
-    if (r.status === 2) throw new Error(r.stderr.trim())
+    if (r.status !== 0) throw new Error(r.stderr?.trim() || "fluxo-guarda indisponível: " + (r.error?.message ?? r.status))
   },
 })

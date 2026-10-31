@@ -58,6 +58,7 @@ instala_regras() {
     atual=$(cat "$f" 2>/dev/null)
     case "$atual" in
         *"$INI"*) novo=${atual%%"$INI"*}$bloco${atual#*"$FIM"} ;;
+        *"# Regras globais —"*) echo "  [aviso] cópia antiga sem marcador em $f: remova-a"; return ;;
         *) novo=${atual:+$atual$'\n\n'}$bloco ;;
     esac
     if [ "$novo" = "$atual" ]; then passo ja "regras em $f"; return; fi
@@ -93,6 +94,7 @@ toml_hook() { # arquivo evento matcher comando timeout descrição
 
 instala_trava() {
     local cmd arq
+    TRAVA_OK=1
     case "$agente" in
         codex)
             arq="$HOME/.codex/hooks.json"; cmd=$(comando_hook guarda-externos-codex guarda-externos.sh codex)
@@ -123,7 +125,7 @@ instala_trava() {
                 passo novo "plugin de trava em $arq"
                 [ $APLICAR = 1 ] && { mkdir -p "$(dirname "$arq")"; cp "$RAIZ/extras/opencode-guarda.js" "$arq"; }
             fi ;;
-        *) echo "  [manual]       $agente tem pre=sim no catálogo, mas o instalador não conhece o formato do hook dele" ;;
+        *) TRAVA_OK=0; echo "  [manual]       $agente tem pre=sim no catálogo, mas o instalador não conhece o formato do hook dele" ;;
     esac
 }
 
@@ -154,6 +156,7 @@ instala_regras
 instala_skills
 if [ "$pre" = sim ]; then
     instala_trava
+    [ $APLICAR = 1 ] && [ "$TRAVA_OK" = 1 ] && date +%F > "$cache/trava-$agente.ok"
     [ "$fim" = sim ] && instala_fim
 else
     echo "  [restrito]     $agente sem hook de comando: fica só em segunda-opiniao (papel de trabalho é recusado pelo contas.sh)"

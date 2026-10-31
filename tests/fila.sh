@@ -58,7 +58,7 @@ if [ "${FILA_SOMENTE_COMPATIBILIDADE:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?;
 cp "$raiz/hooks/guarda-externos.sh" "$raiz/skills/fila-testes/e-teste.sh" "$tmp/"
 
 json() { # comando -> JSON de PreToolUse com o comando escapado
-    local c=${1//\\/\\\\}; c=${c//\"/\\\"}
+    local c=${1//\\/'\\'}; c=${c//\"/'\"'}
     c=${c//$'\n'/'\n'}; c=${c//$'\r'/'\r'}
     printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$c"
 }
@@ -73,6 +73,7 @@ subcomando=test
 executor=pytest
 json $'a\nb\rc' > "$tmp/json-codificado"
 grep -qF 'a\nb\rc' "$tmp/json-codificado" && ok 'JSON preserva escapes LF/CR' || ruim 'JSON não preserva escapes LF/CR'
+json "$(printf 'a\134b')" | grep -qF 'a\\b' && ok 'JSON dobra barra invertida' || ruim 'JSON não dobra barra invertida'
 for nome_fila in fila-teste gs-teste; do
     confere LIVRE "& 'C:/Program Files/Git/bin/bash.exe' -lc 'bash ~/.cache/$nome_fila.sh -- php artisan $subcomando'"
     confere LIVRE "bash.exe C:/Users/x/.cache/$nome_fila.sh -- python -m $executor"
@@ -103,7 +104,8 @@ if [ "${FILA_SOMENTE_SUBSTITUICOES:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?; f
 
 for c in 'php artisan test' 'npm ci && npm test' 'pytest -x' 'composer test' 'cargo test' 'bash -c "pytest"' \
          'npx vitest run' 'php vendor/pestphp/pest/bin/pest' 'python -m unittest' 'pnpm exec vitest run' 'go test ./...' \
-         'git commit -m "x" && pytest' 'python -m pytest -m "not slow"'; do
+         'git commit -m "x" && pytest' 'python -m pytest -m "not slow"' \
+         'out=$(npm test)' 'echo "$(pytest)"' 'echo `npm test`' 'r=$(composer test)'; do
     confere BLOQ "$c"
 done
 

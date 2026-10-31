@@ -43,6 +43,8 @@ E
     url=$(py -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve().as_uri())' "$tmp/guarda.mjs")
     contem 'opencode: ssh bloqueado pelo plugin' 'bloqueou: Comando remoto' "$(node "$tmp/roda.mjs" "$url" 'ssh -V')"
     igual 'opencode: comando comum passa' 'passou' "$(node "$tmp/roda.mjs" "$url" 'ls')"
+    mkdir -p "$tmp/sem-bash"
+    contem 'opencode: sem bash no PATH bloqueia (falha fechada)' 'bloqueou: fluxo-guarda indisponível' "$(PATH="$tmp/sem-bash" "$(command -v node)" "$tmp/roda.mjs" "$url" 'ls')"
 else
     echo 'pulado: plugin do opencode (sem node)'
 fi
@@ -90,7 +92,9 @@ contem 'codex: simulação avisa que nada gravou' 'nada foi gravado' "$saida"
 igual 'codex: simulação não altera hooks.json' "$antes" "$(cat "$HOME/.codex/hooks.json")"
 igual 'codex: simulação não altera as regras' 'minhas regras' "$(cat "$HOME/.codex/AGENTS.md")"
 [ ! -e "$HOME/.codex/config.toml" ] && ok 'codex: simulação não cria config.toml' || ruim 'codex: simulação criou config.toml'
+[ ! -e "$HOME/.cache/trava-codex.ok" ] && ok 'codex: simulação não grava o carimbo da trava' || ruim 'codex: simulação gravou o carimbo'
 inst codex --aplicar >/dev/null
+[ -s "$HOME/.cache/trava-codex.ok" ] && ok 'codex: --aplicar grava o carimbo da trava' || ruim 'codex: carimbo da trava ausente'
 igual 'codex: grupo do Orca preservado' orca-hook "$(ha_json "$HOME/.codex/hooks.json" 'd["hooks"]["PreToolUse"][0]["hooks"][0]["command"]')"
 contem 'codex: trava em PreToolUse' guarda-externos "$(ha_json "$HOME/.codex/hooks.json" 'd["hooks"]["PreToolUse"][1]["hooks"][0]["command"]')"
 contem 'codex: fim em Stop' fim-worker "$(ha_json "$HOME/.codex/hooks.json" 'd["hooks"]["Stop"][1]["hooks"][0]["command"]')"
@@ -138,6 +142,22 @@ inst opencode --aplicar >/dev/null
 cmp -s "$raiz/extras/opencode-guarda.js" "$HOME/.config/opencode/plugins/fluxo-guarda.js" && ok 'opencode: plugin instalado' || ruim 'opencode: plugin ausente'
 contem 'opencode: regras em ~/.config/opencode/AGENTS.md' 'fluxo-orca:inicio' "$(cat "$HOME/.config/opencode/AGENTS.md")"
 sem_mudanca opencode opencode
+
+# Cópia antiga das regras (cabeçalho sem marcador): avisa e não anexa outra.
+mkdir -p "$HOME/.config/opencode"
+printf '# Regras globais — cópia antiga\nx\n' > "$HOME/.config/opencode/AGENTS.md"
+saida=$(inst opencode --aplicar)
+contem 'regras: cópia antiga avisa' "[aviso] cópia antiga sem marcador em $HOME/.config/opencode/AGENTS.md: remova-a" "$saida"
+igual 'regras: cópia antiga não ganha outro bloco' 0 "$(grep -c 'fluxo-orca:inicio' "$HOME/.config/opencode/AGENTS.md")"
+
+# Atalho ~/.cache/instala-agente.sh: roda o script real pela raiz gravada; sem a raiz, erro claro.
+CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh"
+contem 'atalho: executa o instalador real' 'instala-agente: codex' "$(bash "$HOME/.cache/instala-agente.sh" codex)"
+rm "$HOME/.cache/fluxo-orca-raiz"
+saida=$(bash "$HOME/.cache/instala-agente.sh" codex 2>&1); rc=$?
+igual 'atalho: sem a raiz falha' 1 "$rc"
+contem 'atalho: sem a raiz explica' 'raiz do fluxo-orca desconhecida' "$saida"
+CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh"
 
 # Agy: trava no hooks.json do Antigravity, skills no diretório dele.
 mkdir -p "$HOME/.gemini/config"

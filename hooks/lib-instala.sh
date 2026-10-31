@@ -13,6 +13,21 @@ copia_scripts() { # raiz-do-plugin destino
         cmp -s "$s" "$2/medidores/$(basename "$s")" || cp "$s" "$2/medidores/"
     done
     rm -f "$2/codex-cota.sh"
+    grava_atalho_raiz "$1" "$2"
+}
+
+# O instala-agente.sh precisa da árvore do plugin (extras, skills, hooks): ~/.cache guarda só a raiz e um atalho que a chama.
+grava_atalho_raiz() { # raiz-do-plugin destino
+    local raiz=$1
+    command -v cygpath >/dev/null 2>&1 && raiz=$(cygpath -u "$raiz")
+    [ "$(cat "$2/fluxo-orca-raiz" 2>/dev/null)" = "$raiz" ] || printf '%s\n' "$raiz" > "$2/fluxo-orca-raiz"
+    cat > "$2/instala-agente.sh.novo" <<'E'
+#!/bin/bash
+s="$(cat "$HOME/.cache/fluxo-orca-raiz" 2>/dev/null)/skills/limites-cota/instala-agente.sh"
+[ -f "$s" ] || { echo 'instala-agente: raiz do fluxo-orca desconhecida; abra o Claude Code com o plugin ou rode instalar.sh --agente <id> --aplicar no clone' >&2; exit 1; }
+exec bash "$s" "$@"
+E
+    cmp -s "$2/instala-agente.sh.novo" "$2/instala-agente.sh" && rm "$2/instala-agente.sh.novo" || mv "$2/instala-agente.sh.novo" "$2/instala-agente.sh"
 }
 
 copia_skills() { # raiz-do-plugin destino: o cache do plugin muda de caminho a cada versão, os CLIs externos leem uma cópia fixa

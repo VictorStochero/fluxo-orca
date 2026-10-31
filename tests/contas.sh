@@ -29,6 +29,8 @@ while IFS= read -r l || [ -n "$l" ]; do
     esac
 done < "$real" > "$provado"
 export CONTAS_CATALOGO="$provado"
+# Carimbo de trava instalada nesta máquina (instala-agente.sh --aplicar); as recusas por falta dele ficam mais abaixo.
+mkdir -p "$HOME/.cache"; for ag in gemini kimi opencode; do date +%F > "$HOME/.cache/trava-$ag.ok"; done
 
 # Catálogo: os 45 agentes da tela do Orca, chave única.
 n=$(grep -cv -e '^#' -e '^[[:space:]]*$' "$raiz/skills/limites-cota/agentes-catalogo.conf")
@@ -138,7 +140,11 @@ igual 'papel: claude, codex e antigravity seguem sem testado' 0 "$(rc_carrega)"
 export CONTAS_CATALOGO="$provado"
 printf 'x agente=gemini papeis=escritor
 ' > "$HOME/.claude/agentes.conf"
-igual 'papel: gemini com testado=2026-10-30 escreve' 0 "$(rc_carrega)"
+rm "$HOME/.cache/trava-gemini.ok"
+igual 'papel: gemini provado sem carimbo da máquina é recusado' 2 "$(rc_carrega)"
+grep -q 'gemini: trava não instalada nesta máquina — rode bash ~/.cache/instala-agente.sh gemini --aplicar' "$tmp/erro" || ruim "papel: mensagem do carimbo: $(cat "$tmp/erro")"
+date +%F > "$HOME/.cache/trava-gemini.ok"
+igual 'papel: gemini com testado=2026-10-30 e carimbo escreve' 0 "$(rc_carrega)"
 igual 'aviso: com fim de turno não avisa' '' "$(bash "$lib" lista | grep -c aviso | grep -v '^0$')"
 printf 'o agente=opencode papeis=escritor
 ' > "$HOME/.claude/agentes.conf"

@@ -14,7 +14,7 @@ cmd=$(printf '%s' "$cmd" | sed -E \
     -e "s/--(body|subject|title)([[:space:]]+|=)$v//g" \
     -e 's/[^;&|]*(--list-tests|--collect-only|--listTests|vitest[[:space:]]+list)[^;&|]*//g' \
     -e 's/(pip|pip3|uv|poetry|pipenv|npm|pnpm|yarn|bun|composer)[[:space:]]+(install|add|i|ci|sync|remove|uninstall|require)[^;&|]*//g')
-s='(^|["[:space:];&|(/])'
+s='(^|["[:space:];&|(/`])'
 cmd=$(printf '%s\n' "$cmd" | awk '
     function primeiro(s, i,c,q,t) {
         sub(/^[[:space:]]+/, "", s); t=""; q=""
@@ -88,7 +88,7 @@ cmd=$(printf '%s\n' "$cmd" | awk '
         }
         emite()
     }')
-e='([[:space:]"\\]|$)'
+e='([[:space:]"\\)`]|$)'
 if printf '%s' "$cmd" | grep -qE "artisan[[:space:]]+test|vendor/bin/(pest|phpunit)|pestphp/pest/bin/pest|sail[[:space:]]+(test|pest)$e|${s}pytest$e|-m[[:space:]]+(pytest|unittest)|manage\.py[[:space:]]+test|${s}(vitest|jest)$e|${s}(npm|pnpm|yarn|bun)[[:space:]]+(run[[:space:]]+)?test(:[[:alnum:]:_-]+)?$e|${s}composer[[:space:]]+(run(-script)?[[:space:]]+)?test$e|${s}(cargo|go)[[:space:]]+test$e"; then
     exit 0
 fi

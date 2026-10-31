@@ -162,6 +162,7 @@ while IFS= read -r l || [ -n "$l" ]; do
     esac
 done < "$raiz/skills/limites-cota/agentes-catalogo.conf" > "$tmp/catalogo-provado.conf"
 export CONTAS_CATALOGO="$tmp/catalogo-provado.conf"
+mkdir -p "$HOME/.cache"; for ag in opencode aider; do date +%F > "$HOME/.cache/trava-$ag.ok"; done
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 dev2    agente=claude config=~/.claude-dev2 vagas=1
 minimax agente=opencode vagas=1 medidor=orca:minimax papeis=escritor
