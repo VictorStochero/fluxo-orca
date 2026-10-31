@@ -33,7 +33,7 @@ agy agente=antigravity vagas=1 papeis=segunda-opiniao
 ## Atualizar (máquina já instalada)
 Sem repetir as fases; o que muda em cada versão e pede ação manual vai no aviso da versão (descrição do PR na `main`).
 1. `claude plugin marketplace update stochero`, depois `claude plugin update <plugin>@stochero` para cada plugin instalado do marketplace (`fluxo-orca`, `auditoria-pre-subida`, `laravel-worktree`).
-2. Fechar e reabrir **todas** as sessões do Claude Code: o SessionStart recopia para `~/.cache` os scripts de `hooks/scripts.lista` e o `~/.claude/agents/somente-leitura.json`; sessão aberta segue com os hooks da versão anterior.
+2. Fechar e reabrir **todas** as sessões do Claude Code: o SessionStart recopia para `~/.cache` os scripts de `hooks/scripts.lista` e o `~/.claude/agents/somente-leitura.json`; sessão aberta segue com os hooks da versão anterior e, ao compactar ou ser retomada, recopia por cima os scripts antigos (sintoma: `contas.sh lista` recusa chave nova do `agentes.conf`). Se aconteceu, reabrir as sessões resolve.
 3. Agentes externos: `bash ~/.cache/instala-agente.sh <agente> --aplicar` para cada um (regras, skills e trava; idempotente). Com `[aviso] cópia antiga sem marcador`, remover a cópia e rodar de novo. Abrir o agente uma vez (Codex: aprovar em `/hooks` se pedir).
 4. Quem coordena sem Claude Code: `git -C ~/fluxo-orca pull` e `bash ~/fluxo-orca/instalar.sh --agente <id> --aplicar`.
 5. Conferir: `bash ~/.cache/contas.sh lista` aceita o `~/.claude/agentes.conf` e `bash ~/.cache/limites.sh` mede as contas.
