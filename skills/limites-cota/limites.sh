@@ -30,6 +30,7 @@ done
 source "$aqui/contas.sh" || exit 2
 # Registro inválido: a tabela ainda mede as contas padrão; a escolha cai no erro do pool, que lê o mesmo registro.
 contas_carrega 2>/dev/null || { CONTAS_CONF=/dev/null; contas_carrega; }
+for c in $CONTAS; do aviso=$(conta_aviso "$c") && echo "aviso: $c $aviso" >&2; done
 
 instalada() { # O binário da conta (sem as atribuições VAR=) está no PATH e a pasta de config, se houver, existe.
   local b cfg

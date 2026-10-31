@@ -1,6 +1,6 @@
 #!/bin/bash
 # Stop: worker do Orca não encerra o turno sem worker_done — o coordenador só sabe que acabou por ele.
-# Vale para Claude Code e Codex (mesmo JSON de bloqueio). Fora de worker, ou com o Orca fora do ar, não faz nada.
+# Vale para Claude Code, Codex e Kimi (mesmo JSON de bloqueio); com o argumento gemini (AfterAgent) a decisão é deny. Fora de worker, ou com o Orca fora do ar, não faz nada.
 in=$(cat)
 # Uma cobrança só: na segunda parada (stop_hook_active) o turno termina e o orca-espera.sh do coordenador detecta.
 printf '%s' "$in" | grep -q '"stop_hook_active"[[:space:]]*:[[:space:]]*true' && exit 0
@@ -21,5 +21,6 @@ cmd=$(grep -o -- "orca orchestration send --from term_[A-Za-z0-9-]* --type worke
 [ -n "$cmd" ] || cmd="orca orchestration send --type worker_done (comando completo no preâmbulo do Orca) --dispatch-id $d"
 motivo="Você é worker do Orca (dispatch $d, status $st) e ainda não enviou o worker_done; sem ele o coordenador fica esperando. Se a tarefa terminou ou não tem como seguir, envie agora, uma vez: $cmd — com o resumo real em --subject/--body e --outcome failed se não concluiu. Se ainda há trabalho, continue."
 motivo=$(printf '%s' "$motivo" | sed 's/\\/\\\\/g; s/"/\\"/g')
-printf '{"decision":"block","reason":"%s"}\n' "$motivo"
+decisao=block; [ "${1:-}" = gemini ] && decisao=deny
+printf '{"decision":"%s","reason":"%s"}\n' "$decisao" "$motivo"
 exit 0

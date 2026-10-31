@@ -152,7 +152,16 @@ grep -q '^claude-b ' "$tmp/saida" && ruim 'claude-b só medida apareceu no pool'
 confere_rc 2 'claude-b só medida: pega rejeitada' pool pega claude-b ctx_cb
 rmdir "$HOME/.claude-b"
 
-# Registro do dev: contas pessoais e agentes fora da lista antiga.
+# Registro do dev: contas pessoais e agentes fora da lista antiga. Agente novo só trabalha com a trava provada (testado=data no catálogo).
+while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in
+        '' | '#'*) printf '%s\n' "$l" ;;
+        *) IFS='|' read -r c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 <<< "$l"
+           c6=sim; c10=2026-10-30 # qualquer agente do catálogo, para o pool não depender da regra de trava
+           printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6" "$c7" "$c8" "$c9" "$c10" "$c11" ;;
+    esac
+done < "$raiz/skills/limites-cota/agentes-catalogo.conf" > "$tmp/catalogo-provado.conf"
+export CONTAS_CATALOGO="$tmp/catalogo-provado.conf"
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 dev2    agente=claude config=~/.claude-dev2 vagas=1
 minimax agente=opencode vagas=1 medidor=orca:minimax papeis=escritor

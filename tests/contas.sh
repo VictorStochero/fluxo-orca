@@ -17,11 +17,26 @@ carrega() { # comando bash a rodar depois de carregar o registro
 }
 rc_carrega() { bash -c 'source "$1" && contas_carrega' bash "$lib" >/dev/null 2>"$tmp/erro"; echo $?; }
 
+# Catálogo real (nenhum agente novo passou pela prova do GUIA: testado=-) e o "provado": a mesma tabela com testado preenchido onde há trava.
+real="$raiz/skills/limites-cota/agentes-catalogo.conf"
+provado="$tmp/catalogo-provado.conf"
+while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in
+        '' | '#'*) printf '%s\n' "$l" ;;
+        *) IFS='|' read -r c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 <<< "$l"
+           [ "$c6" = sim ] && c10=2026-10-30
+           printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6" "$c7" "$c8" "$c9" "$c10" "$c11" ;;
+    esac
+done < "$real" > "$provado"
+export CONTAS_CATALOGO="$provado"
+
 # Catálogo: os 45 agentes da tela do Orca, chave única.
 n=$(grep -cv -e '^#' -e '^[[:space:]]*$' "$raiz/skills/limites-cota/agentes-catalogo.conf")
 igual 'catálogo com 45 agentes' 45 "$n"
 dup=$(grep -v -e '^#' -e '^[[:space:]]*$' "$raiz/skills/limites-cota/agentes-catalogo.conf" | cut -d'|' -f1 | sort | uniq -d)
 igual 'catálogo sem chave repetida' '' "$dup"
+
+igual 'catálogo: 11 colunas por linha' 0 "$(grep -v -e '^#' -e '^[[:space:]]*$' "$raiz/skills/limites-cota/agentes-catalogo.conf" | awk -F'|' 'NF != 11' | wc -l | tr -d ' ')"
 
 # Sem agentes.conf: as contas de hoje, na ordem de hoje.
 igual 'padrão: contas' 'team pessoal codex agy' "$(carrega 'echo $CONTAS')"
@@ -74,6 +89,64 @@ igual 'trava: kimi sem papeis não escreve' nao "$(carrega 'conta_tem_papel k es
 igual 'trava: kimi sem papeis fora do pool' nao "$(carrega 'conta_no_pool k || echo nao')"
 igual 'trava: kimi com papel escrito escreve' sim "$(carrega 'conta_tem_papel k2 escritor && echo sim')"
 igual 'trava: codex mantém o padrão' sim "$(carrega 'conta_tem_papel c escritor && echo sim')"
+cat > "$HOME/.claude/agentes.conf" <<'EOF'
+pessoal agente=claude papeis=orquestra
+team    agente=claude config=~/.claude-team vagas=1 papeis=escritor,revisor
+claude-b agente=claude comando=claude-b config=~/.claude-b vagas=1 papeis=escritor,revisor
+codex   agente=codex vagas=1 papeis=escritor modelo=gpt-6.1-sol
+EOF
+# Capacidades do catálogo real (hook antes de comando, fim de turno, regras, skills, testado).
+export CONTAS_CATALOGO="$real"
+printf 'g agente=gemini
+k agente=kimi
+o agente=opencode
+c agente=cursor
+t agente=claude-agent-teams
+cx agente=codex
+' > "$HOME/.claude/agentes.conf"
+igual 'capacidade: gemini pre' sim "$(carrega 'conta_campo g pre')"
+igual 'capacidade: gemini fim' sim "$(carrega 'conta_campo g fim')"
+igual 'capacidade: gemini regras' '~/.gemini/GEMINI.md' "$(carrega 'conta_campo g regras')"
+igual 'capacidade: gemini skills' '~/.agents/skills' "$(carrega 'conta_campo g skills')"
+igual 'capacidade: kimi mantém a nota' 'nao-testado' "$(carrega 'conta_campo k nota')"
+igual 'capacidade: opencode sem fim' nao "$(carrega 'conta_campo o fim')"
+igual 'capacidade: cursor sem trava' nao "$(carrega 'conta_campo c pre')"
+igual 'capacidade: desconhecido' '-' "$(carrega 'conta_campo t pre')"
+igual 'capacidade: testado ainda sem prova' '-' "$(carrega 'conta_campo cx testado')"
+
+# Papel de trabalho só em agente com trava de comando (pre=sim); sem fim de turno a conta entra com aviso.
+for ag in cursor claude-agent-teams; do
+    for papel in escritor mecanico revisor verificador; do
+        printf 'x agente=%s papeis=%s
+' "$ag" "$papel" > "$HOME/.claude/agentes.conf"
+        igual "papel: $ag recusa $papel" 2 "$(rc_carrega)"
+        grep -q "$ag sem trava de comando: só segunda-opiniao" "$tmp/erro" || ruim "papel: mensagem de $ag/$papel: $(cat "$tmp/erro")"
+    done
+done
+printf 'x agente=cursor papeis=segunda-opiniao,orquestra
+' > "$HOME/.claude/agentes.conf"
+igual 'papel: cursor aceita segunda-opiniao' 0 "$(rc_carrega)"
+printf 'x agente=gemini papeis=escritor
+' > "$HOME/.claude/agentes.conf"
+igual 'papel: gemini com pre=sim e testado=- é recusado' 2 "$(rc_carrega)"
+grep -q 'gemini: trava só documentada, rode a prova do GUIA fase 4b e registre testado=<data>' "$tmp/erro" || ruim "papel: mensagem da trava só documentada: $(cat "$tmp/erro")"
+printf 'x agente=gemini papeis=segunda-opiniao
+' > "$HOME/.claude/agentes.conf"
+igual 'papel: gemini testado=- dá segunda opinião' 0 "$(rc_carrega)"
+printf 'x agente=codex papeis=escritor,revisor\ny agente=antigravity papeis=escritor\nz agente=claude papeis=escritor\n' > "$HOME/.claude/agentes.conf"
+igual 'papel: claude, codex e antigravity seguem sem testado' 0 "$(rc_carrega)"
+export CONTAS_CATALOGO="$provado"
+printf 'x agente=gemini papeis=escritor
+' > "$HOME/.claude/agentes.conf"
+igual 'papel: gemini com testado=2026-10-30 escreve' 0 "$(rc_carrega)"
+igual 'aviso: com fim de turno não avisa' '' "$(bash "$lib" lista | grep -c aviso | grep -v '^0$')"
+printf 'o agente=opencode papeis=escritor
+' > "$HOME/.claude/agentes.conf"
+igual 'papel: opencode aceito sem fim' 0 "$(rc_carrega)"
+case "$(bash "$lib" lista)" in *"aviso=sem fim de turno: coordenador cobra worker_done"*) ok 'aviso: sem fim de turno' ;; *) ruim 'aviso: sem fim de turno' ;; esac
+printf 'o agente=opencode papeis=segunda-opiniao
+' > "$HOME/.claude/agentes.conf"
+case "$(bash "$lib" lista)" in *aviso*) ruim 'aviso: segunda-opiniao não precisa de fim' ;; *) ok 'aviso: segunda-opiniao não precisa de fim' ;; esac
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 pessoal agente=claude papeis=orquestra
 team    agente=claude config=~/.claude-team vagas=1 papeis=escritor,revisor
