@@ -10,7 +10,7 @@ Escritor de uma etapa. Começo, fim e prova definidos no pedido.
 Entrada: pedido com worktree, branch, critério de pronto e o mapa em `~/.cache/handoff/<tarefa>/mapa.md`. **Parta do mapa**: leia os arquivos que ele aponta; explorar além disso só para destravar um bloqueio — se o mapa estiver errado, diga no retorno.
 
 Regras:
-- Só o worktree indicado; não toque em nenhum outro. Sem merge, sem push para a base, sem abrir PR (a sessão principal abre depois da auditoria), sem comando remoto, sem background, sem bulk replace, sem atribuição a IA no commit.
+- Só o worktree indicado; não toque em nenhum outro. Sem merge, sem push (commit só local), sem abrir PR (a sessão principal faz push e PR depois da auditoria), sem comando remoto, sem background, sem bulk replace, sem atribuição a IA no commit.
 - Antes de tocar banco, conferir que o setup do worktree terminou com sucesso; se estiver rodando, aguardar. Setup falhou ou sucesso não verificável → `ask` ao coordenador com a saída do setup e aguardar orientação, sem tentar refazer migração por conta própria.
 - Testes só pela fila: `bash ~/.cache/fila-teste.sh <args>` — o teste novo e até 5 arquivos editados, um por chamada. Commitar antes de verificação longa; nenhuma chamada passa de 10 min.
 - Relatório, log de teste e evidência vão no `worker_done` e no PR, nunca em arquivo versionado (`reports/`, `*.log`, notas): fora do repo, em `~/.cache/handoff/<tarefa>/`.
