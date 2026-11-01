@@ -209,7 +209,8 @@ try:
     for x in ((ret or {}).get("result") or {}).get("workers") or []:
         if x.get("dispatchStatus") not in TERMINAIS or x.get("terminalState") != "retained" or x.get("agentTerminalHandle") in ativos: continue
         rec = x.get("resource") or {}
-        retidos.setdefault(rec.get("worktreeId"), []).append(((rec.get("endpointIncarnation") or "").rsplit(":", 1)[0], x.get("dispatchId")))
+        wt_id = rec.get("worktreeId") or ((x.get("projection") or {}).get("workspace") or {}).get("id")
+        retidos.setdefault(wt_id, []).append(((rec.get("endpointIncarnation") or "").rsplit(":", 1)[0], x.get("dispatchId")))
     for wt in sorted(mem["result"].get("worktrees") or [], key=lambda w: -sum(x.get("memory", 0) for x in w.get("sessions", []) if x.get("cpu") == 0)):
         ociosas = sorted([x for x in wt.get("sessions", []) if x.get("cpu") == 0], key=lambda x: -x.get("memory", 0))
         if not ociosas: continue

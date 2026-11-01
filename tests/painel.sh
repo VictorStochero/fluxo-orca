@@ -24,7 +24,8 @@ case "$1 $2" in
         [ -n "${ORCA_TERMINAL_HANDLE:-}" ] && { echo '{"ok":true,"result":{"workers":[],"page":{"hasMore":false,"nextCursor":null},"scope":{"source":"bound"}}}'; exit 0; }
         [ "$3" = --terminal-state ] && { echo '{"ok":true,"result":{"workers":[
           {"dispatchId":"ctx_r","dispatchStatus":"completed","terminalState":"retained","agentTerminalHandle":"term_r","resource":{"worktreeId":"repo-id::C:/x/wt-o","endpointIncarnation":"repo-id::C:/x/wt-o@@abc:sess-1"}},
-          {"dispatchId":"ctx_r2","dispatchStatus":"completed","terminalState":"retained","agentTerminalHandle":"term_r2","resource":{"worktreeId":"repo-id::C:/x/wt-o","endpointIncarnation":"repo-id::C:/x/wt-o@@outra:sess-2"}}],
+          {"dispatchId":"ctx_r2","dispatchStatus":"completed","terminalState":"retained","agentTerminalHandle":"term_r2","resource":{"worktreeId":"repo-id::C:/x/wt-o","endpointIncarnation":"repo-id::C:/x/wt-o@@outra:sess-2"}},
+          {"dispatchId":"ctx_r3","dispatchStatus":"completed","terminalState":"retained","agentTerminalHandle":"term_r3","projection":{"workspace":{"id":"repo-id::C:/x/wt-o"}}}],
           "page":{"hasMore":false,"nextCursor":null}}}'; exit 0; }
         echo '{"ok":true,"result":{"workers":[
       {"dispatchId":"ctx_a","taskId":"task_a","runId":"run_1","workerState":"ready","dispatchStatus":"dispatched","projection":{"provider":{"id":"codex","model":"m1"}},"resource":{"worktreeId":"repo-id::C:/x/wt-a"}},
@@ -69,6 +70,7 @@ igual 'pool: máquina' '1/4 ram_min 3' "$(j 'str(d["pool"]["maquina"]["usadas"])
 igual 'ram: GB disponíveis' 8.0 "$(j 'd["ram"]["disponivel_gb"]' "$tmp/e.json")"
 # Retido na sessão ociosa entra com o comando de liberar; retido em sessão que não está ociosa fica fora.
 igual 'ram: retido na sessão ociosa' True "$(j '"PID 42: CPU 0" in d["ram"]["relatorio"] and "orca-libera.sh ctx_r\n" in d["ram"]["relatorio"]+"\n" and "ctx_r2" not in d["ram"]["relatorio"]' "$tmp/e.json")"
+igual 'ram: retido só com projection.workspace.id' True "$(j '"orca-libera.sh ctx_r3" in d["ram"]["relatorio"]' "$tmp/e.json")"
 igual 'saúde: Orca' '9.9.9' "$(j 'd["saude"]["orca"]["versao"]' "$tmp/e.json")"
 igual 'saúde: script novo desatualizado' True "$(j '"painel.sh" in d["saude"]["scripts_desatualizados"]' "$tmp/e.json")"
 # Workers: objetivo do run e worktree após "::"; dispatch concluído fica fora.
