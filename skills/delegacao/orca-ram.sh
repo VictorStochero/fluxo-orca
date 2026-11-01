@@ -11,7 +11,37 @@ for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 w() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 orca_cmd=${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}
-"$orca_cmd" diagnostics memory --json > "$tmp/memoria" 2>/dev/null || : > "$tmp/memoria"
+mede_memoria() { "$orca_cmd" diagnostics memory --json > "$tmp/memoria" 2>/dev/null || : > "$tmp/memoria"; }
+# Relatório: a memória (a chamada mais lenta) corre junto da paginação dos workers.
+if [ "$modo" = relatorio ]; then mede_memoria & mem=$!; else mede_memoria; fi
+lista_workers() {
+: > "$tmp/workers"; cursor=""
+while :; do
+    args=(); [ -z "$cursor" ] || args=(--cursor "$cursor")
+    "$orca_cmd" orchestration worker-list "${args[@]}" --json > "$tmp/pagina" 2>/dev/null || { echo 'AVISO: workers indisponíveis' >&2; break; }
+    cat "$tmp/pagina" >> "$tmp/workers"; printf '\n' >> "$tmp/workers"
+    proximo=$(RAM_ARQ="$(w "$tmp/pagina")" "$py" -I - <<'EOF'
+import json, os, sys
+sys.stderr.reconfigure(encoding="utf-8")
+try:
+    d = json.load(open(os.environ["RAM_ARQ"], encoding="utf-8"))
+    if d.get("ok") is False: raise ValueError()
+    r = d.get("result", {})
+    p = r.get("page") or {}
+    # shortcut: para na primeira página sem dispatch em andamento; retidos mais antigos que ela não aparecem. Ler todas as páginas se o histórico acumular retidos.
+    andamento = any(w.get("dispatchStatus") not in ("completed", "failed", "stopped", "abandoned") for w in r.get("workers") or [])
+    if p.get("hasMore") and andamento:
+        if not p.get("nextCursor"): raise ValueError()
+        print(p["nextCursor"])
+except (OSError, ValueError, TypeError, AttributeError):
+    print("AVISO: lista de workers ilegível", file=sys.stderr); sys.exit(2)
+EOF
+    )
+    [ $? = 0 ] && [ -n "$proximo" ] && [ "$proximo" != "$cursor" ] || break
+    cursor=$proximo
+done
+}
+if [ "$modo" = relatorio ]; then lista_workers; wait "$mem"; fi
 RAM_ARQ="$(w "$tmp/memoria")" RAM_MODO="$modo" RAM_MIN="$minimo" "$py" -I - <<'EOF'
 import json, math, os, sys
 sys.stdout.reconfigure(encoding="utf-8")
@@ -33,28 +63,6 @@ EOF
 rc=$?
 [ "$modo" = portao ] && exit "$rc"
 [ "$rc" = 0 ] || exit "$rc"
-: > "$tmp/workers"; cursor=""
-while :; do
-    args=(); [ -z "$cursor" ] || args=(--cursor "$cursor")
-    "$orca_cmd" orchestration worker-list "${args[@]}" --json > "$tmp/pagina" 2>/dev/null || { echo 'AVISO: workers indisponíveis' >&2; break; }
-    cat "$tmp/pagina" >> "$tmp/workers"; printf '\n' >> "$tmp/workers"
-    proximo=$(RAM_ARQ="$(w "$tmp/pagina")" "$py" -I - <<'EOF'
-import json, os, sys
-sys.stderr.reconfigure(encoding="utf-8")
-try:
-    d = json.load(open(os.environ["RAM_ARQ"], encoding="utf-8"))
-    if d.get("ok") is False: raise ValueError()
-    p = d.get("result", {}).get("page") or {}
-    if p.get("hasMore"):
-        if not p.get("nextCursor"): raise ValueError()
-        print(p["nextCursor"])
-except (OSError, ValueError, TypeError, AttributeError):
-    print("AVISO: lista de workers ilegível", file=sys.stderr); sys.exit(2)
-EOF
-    )
-    [ $? = 0 ] && [ -n "$proximo" ] && [ "$proximo" != "$cursor" ] || break
-    cursor=$proximo
-done
 RAM_ARQ="$(w "$tmp/memoria")" RAM_WORKERS="$(w "$tmp/workers")" "$py" -I - <<'EOF'
 import json, os, sys
 sys.stdout.reconfigure(encoding="utf-8")

@@ -15,6 +15,7 @@ comeca() { case "$3" in "$2"*) ok "$1" ;; *) ruim "$1: esperado começar com [$2
 cat > "$tmp/bin/claude" <<'EOF'
 #!/usr/bin/env bash
 case " $* " in *' --strict-mcp-config '*) ;; *) exit 2 ;; esac
+[ -n "${MED_MARCA:-}" ] && : > "$MED_MARCA"
 [ -n "${MED_SEM_SEMANA:-}" ] && { echo 'Current session: 12% used'; exit 0; }
 uso_c=30; uso_l=40; [ -n "$CLAUDE_CONFIG_DIR" ] && { uso_c=10; uso_l=6; }
 printf 'Current session: %s%% used, resets %s (America/Sao_Paulo)\nCurrent week (all models): %s%% used, resets %s (America/Sao_Paulo)\n' \
@@ -35,6 +36,36 @@ comeca 'claude: rótulo alinhado e config da conta' 'team   : sessão 10% usado'
 igual 'claude: #cand team' '#cand team 10 6' "$(printf '%s\n' "$saida" | grep '^#cand' | cut -d' ' -f1-4)"
 saida=$(MED_SEM_SEMANA=1 bash "$med/claude.sh" team)
 igual 'claude: sem semana é ilegível' 'team: ilegível' "$saida"
+
+# Claude pela API de uso: token do .credentials.json, sem subir o claude.
+tok=tok-secreto-fixture-9f3a
+cfg="$HOME/.claude-api"; mkdir -p "$cfg"
+cred() { printf '{"claudeAiOauth":{"accessToken":"%s","refreshToken":"ref-%s","expiresAt":%s}}' "$tok" "$tok" "$1" > "$cfg/.credentials.json"; }
+url() { if command -v cygpath >/dev/null 2>&1; then echo "file:///$(cygpath -m "$1")"; else echo "file://$1"; fi; }
+cat > "$tmp/usage.json" <<'EOF2'
+{"five_hour":{"utilization":14.0,"resets_at":"2026-11-01T05:20:00.474730+00:00"},"seven_day":{"utilization":29.0,"resets_at":"2026-11-03T16:00:00.474751+00:00"}}
+EOF2
+echo '{"five_hour":{"utilization":14.0}}' > "$tmp/usage-sem-semana.json"
+api() { rm -f "$tmp/marca"; MED_MARCA="$tmp/marca" CONTA_CONFIG="$cfg" bash "$med/claude.sh" api "$@" > "$tmp/api.out" 2> "$tmp/api.err"; saida=$(cat "$tmp/api.out"); }
+vazao=$(( ($(date +%s) + 3600) * 1000 ))
+cred "$vazao"; export LIMITES_USAGE_URL; LIMITES_USAGE_URL=$(url "$tmp/usage.json")
+api
+comeca 'api: linha humana' 'api    : sessão 14% usado, zera ' "$(printf '%s\n' "$saida" | head -1)"
+igual 'api: #cand com o reset da semana' '#cand api 14 29 1793721600 168' "$(printf '%s\n' "$saida" | grep '^#cand')"
+[ ! -e "$tmp/marca" ] && ok 'api: claude não foi chamado' || ruim 'api: chamou o claude'
+igual 'api: nenhuma saída contém o token' 0 "$(cat "$tmp/api.out" "$tmp/api.err" | grep -c "$tok")"
+cred 1000; api
+[ -e "$tmp/marca" ] && ok 'api: token vencido cai no claude' || ruim 'api: token vencido não caiu'
+cred "$vazao"; LIMITES_USAGE_URL=$(url "$tmp/usage-sem-semana.json") api
+[ -e "$tmp/marca" ] && ok 'api: JSON sem semana cai no claude' || ruim 'api: JSON sem semana não caiu'
+LIMITES_USAGE_URL=$(url "$tmp/inexistente.json") api
+[ -e "$tmp/marca" ] && ok 'api: erro de leitura cai no claude' || ruim 'api: erro não caiu'
+LIMITES_SEM_API=1 api
+[ -e "$tmp/marca" ] && ok 'api: LIMITES_SEM_API força o claude' || ruim 'api: LIMITES_SEM_API ignorado'
+rm "$cfg/.credentials.json"; api
+[ -e "$tmp/marca" ] && ok 'api: sem credencial cai no claude' || ruim 'api: sem credencial não caiu'
+igual 'api: fallback também sem token na saída' 0 "$(cat "$tmp/api.out" "$tmp/api.err" | grep -c "$tok")"
+unset LIMITES_USAGE_URL
 
 # Orca: rateLimits do `orca account list --json`, uma leitura por execução.
 agora_ms=$(( $(date +%s) * 1000 ))

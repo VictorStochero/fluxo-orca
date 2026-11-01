@@ -23,13 +23,15 @@ cat > "$tmp/memoria.json" <<'EOF'
  {"worktreeId":"r::/a","worktreeName":"projeto-a","sessions":[{"sessionId":"r::/a@@idle","pid":10,"cpu":0,"memory":2147483648},{"pid":11,"cpu":0,"memory":1073741824},{"pid":12,"cpu":1,"memory":3221225472}]},
  {"worktreeId":"r::/b","worktreeName":"projeto-b","sessions":[{"pid":20,"cpu":0,"memory":536870912}]}]}}
 EOF
-printf '%s\n' '{"ok":true,"result":{"workers":[],"page":{"hasMore":true,"nextCursor":"pagina2"}}}' > "$tmp/pagina1.json"
+cat > "$tmp/pagina1.json" <<'EOF'
+{"ok":true,"result":{"workers":[
+ {"dispatchId":"ctx_ativo","dispatchStatus":"dispatched","terminalState":"active","agentTerminalHandle":"term_b","resource":{"worktreeId":"r::/b"}}],"page":{"hasMore":true,"nextCursor":"pagina2"}}}
+EOF
 cat > "$tmp/pagina2.json" <<'EOF'
 {"ok":true,"result":{"workers":[
  {"dispatchId":"ctx_retido","dispatchStatus":"completed","terminalState":"retained","agentTerminalHandle":"term_a","resource":{"worktreeId":"r::/a","endpointIncarnation":"r::/a@@idle:instancia"}},
  {"dispatchId":"ctx_inexistente","dispatchStatus":"completed","terminalState":"retained","agentTerminalHandle":"term_antigo","resource":{"worktreeId":"r::/a","endpointIncarnation":"r::/a@@fechado:instancia"}},
- {"dispatchId":"ctx_antigo","dispatchStatus":"completed","terminalState":"retained","agentTerminalHandle":"term_b","resource":{"worktreeId":"r::/b"}},
- {"dispatchId":"ctx_ativo","dispatchStatus":"dispatched","terminalState":"active","agentTerminalHandle":"term_b","resource":{"worktreeId":"r::/b"}}],"page":{"hasMore":false}}}
+ {"dispatchId":"ctx_antigo","dispatchStatus":"completed","terminalState":"retained","agentTerminalHandle":"term_b","resource":{"worktreeId":"r::/b"}}],"page":{"hasMore":false}}}
 EOF
 falhas=0
 confere() { if "$@"; then echo "ok   $*"; else echo "FALHA $*"; falhas=$((falhas + 1)); fi; }
@@ -41,6 +43,12 @@ if grep -q 'PID 12\|ctx_antigo\|ctx_inexistente' "$tmp/saida"; then echo 'FALHA 
 ordem=$(awk '/PID/ {gsub(/:/,"",$2); print $2}' "$tmp/saida")
 [ "$ordem" = "$(printf '10\n11\n20')" ] || { echo 'FALHA ordem por memória'; falhas=$((falhas + 1)); }
 if grep -q 'worker-release\|terminal close\|worktree remove' "$tmp/chamadas"; then echo 'FALHA relatório escreveu'; falhas=$((falhas + 1)); fi
+confere test "$(grep -c 'worker-list' "$tmp/chamadas")" = 2
+# Página sem dispatch em andamento encerra a paginação (o histórico vem do mais novo ao mais antigo).
+printf '%s\n' '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_velho","dispatchStatus":"completed","terminalState":"retained"}],"page":{"hasMore":true,"nextCursor":"pagina2"}}}' > "$tmp/pagina1.json"
+: > "$tmp/chamadas"
+bash "$raiz/skills/delegacao/orca-ram.sh" > "$tmp/saida" 2>&1
+confere test "$(grep -c 'worker-list' "$tmp/chamadas")" = 1
 echo '{"ok":false}' > "$tmp/memoria.json"
 bash "$raiz/skills/delegacao/orca-ram.sh" --portao 3 > "$tmp/saida" 2>&1
 [ $? = 2 ] && grep -q 'memória indisponível' "$tmp/saida" || { echo 'FALHA memória ilegível'; falhas=$((falhas + 1)); }

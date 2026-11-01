@@ -115,6 +115,8 @@ rc=$?
 if [ "$SEGUNDA" = 1 ]; then
   [ "$rc" = 0 ] || exit "$rc"
   : > "$tmp/segunda"
+  teto_segunda=${LIMITES_SEGUNDA_TETO:-$CONTAS_SEGUNDA_TETO}
+  [[ "$teto_segunda" =~ ^[0-9]+$ ]] || { echo 'LIMITES_SEGUNDA_TETO deve ser inteiro.' >&2; exit 2; }
   for c in $CONTAS; do
     agente=$(conta_campo "$c" agente)
     if ! conta_tem_papel "$c" segunda-opiniao; then
@@ -123,9 +125,12 @@ if [ "$SEGUNDA" = 1 ]; then
     instalada "$c" || continue
     i=$(awk -v c="$c" '$2 == c { print $1 }' "$tmp/medidas")
     if [ "$agente" = antigravity ]; then
+      # O uso do Argon está no grupo próprio; o gemini-models só vale quando a medida não traz o gemini-4-argon.
+      argon=$(awk '$1 == "#grupo" && $3 == "gemini-4-argon" { print 1; exit }' "$tmp/m.$i" 2>/dev/null)
       while read -r _ _ grupo cu lo ep dur; do
         case "$grupo" in
-          gemini-models) [ "$FAMILIA" = gemini ] && continue; ordem=0; modelo=gemini-4-argon-high ;;
+          gemini-4-argon) [ "$FAMILIA" = gemini ] && continue; ordem=0; modelo=gemini-4-argon-high ;;
+          gemini-models) [ "$FAMILIA" = gemini ] || [ -n "$argon" ] && continue; ordem=0; modelo=gemini-4-argon-high ;;
           claude-and-gpt-models)
             ordem=1; modelo=claude-opus-5-5-high
             [ "$FAMILIA" != claude ] || modelo=gpt-oss-120b-medium ;;
@@ -145,12 +150,13 @@ if [ "$SEGUNDA" = 1 ]; then
       [ -n "$lo" ] && printf '%s %s - %s %s %s %s %s\n' "$ordem" "$c" "$modelo" "$cu" "$lo" "$ep" "$dur" >> "$tmp/segunda"
     fi
   done
-  awk -v agora="$(date +%s)" '
+  # Vence a maior folga na janela longa (empate: Gemini, misto, codex); acima do teto da segunda opinião a candidata sai.
+  awk -v agora="$(date +%s)" -v teto="$teto_segunda" '
     FNR == NR { split($2,v,"/"); if ($1 == "maquina") cheia=(v[1] == 0); else livre[$1]=(v[2] == 0 || v[1] > 0); next }
     { if (cheia || !livre[$2]) next
       h=-1; if ($7 != "-") h=($7-agora)/3600
-      if ($5 > 80 || !($6 <= 80 || ($6 <= 95 && h >= 0 && h < 24))) next
-      if (!achou || $1 < melhor) { achou=1; melhor=$1; conta=$2; grupo=$3; modelo=$4; folga=100-$6; horas=h }
+      if ($5 > 80 || $6 > teto) next
+      if (!achou || 100-$6 > folga || (100-$6 == folga && $1 < melhor)) { achou=1; melhor=$1; conta=$2; grupo=$3; modelo=$4; folga=100-$6; horas=h }
     }
     END {
       if (!achou) { print "segunda: nenhuma (cota)"; exit 75 }

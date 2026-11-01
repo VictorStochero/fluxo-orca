@@ -6,8 +6,6 @@ description: Use antes de despachar uma onda de workers ou quando perguntarem so
 # Revisão de limite das contas
 
 ## Registro de contas
-O painel (`painel.sh --servir` ou `--config conta.<nome>.vagas=N`) edita o registro: troca só o token pedido na linha da conta, preserva comentários e ordem, remove a linha legada `<conta>=N` ao gravar `vagas` e só troca o arquivo depois de o `contas.sh lista` aprovar o candidato (num `.tmp`). `papeis=` vazio vale e deixa a conta só como medida.
-
 As contas da máquina vêm de `~/.claude/agentes.conf` sobre o catálogo do plugin (`agentes-catalogo.conf`: os 45 agentes da tela do Orca, com comando, argumentos e medidor). Uma conta por linha, `nome chave=valor ...`; a ordem das linhas é a prioridade:
 
 ```
@@ -30,6 +28,7 @@ minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minima
 - `ram_min=<GB>` é uma linha global (padrão 0, desligado; aceita decimal com ponto), lida em `RAM_MIN_GB`. Antes da reserva, o pool consulta `orca diagnostics memory --json`: abaixo do mínimo sai 75 com `POOL CHEIO: memória (...)`; Orca fora do ar ou JSON ilegível só avisa, mantendo o teto. `bash ~/.cache/orca-ram.sh` lista RAM disponível e sessões com CPU 0 por memória, com sugestões de liberação de workers concluídos e retidos, sem fechar nada.
 - A conta principal pode revisar/verificar; só `papeis=orquestra` continua fora do pool. Escritor Claude recebe `--advisor opus`; `CONTAS_ADVISOR` troca o modelo e vazio desliga. Papéis Claude só leitura sempre usam `--settings ~/.claude/agents/somente-leitura.json`, sem MCP de navegador.
 - Sem linha de conta no arquivo, valem as padrão: `team` (`~/.claude-team`, 1 vaga), `pessoal` (ilimitada), `codex` (1), `agy` (1, só segunda opinião) e `claude-b` (`~/.claude-b`, só medida, se a pasta existir). Linhas `conta=N` mudam só as vagas.
+- O registro parseado fica em `~/.cache/agentes/registro.cache` (atribuições bash, gravação atômica), válido enquanto o carimbo da primeira linha bater: caminho, mtime e tamanho do `agentes.conf` e do catálogo, mtime do `contas.sh`, pasta `~/.claude-b` e carimbos de trava. Qualquer mudança, linha que não seja atribuição do registro ou erro de parse reconstrói o cache (que só se grava com parse bem-sucedido); sem `stat -c` (macOS) não há cache. Apagar o arquivo é sempre seguro.
 - `bash ~/.cache/contas.sh lista` mostra o registro efetivo; `contas.sh lanca <conta> <papel> [modelo]` imprime o comando para `orca-libera.sh --cria --command` (Claude ganha `--agent fluxo-orca:<papel>`, ou `--agent <plugin:agente>` quando o papel já vem assim, ex.: `auditoria-pre-subida:auditor`).
 - `comando` de conta Claude tem de ser um executável no PATH (script), não função do `.bashrc`: a medição usa o `claude` com a pasta de config, mas o terminal do worker roda o `comando`.
 - Kimi e MiniMax: no catálogo e medidos pelo Orca, **não testados com conta real**. MiniMax não tem agente próprio no Orca: conta pelo `opencode` ou pelo `claude` com `ANTHROPIC_BASE_URL`.
@@ -45,7 +44,7 @@ minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minima
 
 | Medidor | Origem | Contas |
 |---|---|---|
-| `claude` | `claude -p "/usage"` com `CLAUDE_CONFIG_DIR` da conta (sem ela, a principal); sessão e semana | contas Claude |
+| `claude` | API de uso (`api.anthropic.com/api/oauth/usage`) com o token de `<config>/.credentials.json` (~1 s); cai no `claude -p "/usage"` com `CLAUDE_CONFIG_DIR` da conta (sem ela, a principal) quando falta credencial (macOS usa o Keychain), o token venceu, a API recusa ou falha; `LIMITES_SEM_API=1` força o `/usage`; `LIMITES_USAGE_URL` troca a URL (testes); sessão e semana | contas Claude |
 | `orca:<fornecedor>` | `rateLimits.<fornecedor>` do `orca account list --json`, uma consulta por execução; janela curta e semana (ou mês) | `codex`, `antigravity` (uma linha por grupo de modelos; a conta vale pelo pior grupo), `kimi`, `minimax`, `cursor`, `grok`, `zcode`, `gemini`, `opencodeGo` |
 | `-` | sem medição: só vagas | os demais agentes |
 
@@ -58,11 +57,11 @@ minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minima
 
 ## Pool
 Com `teto>0`, a reserva conta todas as vagas e sai 75 com `POOL CHEIO: teto da máquina (N)` quando atinge o limite. Conta com `vagas=0` cria trava para participar da contagem; com `teto=0` mantém o comportamento sem trava. `livres` inclui `maquina <livres>/<teto>` só com teto ativo: essa linha resume a máquina e não é uma conta.
-`vaga-agente.sh pega <conta> <dispatch_id>`, `solta <dispatch_id>`, `troca <provisório> <dispatch_id>` e `livres`, com as vagas do registro. Recuperação somente por estado terminal do dispatch ou `dispatch_not_found` confirmado pelo Orca; erro de conexão conserva a vaga. Dono provisório (`res-<tag>`) não é consultado no Orca: reserva esquecida expira em `POOL_RESERVA_TTL` s (padrão 600). `solta` e `troca` acham a vaga mesmo de conta que saiu do registro. Fluxo de reserva/liberação na skill `delegacao`.
+`vaga-agente.sh pega <conta> <dispatch_id>`, `solta <dispatch_id>`, `troca <provisório> <dispatch_id>` e `livres`, com as vagas do registro. Recuperação somente por estado terminal do dispatch ou `dispatch_not_found` confirmado pelo Orca; erro de conexão conserva a vaga. Uma só `worker-list --json` (100 mais recentes) decide os dispatches que ela traz; só o ausente da lista vai ao `worker-show` individual, que confirma o `dispatch_not_found`. Dono provisório (`res-<tag>`) não é consultado no Orca: reserva esquecida expira em `POOL_RESERVA_TTL` s (padrão 600). `solta` e `troca` acham a vaga mesmo de conta que saiu do registro. Fluxo de reserva/liberação na skill `delegacao`.
 
 - **Antes de cada onda de workers**: rodar; conta acima de 80% sai da vez.
 - Revisão obrigatória continua em Opus mesmo com cota apertada: espera a janela zerar em vez de rebaixar o modelo.
-- Linha `ilegível (...)`: o `/usage` mudou de formato, a conta não está logada ou o Orca não tem a cota do fornecedor — dizer o motivo da linha, não estimar.
+- Linha `ilegível (...)`: o `/usage` (ou a API de uso) mudou de formato, a conta não está logada ou o Orca não tem a cota do fornecedor — dizer o motivo da linha, não estimar.
 
 ## Responder ao usuário
 - `bash ~/.cache/limites.sh` — uso por conta e janela, horário de renovação e escritor escolhido; exit 3 indica algum uso acima de 80%. Apresentar como tabela (conta · janela · uso · zera às), sem reformular números.
@@ -71,6 +70,6 @@ Com `teto>0`, a reserva conta todas as vagas e sai 75 com `POOL CHEIO: teto da m
 - `bash ~/.cache/limites.sh --alerta` — só as linhas de conta com alguma janela acima de 80%, exit 3; nada acima, nada impresso e exit 0. O `orca-espera.sh` usa para avisar antes de estourar.
 
 ## Segunda opinião
-`bash ~/.cache/limites.sh --segunda [--familia <claude|gpt|gemini>]` escolhe entre contas com `segunda-opiniao` e Codex quando o escritor não é GPT, respeitando vagas e o mesmo teto de cota do escritor. A preferência é Gemini do agy, grupo misto do agy, depois Codex. Com escritor Claude, o grupo misto usa GPT; com escritor GPT, usa Claude; com escritor Gemini, o grupo Gemini fica fora.
+`bash ~/.cache/limites.sh --segunda [--familia <claude|gpt|gemini>]` escolhe entre contas com `segunda-opiniao` e Codex quando o escritor não é GPT, respeitando vagas. Vence a candidata de **maior folga** na janela longa (empate: Gemini do agy, grupo misto do agy, Codex); a janela curta segue com o teto de 80. O teto próprio da segunda opinião é `LIMITES_SEGUNDA_TETO` (padrão 60; `segunda_teto=<N>` no `agentes.conf`, linha global como `teto=`): acima dele a candidata sai. Com escritor Claude, o grupo misto usa GPT; com escritor GPT, usa Claude; com escritor Gemini, o grupo Gemini fica fora.
 
-Os grupos em `#grupo <conta> <grupo-slug> <curta%> <longa%> <reset_epoch|-> <duração_h>` valem separadamente: o pior `#cand` continua no alerta/escritor e não exclui o Gemini livre da segunda opinião. Saída: `segunda: agy gemini-models modelo=gemini-4-argon-high (90% livre, zera em 168h)`, ou `segunda: nenhuma (cota)` com exit 75. IDs conferidos em `agy models`: `gemini-4-argon-high`, `claude-opus-5-5-high` e `gpt-oss-120b-medium`; Codex sugere `gpt-6.1-sol` ou `modelo=` da conta.
+Os grupos em `#grupo <conta> <grupo-slug> <curta%> <longa%> <reset_epoch|-> <duração_h>` valem separadamente: o pior `#cand` continua no alerta/escritor e não exclui o Gemini livre da segunda opinião. O modelo `gemini-4-argon-high` vale pelo grupo `gemini-4-argon` (onde o Orca mede o uso do Argon) quando a medida o traz; só sem ele vale pelo `gemini-models`. Saída: `segunda: agy gemini-4-argon modelo=gemini-4-argon-high (48% livre, zera em 150h)`, ou `segunda: nenhuma (cota)` com exit 75. Uso: uma por branch, na primeira entrega de alto risco, nunca nas rodadas de correção; pacote só com o diff e os arquivos tocados, pergunta fixa “ache o caso que quebra”, resposta só com achados `arquivo:linha` (alvo ≤ 3 KB). IDs conferidos em `agy models`: `gemini-4-argon-high`, `claude-opus-5-5-high` e `gpt-oss-120b-medium`; Codex sugere `gpt-6.1-sol` ou `modelo=` da conta.

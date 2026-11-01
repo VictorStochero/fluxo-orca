@@ -19,7 +19,9 @@ if [ "$1 $2 $3" = 'account list --json' ]; then
     longa=weekly; min=10080; [ -n "${POOL_CODEX_MENSAL:-}" ] && { longa=monthly; min=43200; }
     agy=""
     # Antigravity com um grupo acima de 80% e outro abaixo.
-    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s}]}' "${POOL_AGY_GEMINI:-10}" "$zs" "${POOL_AGY_MISTO:-85}" "$zs")
+    # POOL_AGY_ARGON: grupo próprio "Gemini 4 Argon" (só semana), onde o uso real do modelo é medido.
+    argon=""; [ -n "${POOL_AGY_ARGON:-}" ] && argon=$(printf ',{"group":"Gemini 4 Argon","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s}' "$POOL_AGY_ARGON" "$zs")
+    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s}%s]}' "${POOL_AGY_GEMINI:-10}" "$zs" "${POOL_AGY_MISTO:-85}" "$zs" "$argon")
     printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}%s}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs" "$agy"
     exit 0
 fi
@@ -29,7 +31,23 @@ fi
     printf '{"ok":true,"result":{"host":{"availableMemory":%s}}}\n' "$(( ${POOL_RAM_GB:-4} * 1073741824 ))"
     exit 0
 }
+if [ "$1 $2 $3" = 'orchestration worker-list --json' ]; then
+    echo list >> "$POOL_ESTADOS/chamadas"
+    # POOL_LISTA=1: as 100 mais recentes trazem os dispatches de estado conhecido; sem ele, a lista vem vazia.
+    printf '{"ok":true,"result":{"workers":['; sep=""
+    if [ -n "${POOL_LISTA:-}" ]; then
+        for f in "$POOL_ESTADOS"/ctx_*; do
+            [ -f "$f" ] || continue
+            case "$(cat "$f")" in pending | running | completed | failed | stopped | abandoned)
+                printf '%s{"dispatchId":"%s","dispatchStatus":"%s"}' "$sep" "${f##*/}" "$(cat "$f")"; sep=, ;;
+            esac
+        done
+    fi
+    printf '],"page":{"hasMore":false}}}\n'
+    exit 0
+fi
 [ "$1 $2 $3 $5" = 'orchestration worker-show --dispatch --json' ] || exit 2
+echo "show $4" >> "$POOL_ESTADOS/chamadas"
 estado=$(cat "$POOL_ESTADOS/$4" 2>/dev/null || echo pending)
 case "$estado" in
     inexistente) echo '{"ok":false,"error":{"code":"dispatch_not_found"}}'; exit 1 ;;
@@ -109,6 +127,22 @@ for estado in completed failed stopped abandoned inexistente; do
     pool solta ctx_3; echo pending > "$POOL_ESTADOS/ctx_2"; pool pega team ctx_2
 done
 pool solta ctx_2
+# Lista de workers resolve sem worker-show; dispatch ausente da lista confirma no worker-show.
+export POOL_LISTA=1
+pool pega team ctx_2; : > "$POOL_ESTADOS/chamadas"
+echo completed > "$POOL_ESTADOS/ctx_2"
+confere_rc 0 'lista: dispatch terminal libera a vaga' pool pega team ctx_3
+[ "$(cat "$HOME/.cache/agentes/team.lock1/dispatch" 2>/dev/null)" = ctx_3 ] && ok 'lista: novo dono' || ruim 'lista: vaga não trocou de dono'
+grep -qx list "$POOL_ESTADOS/chamadas" && ! grep -q '^show' "$POOL_ESTADOS/chamadas" && ok 'lista: uma consulta, nenhum worker-show' || ruim 'lista: consultou worker-show'
+pool solta ctx_3; pool pega team ctx_2; : > "$POOL_ESTADOS/chamadas"
+echo running > "$POOL_ESTADOS/ctx_2"
+confere_rc 75 'lista: dispatch ativo conserva a vaga' pool pega team ctx_3
+! grep -q '^show' "$POOL_ESTADOS/chamadas" && ok 'lista: ativo sem worker-show' || ruim 'lista: ativo consultou worker-show'
+: > "$POOL_ESTADOS/chamadas"; echo inexistente > "$POOL_ESTADOS/ctx_2"
+confere_rc 0 'lista: ausente da lista confirma no worker-show' pool pega team ctx_3
+grep -qx 'show ctx_2' "$POOL_ESTADOS/chamadas" && ok 'lista: worker-show só para o ausente' || ruim 'lista: ausente sem worker-show'
+unset POOL_LISTA
+pool solta ctx_3; pool solta ctx_2
 mkdir -p "$HOME/.cache/agentes/team.lock1"
 confere_rc 75 'trava sem dispatch é preservada' pool pega team ctx_sem_dono
 confere_rc 0 'livres consulta trava sem dono' pool livres
@@ -405,6 +439,19 @@ POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 confere_rc 0 'segunda: fallback codex' bash "
 grep -q '^segunda: codex - modelo=gpt-6.1-sol ' "$tmp/saida" && ok 'segunda cai para codex' || ruim 'fallback codex ausente'
 POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 confere_rc 75 'segunda: GPT sem outra família livre' bash "$tmp/seletor/limites.sh" --segunda --familia gpt
 grep -qx 'segunda: nenhuma (cota)' "$tmp/saida" && ok 'segunda esgotada informa cota' || ruim 'diagnóstico da segunda'
+# Escolha por folga e Argon medido no grupo próprio.
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=70 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=10 POOL_CODEX_SEMANA=38 confere_rc 0 'segunda: Argon alto não é escolhido' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy claude-and-gpt-models modelo=gpt-oss-120b-medium (90% livre' "$tmp/saida" && ok 'segunda: misto de maior folga vence o Gemini' || { ruim 'segunda: escolha com Argon a 70%'; cat "$tmp/saida"; }
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=30 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=50 POOL_CODEX_SEMANA=38 confere_rc 0 'segunda: Argon livre' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy gemini-4-argon modelo=gemini-4-argon-high (70% livre' "$tmp/saida" && ok 'segunda: Gemini pelo grupo gemini-4-argon' || { ruim 'segunda: Argon a 30%'; cat "$tmp/saida"; }
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=70 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=70 POOL_CODEX_SEMANA=70 confere_rc 75 'segunda: tudo acima do teto' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -qx 'segunda: nenhuma (cota)' "$tmp/saida" && ok 'segunda: nenhuma (cota) acima de 60' || ruim 'segunda: diagnóstico acima do teto'
+LIMITES_SEGUNDA_TETO=80 POOL_AGY_ALTO=1 POOL_AGY_ARGON=70 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=70 POOL_CODEX_SEMANA=70 confere_rc 0 'segunda: teto 80 volta a aceitar' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy gemini-4-argon ' "$tmp/saida" && ok 'segunda: empate na folga fica com o Gemini' || ruim 'segunda: teto 80'
+printf 'segunda_teto=40\n' > "$HOME/.claude/agentes.conf"
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=50 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=50 POOL_CODEX_SEMANA=50 confere_rc 75 'segunda: segunda_teto do agentes.conf' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+LIMITES_SEGUNDA_TETO=60 POOL_AGY_ALTO=1 POOL_AGY_ARGON=50 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=50 POOL_CODEX_SEMANA=50 confere_rc 0 'segunda: variável vence o agentes.conf' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+rm "$HOME/.claude/agentes.conf"
 
 # Peso altera o ritmo, mas a ordem explícita continua soberana.
 cat > "$HOME/.claude/agentes.conf" <<'EOF'

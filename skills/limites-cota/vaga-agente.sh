@@ -8,15 +8,45 @@ valida_dispatch() { [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]] || erro 'dispatch inválido';
 source "$(dirname "${BASH_SOURCE[0]}")/contas.sh" || exit 2
 contas_carrega || exit 2
 
-morta() { # Só evidência explícita do Orca libera uma vaga; falhas de transporte não liberam.
-    local resposta
-    [ -n "$1" ] || return 1
-    resposta=$("${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" orchestration worker-show --dispatch "$1" --json 2>/dev/null)
-    [ -n "$resposta" ] || return 1
+acha_python() {
     if [ -z "${py:-}" ]; then
         for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break; done
     fi
-    [ -n "$py" ] || return 1
+    [ -n "$py" ]
+}
+
+# Uma consulta (as 100 mais recentes) resolve as vagas de dispatch recente; o resto vai ao worker-show.
+lista_workers() {
+    LISTA_OK=0; LISTA=""
+    acha_python || return 0
+    LISTA=$("${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" orchestration worker-list --json 2>/dev/null | "$py" -I -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    if d.get("ok") is not True: sys.exit(1)
+    for w in d["result"]["workers"]: print(w["dispatchId"], w.get("dispatchStatus") or "-")
+except (ValueError, KeyError, TypeError, AttributeError):
+    sys.exit(1)
+' 2>/dev/null) && LISTA_OK=1
+    LISTA=${LISTA//$'\r'/}
+    return 0
+}
+
+morta() { # Só evidência explícita do Orca libera uma vaga; falhas de transporte não liberam.
+    local resposta l r
+    [ -n "$1" ] || return 1
+    [ -n "${LISTA_OK:-}" ] || lista_workers
+    if [ "$LISTA_OK" = 1 ]; then
+        l=$'\n'$LISTA$'\n'
+        if [[ "$l" == *$'\n'"$1 "* ]]; then
+            r=${l#*$'\n'"$1 "}
+            case ${r%%$'\n'*} in completed | failed | stopped | abandoned) return 0 ;; esac
+            return 1
+        fi
+    fi
+    resposta=$("${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" orchestration worker-show --dispatch "$1" --json 2>/dev/null)
+    [ -n "$resposta" ] || return 1
+    acha_python || return 1
     POOL_JSON="$resposta" POOL_DISPATCH="$1" "$py" -I - <<'EOF'
 import json, os, sys
 try:
