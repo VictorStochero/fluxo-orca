@@ -116,13 +116,11 @@ _contas_carimbo() { # entrada do registro (arquivo, catálogo, este script, cont
         st=$(stat -c '%y %s' -- "$CONTAS_CONF" "$CONTAS_CATALOGO" "$CONTAS_FONTE" 2>/dev/null) || return 1
     else
         st=$(stat -c '%y %s' -- "$CONTAS_CATALOGO" "$CONTAS_FONTE" 2>/dev/null) || return 1
-        st="-"$'
-'"$st"
+        st="-"$'\n'"$st"
     fi
     [ -d "$HOME/.claude-b" ] && b=1
     for f in "$HOME"/.cache/trava-*.ok; do [ -s "$f" ] && t="$t,${f##*/trava-}"; done
-    CONTAS_CARIMBO="# stamp $CONTAS_CONF ${st//$'
-'/ } $CONTAS_CATALOGO b=$b t=$t"
+    CONTAS_CARIMBO="# stamp $CONTAS_CONF ${st//$'\n'/ } $CONTAS_CATALOGO b=$b t=$t"
 }
 
 _contas_cache_le() { # Só aceita carimbo igual e linhas de atribuição do registro; senão reconstrói.

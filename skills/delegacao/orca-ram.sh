@@ -28,7 +28,7 @@ try:
     if d.get("ok") is False: raise ValueError()
     r = d.get("result", {})
     p = r.get("page") or {}
-    # Histórico vem do mais novo ao mais antigo: sem dispatch em andamento na página, as seguintes só têm histórico.
+    # shortcut: para na primeira página sem dispatch em andamento; retidos mais antigos que ela não aparecem. Ler todas as páginas se o histórico acumular retidos.
     andamento = any(w.get("dispatchStatus") not in ("completed", "failed", "stopped", "abandoned") for w in r.get("workers") or [])
     if p.get("hasMore") and andamento:
         if not p.get("nextCursor"): raise ValueError()
