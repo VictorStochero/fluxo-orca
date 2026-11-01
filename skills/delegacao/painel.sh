@@ -25,7 +25,7 @@ coleta_travas() {
         t=${d##*/}; fila=${t%.lock*}; fila=${fila#gs-teste}; fila=${fila#-}; vaga=${t##*.lock}
         [ -n "$fila" ] || fila=3306
         pid=''; dono=''; viva=false
-        read -r pid < "$d/pid" 2>/dev/null; read -r dono < "$d/dono" 2>/dev/null
+        { read -r pid < "$d/pid"; } 2>/dev/null; { read -r dono < "$d/dono"; } 2>/dev/null
         [[ "$pid" =~ ^[0-9]+$ ]] || pid=''
         [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && viva=true
         dono=${dono//$'\t'/ }; dono=${dono%$'\r'}
@@ -72,7 +72,9 @@ def orca_json(*args):
     try:
         with open(exe, "rb") as f: script = f.read(2) == b"#!"
         cmd = ([shutil.which("bash") or "bash", exe] if script else [exe]) + list(args)
-        r = subprocess.run(cmd, capture_output=True, timeout=20, stdin=subprocess.DEVNULL)
+        # Sem o handle do terminal: com ele o worker-list fica restrito ao run vinculado ao coordenador.
+        env = {k: v for k, v in E.items() if k != "ORCA_TERMINAL_HANDLE"}
+        r = subprocess.run(cmd, capture_output=True, timeout=20, stdin=subprocess.DEVNULL, env=env)
         d = json.loads(r.stdout.decode("utf-8", "replace"))
         return d if r.returncode == 0 and isinstance(d, dict) and d.get("ok") is not False else None
     except (OSError, ValueError, subprocess.SubprocessError): return None
@@ -85,9 +87,6 @@ def lista_workers():
         d = orca_json("orchestration", "worker-list", *(["--cursor", cursor] if cursor else []), "--json")
         if d is None: break
         paginas.append(d)
-        # Terminal com run vinculado (coordenador): o Orca restringe a lista a esse run.
-        if ((d.get("result") or {}).get("scope") or {}).get("source") == "bound":
-            aviso.append("workers só do run vinculado a este terminal: gere o painel de um terminal sem run")
         p = (d.get("result") or {}).get("page") or {}
         # Histórico vem do mais novo ao mais antigo (milhares): para na primeira página sem dispatch em andamento.
         if not any(x.get("dispatchStatus") not in TERMINAIS for x in (d.get("result") or {}).get("workers") or []): break
@@ -103,7 +102,8 @@ with ThreadPoolExecutor(4) as ex:
     f_mem = ex.submit(orca_json, "diagnostics", "memory", "--json")
     f_runs = ex.submit(orca_json, "orchestration", "run-list", "--json")
     f_ws = ex.submit(lista_workers)
-    st, mem, runs, paginas = f_st.result(), f_mem.result(), f_runs.result(), f_ws.result()
+    f_ret = ex.submit(orca_json, "orchestration", "worker-list", "--terminal-state", "retained", "--json")
+    st, mem, runs, paginas, ret = f_st.result(), f_mem.result(), f_runs.result(), f_ws.result(), f_ret.result()
 
 # saúde
 raiz = le(os.path.join(cache, "fluxo-orca-raiz")).strip()
@@ -159,7 +159,8 @@ for l in le(os.path.join(home, ".claude", "agentes.conf")).split("\n"):
     if m: conf[m.group(1)] = float(m.group(2)) if "." in m.group(2) else int(m.group(2))
 agora = time.time(); contas = []; total = 0
 # contas.sh leva segundos no Windows: com agentes.conf lê-se direto (padrões do contas.sh); sem ele, a saída do contas.sh lista.
-conta_linhas = [l for l in le(os.path.join(home, ".claude", "agentes.conf")).split("\n") if re.match(r"^\s*[^\s#=]+\s+\S+=", l)]
+conf_linhas = le(os.path.join(home, ".claude", "agentes.conf")).split("\n")
+conta_linhas = [l for l in conf_linhas if re.match(r"^\s*[^\s#=]+\s+\S+=", l)]
 if not conta_linhas:
     try: conta_linhas = subprocess.run([shutil.which("bash") or "bash", os.path.join(cache, "contas.sh"), "lista"], capture_output=True, timeout=30, stdin=subprocess.DEVNULL).stdout.decode("utf-8", "replace").split("\n")
     except (OSError, subprocess.SubprocessError): conta_linhas = []
@@ -189,6 +190,10 @@ for l in conta_linhas:
     contas.append({"nome": nome, "agente": c.get("agente"), "vagas": inteiro(c.get("vagas"), 0), "usadas": len(ocup),
                    "peso": inteiro(c.get("peso"), 1), "papeis": [p for p in c.get("papeis", "").split(",") if p],
                    "ocupantes": ocup, "cota": cota})
+for l in conf_linhas:  # linhas "conta=N" mudam só as vagas (contas.sh)
+    m = re.match(r"^\s*([A-Za-z0-9_-]+)=(\d+)\s*$", l)
+    for c in contas:
+        if m and c["nome"] == m.group(1): c["vagas"] = int(m.group(2))
 teto = conf.get("teto", 0); ram_min = conf.get("ram_min", 0)
 pool = {"teto": teto, "ram_min": ram_min, "maquina": {"usadas": total, "teto": teto}, "contas": contas}
 
@@ -196,14 +201,22 @@ pool = {"teto": teto, "ram_min": ram_min, "maquina": {"usadas": total, "teto": t
 disp = None
 try: disp = round(mem["result"]["host"]["availableMemory"] / 1073741824, 1)
 except (TypeError, KeyError): pass
-# Mesmo critério do orca-ram.sh (sessões com CPU 0 por memória), sem os segundos que ele leva no Windows.
+# Mesmo critério do orca-ram.sh (sessões com CPU 0 por memória e workers concluídos retidos nelas), sem os segundos que ele leva no Windows.
 rel = []
 try:
+    ativos = {x.get("agentTerminalHandle") for pg in paginas for x in (pg.get("result") or {}).get("workers") or [] if x.get("dispatchStatus") not in TERMINAIS}
+    retidos = {}
+    for x in ((ret or {}).get("result") or {}).get("workers") or []:
+        if x.get("dispatchStatus") not in TERMINAIS or x.get("terminalState") != "retained" or x.get("agentTerminalHandle") in ativos: continue
+        rec = x.get("resource") or {}
+        retidos.setdefault(rec.get("worktreeId"), []).append(((rec.get("endpointIncarnation") or "").rsplit(":", 1)[0], x.get("dispatchId")))
     for wt in sorted(mem["result"].get("worktrees") or [], key=lambda w: -sum(x.get("memory", 0) for x in w.get("sessions", []) if x.get("cpu") == 0)):
         ociosas = sorted([x for x in wt.get("sessions", []) if x.get("cpu") == 0], key=lambda x: -x.get("memory", 0))
         if not ociosas: continue
         rel.append((wt.get("worktreeName") or wt.get("worktreeId")) + ":")
         rel += ["  PID %s: CPU 0 · %.1f GB" % (x.get("pid"), x.get("memory", 0) / 1073741824) for x in ociosas]
+        sessoes = {x.get("sessionId") for x in ociosas}
+        rel += ["  worker concluído e retido: bash ~/.cache/orca-libera.sh " + d for s, d in sorted(retidos.get(wt.get("worktreeId"), []), key=lambda r: r[1]) if not s or s in sessoes]
 except (TypeError, AttributeError): pass
 ram = {"disponivel_gb": disp, "relatorio": "\n".join(rel)}
 
@@ -290,13 +303,14 @@ return{c:[el("code",{},x.dispatch||"-"),(x.agente||"-")+(x.modelo?" / "+x.modelo
 html = PAGINA.replace("__N__", E["PAINEL_INTERVALO"]).replace("__DADOS__", DADOS)
 alvo = os.path.join(cache, "painel.html")
 os.makedirs(cache, exist_ok=True)
-with open(alvo + ".novo", "w", encoding="utf-8", newline="\n") as f: f.write(html)
-os.replace(alvo + ".novo", alvo)
+novo = "%s.%d" % (alvo, os.getpid())  # por processo: --loop e geração avulsa podem coincidir
+with open(novo, "w", encoding="utf-8", newline="\n") as f: f.write(html)
+os.replace(novo, alvo)
 print(alvo)
 EOF
 }
 
 if [ "$modo" = loop ]; then
-    while :; do gera >/dev/null || exit $?; sleep "$intervalo"; done
+    while :; do gera >/dev/null; sleep "$intervalo"; done
 fi
 gera
