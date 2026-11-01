@@ -12,7 +12,6 @@
 # Laravel: --parallel vira --processes=8 e, no fim, apaga os <banco>_test_N do MySQL/MariaDB do host.
 # Fila: Laravel no host = uma por porta de banco (3306 usa gs-teste.lockN, outras gs-teste-<porta>.lockN);
 # container (executor ddev/sail/docker/podman) = gs-teste-ctr.lockN; qualquer outro executor Laravel é host; Python/JS = gs-teste-geral.lockN. FILA_TESTE_VAGAS e FILA_TESTE_PROCESSOS sobrescrevem 2 e 8.
-# Precedência das configurações: variável de ambiente < ~/.claude/fila.conf (FILA_TESTE_FILA|VAGAS|VAGAS_PROJETO|TETO|PROCESSOS) < .orca/worktree.conf.
 # Teto global: além da vaga da fila, no máximo FILA_TESTE_TETO (3) runs ao mesmo tempo na máquina (gs-teste-teto.lockN).
 # As travas conservam os nomes para enxergar runs iniciados pela versão anterior.
 # Espera vaga até 5 min; sem vaga, sai com 75 (rode de novo). Imposto pelo hook fila-testes.sh do plugin fluxo-orca.
@@ -23,29 +22,9 @@ env_testing() { # $1 chave: .env.testing, senão .env
     [ -z "$v" ] && v=$(grep -hE "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"\r')
     printf '%s' "$v"
 }
-# ~/.claude/fila.conf (o painel grava): chave=valor validado, sem source; vale sobre o ambiente e cede ao .orca/worktree.conf.
-do_conf=""
-if [ -f "$HOME/.claude/fila.conf" ]; then
-    while IFS= read -r linha || [ -n "$linha" ]; do
-        linha=${linha%$'\r'}
-        [[ "$linha" =~ ^[[:space:]]*(#.*)?$ ]] && continue
-        valido=0
-        if [[ "$linha" =~ ^[[:space:]]*(FILA_TESTE_[A-Z_]+)=([^[:space:]]*)[[:space:]]*$ ]]; then
-            chave=${BASH_REMATCH[1]}; valor=${BASH_REMATCH[2]}
-            case "$chave" in
-                FILA_TESTE_FILA) [[ "$valor" =~ ^(recurso|projeto)$ ]] && valido=1 ;;
-                FILA_TESTE_VAGAS | FILA_TESTE_VAGAS_PROJETO | FILA_TESTE_TETO | FILA_TESTE_PROCESSOS) [[ "$valor" =~ ^[1-9][0-9]*$ ]] && valido=1 ;;
-            esac
-        fi
-        if [ $valido = 1 ]; then printf -v "$chave" '%s' "$valor"; do_conf="$do_conf ${chave#FILA_TESTE_}"; else echo "fila.conf: linha ignorada ($linha)" >&2; fi
-    done < "$HOME/.claude/fila.conf"
-fi
-# O nome antigo (GS_TESTE_*) no worktree.conf ainda vence o fila.conf: limpa o legado herdado do ambiente antes do source e lê o que o arquivo definiu.
-for k in $do_conf; do unset "GS_TESTE_$k"; done
 comum=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 # shellcheck source=/dev/null
 [ -n "$comum" ] && [ -z "${FILA_TESTE_RUNNER:-${GS_TESTE_RUNNER:-}}" ] && [ -f "$(dirname "$comum")/.orca/worktree.conf" ] && . "$(dirname "$comum")/.orca/worktree.conf"
-for k in $do_conf; do v="GS_TESTE_$k"; [ -n "${!v:-}" ] && printf -v "FILA_TESTE_$k" '%s' "${!v}"; done
 FILA_TESTE_RUNNER=${FILA_TESTE_RUNNER:-${GS_TESTE_RUNNER:-}}
 VAGAS=${FILA_TESTE_VAGAS:-${GS_TESTE_VAGAS:-2}}
 TETO=${FILA_TESTE_TETO:-${GS_TESTE_TETO:-3}}
