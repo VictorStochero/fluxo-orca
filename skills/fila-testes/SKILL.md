@@ -24,7 +24,8 @@ Compatibilidade: `gs-teste.sh` é um atalho para `fila-teste.sh`. As seis variá
 - O detector bloqueia essas operações com `--env=testing` (ou `--env testing`) ou `--database` com token `test`/`testing` no nome da conexão (`test`, `testing`, `mysql_test`, `test_mysql`). Conexão com nome arbitrário precisa de `--env=testing`; sem indicação de teste, operações do banco de desenvolvimento continuam livres.
 - Django: `manage.py migrate|flush` com `--settings=*test*` também exige fila, por exemplo `bash ~/.cache/fila-teste.sh -- python manage.py migrate --settings=app.settings.test`. A opção de teste deve estar no mesmo trecho do comando que a operação de banco.
 - Projeto em container ou com executor próprio: `FILA_TESTE_RUNNER="<comando>"` no `.orca/worktree.conf` do principal (ex.: `docker compose exec -T web pytest`) — vale para todos os worktrees.
-- Sem vaga em 5 min → `FILA OCUPADA` (exit 75): rodar de novo. `FILA_TESTE_VAGAS`, `FILA_TESTE_TETO` e `FILA_TESTE_PROCESSOS` sobrescrevem 2 vagas, 3 do teto e 8 processos. A vaga do teto vem depois da da fila, no mesmo prazo de 5 min.
+- **Configuração da máquina**: `~/.claude/fila.conf`, linhas `FILA_TESTE_FILA=recurso|projeto`, `FILA_TESTE_VAGAS=N`, `FILA_TESTE_VAGAS_PROJETO=N`, `FILA_TESTE_TETO=N`, `FILA_TESTE_PROCESSOS=N` (N ≥ 1; `#` comenta; linha inválida é ignorada com aviso). Lido como chave=valor, nunca por `source`. Precedência: **variável de ambiente < `fila.conf` < `.orca/worktree.conf` do projeto**. O painel edita o arquivo (`bash ~/.cache/painel.sh --servir`, seção Configuração, ou `--config fila.vagas=3`); a mudança vale só para testes iniciados depois.
+- Sem vaga em 5 min → `FILA OCUPADA` (exit 75): rodar de novo. `FILA_TESTE_VAGAS`, `FILA_TESTE_TETO` e `FILA_TESTE_PROCESSOS` sobrescrevem 2 vagas, 3 do teto e 8 processos (padrões, quando nem o ambiente nem o `fila.conf` definem). A vaga do teto vem depois da da fila, no mesmo prazo de 5 min.
 
 ## Consultar o estado da fila
 
