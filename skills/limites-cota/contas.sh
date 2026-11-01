@@ -61,6 +61,7 @@ _contas_valida() { # chave valor linha conta
         medidor) [[ "$2" =~ ^(claude|-|orca:[A-Za-z]+)$ ]] || _contas_erro 'medidor desconhecido' "$3" ;;
         papeis)
             local p ag resto=$2,
+            [ -n "$2" ] || return 0 # papeis= vazio: conta só medida
             while [ -n "$resto" ]; do
                 p=${resto%%,*}; resto=${resto#*,}
                 case "$CONTAS_PAPEIS" in *" $p "*) ;; *) _contas_erro "papel desconhecido ($p)" "$3"; return ;; esac

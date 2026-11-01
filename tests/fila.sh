@@ -257,4 +257,33 @@ printf '%s
 if kill -0 "$alheio" 2>/dev/null; then ok "pid reciclado: processo alheio preservado"; else ruim "pid reciclado: processo alheio foi morto"; fi
 kill "$alheio" 2>/dev/null
 
+# fila.conf: vale sobre o ambiente e cede ao .orca/worktree.conf. Com a vaga ocupada por p, a execução em w espera ("Aguardando fila") ou entra.
+fila_conf() (
+    export HOME="$tmp/fc-home"; unset FILA_TESTE_VAGAS GS_TESTE_VAGAS FILA_TESTE_FILA GS_TESTE_FILA
+    mkdir -p "$HOME/.claude" "$tmp/fc/p"
+    git -C "$tmp/fc/p" init -q -b main
+    git -C "$tmp/fc/p" -c user.name=t -c user.email=t@t commit -q --allow-empty -m inicial
+    git -C "$tmp/fc/p" worktree add -q --detach "$tmp/fc/w"
+    espera() { # imprime 1 se a segunda execução esperou vaga, 0 se entrou
+        rm -rf "$HOME/.cache"
+        (cd "$tmp/fc/p" && bash "$fila_script" -- sleep 8 >/dev/null 2>&1) &
+        sleep 2
+        if (cd "$tmp/fc/w" && timeout 5 bash "$fila_script" -- true 2>&1) | grep -q 'Aguardando fila'; then echo 1; else echo 0; fi
+        wait
+    }
+    printf '# vagas da máquina\nFILA_TESTE_VAGAS=1\n' > "$HOME/.claude/fila.conf"
+    [ "$(FILA_TESTE_VAGAS=3 espera)" = 1 ] || exit 1
+    mkdir -p "$tmp/fc/p/.orca"; echo 'FILA_TESTE_VAGAS=2' > "$tmp/fc/p/.orca/worktree.conf"
+    [ "$(espera)" = 0 ] || exit 2
+    rm -rf "$tmp/fc/p/.orca"
+    printf 'FILA_TESTE_VAGAS=abc\nFILA_TESTE_TETO=2\n' > "$HOME/.claude/fila.conf"
+    aviso=$(cd "$tmp/fc/p" && bash "$fila_script" -- true 2>&1 >/dev/null)
+    case "$aviso" in *'fila.conf: linha ignorada (FILA_TESTE_VAGAS=abc)'*) ;; *) exit 3 ;; esac
+)
+fila_conf; rc=$?
+case $rc in
+    0) ok "fila.conf: sobrepõe o ambiente (1 vaga), cede ao worktree.conf (2 vagas) e ignora linha inválida com aviso" ;;
+    *) ruim "fila.conf: etapa $rc falhou (1 ambiente, 2 worktree.conf, 3 aviso)" ;;
+esac
+
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
