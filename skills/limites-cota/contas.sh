@@ -5,14 +5,15 @@ CONTAS_CATALOGO=${CONTAS_CATALOGO:-$(dirname "${BASH_SOURCE[0]}")/agentes-catalo
 CONTAS_CONF=${CONTAS_CONF:-$HOME/.claude/agentes.conf}
 CONTAS_PAPEIS=" escritor revisor verificador mecanico segunda-opiniao orquestra "
 CONTAS_PAPEIS_PADRAO="escritor,revisor,verificador,mecanico"
+CONTAS_FONTE=${BASH_SOURCE[0]}
 
-_contas_var() { printf 'c_%s_%s' "${1//-/_}" "$2"; }
-_contas_set() { printf -v "$(_contas_var "$1" "$2")" '%s' "$3"; }
-conta_campo() { local v; v=$(_contas_var "$1" "$2"); printf '%s' "${!v}"; }
-conta_tem_papel() { case ",$(conta_campo "$1" papeis)," in *",$2,"*) return 0 ;; esac; return 1; }
+# Sem subshell: cada $(...) custa um fork (~0,12 s no Git Bash).
+_contas_set() { printf -v "c_${1//-/_}_$2" '%s' "$3"; }
+conta_campo() { local v=c_${1//-/_}_$2; printf '%s' "${!v}"; }
+conta_tem_papel() { local v=c_${1//-/_}_papeis; case ",${!v}," in *",$2,"*) return 0 ;; esac; return 1; }
 conta_existe() { case " $CONTAS " in *" $1 "*) return 0 ;; esac; return 1; }
 # Só medida (sem papel, ou só orquestra) não ocupa vaga: fica fora do pool.
-conta_no_pool() { conta_existe "$1" && case ",$(conta_campo "$1" papeis)," in ,, | ,orquestra,) return 1 ;; esac; }
+conta_no_pool() { local v=c_${1//-/_}_papeis; conta_existe "$1" && case ",${!v}," in ,, | ,orquestra,) return 1 ;; esac; }
 CONTAS_CAMPOS="agente id comando args config modelo vagas peso papeis medidor pre fim regras skills testado nota"
 CONTAS_PAPEIS_TRABALHO=" escritor revisor verificador mecanico "
 _contas_erro() { echo "contas: $1: $2" >&2; return 2; }
@@ -108,9 +109,53 @@ _contas_linha() { # Conta do dev: nome chave=valor ..., valor com espaço entre 
     done
 }
 
+# Cache do registro parseado (mtime com nanossegundos: duas gravações no mesmo segundo não passam por iguais): atribuições bash em ~/.cache/agentes/registro.cache, válido enquanto o carimbo bater.
+_contas_carimbo() { # entrada do registro (arquivo, catálogo, este script, conta claude-b, travas) → CONTAS_CARIMBO
+    local st f t="" b=0
+    if [ -f "$CONTAS_CONF" ]; then
+        st=$(stat -c '%y %s' -- "$CONTAS_CONF" "$CONTAS_CATALOGO" "$CONTAS_FONTE" 2>/dev/null) || return 1
+    else
+        st=$(stat -c '%y %s' -- "$CONTAS_CATALOGO" "$CONTAS_FONTE" 2>/dev/null) || return 1
+        st="-"$'
+'"$st"
+    fi
+    [ -d "$HOME/.claude-b" ] && b=1
+    for f in "$HOME"/.cache/trava-*.ok; do [ -s "$f" ] && t="$t,${f##*/trava-}"; done
+    CONTAS_CARIMBO="# stamp $CONTAS_CONF ${st//$'
+'/ } $CONTAS_CATALOGO b=$b t=$t"
+}
+
+_contas_cache_le() { # Só aceita carimbo igual e linhas de atribuição do registro; senão reconstrói.
+    local arq=$HOME/.cache/agentes/registro.cache linha primeira=1
+    [ -f "$arq" ] || return 1
+    while IFS= read -r linha || [ -n "$linha" ]; do
+        if [ "$primeira" = 1 ]; then [ "$linha" = "$CONTAS_CARIMBO" ] || return 1; primeira=0; continue; fi
+        [[ "$linha" =~ ^(c_[a-z0-9_]+|CONTAS|ESCOLHA|CONTAS_TETO|RAM_MIN_GB)= ]] || return 1
+        case "$linha" in *'$('* | *'${'* | *'`'*) return 1 ;; esac
+    done < "$arq"
+    [ "$primeira" = 0 ] || return 1
+    source "$arq"
+}
+
+_contas_cache_grava() { # Atômico (.tmp + mv); falha de gravação não afeta o registro já carregado.
+    local arq=$HOME/.cache/agentes/registro.cache conta f v
+    mkdir -p "${arq%/*}" 2>/dev/null || return 0
+    {
+        printf '%s\n' "$CONTAS_CARIMBO"
+        printf '%s=%q\n' CONTAS "$CONTAS" ESCOLHA "$ESCOLHA" CONTAS_TETO "$CONTAS_TETO" RAM_MIN_GB "$RAM_MIN_GB"
+        for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do v=c_${conta//-/_}_$f; printf '%s=%q\n' "$v" "${!v}"; done; done
+    } > "$arq.tmp.$$" 2>/dev/null && mv -f "$arq.tmp.$$" "$arq" 2>/dev/null
+    rm -f "$arq.tmp.$$" 2>/dev/null
+    return 0
+}
+
 contas_carrega() {
     local linha legado=() proprias=0 i conta f
-    for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do unset "$(_contas_var "$conta" "$f")"; done; done
+    for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do unset "c_${conta//-/_}_$f"; done; done
+    CONTAS=""; ESCOLHA=ritmo; CONTAS_TETO=0; RAM_MIN_GB=0
+    if _contas_carimbo; then _contas_cache_le && return 0; else CONTAS_CARIMBO=""; fi
+    # Cache parcial ou ilegível pode ter atribuído algo antes de falhar.
+    for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do unset "c_${conta//-/_}_$f"; done; done
     CONTAS=""; ESCOLHA=ritmo; CONTAS_TETO=0; RAM_MIN_GB=0
     if [ -f "$CONTAS_CONF" ]; then
         while IFS= read -r linha || [ -n "$linha" ]; do
@@ -138,13 +183,14 @@ contas_carrega() {
         conta_existe "$conta" || { _contas_erro 'configuração inválida' "${legado[i]}"; return; }
         _contas_set "$conta" vagas "$((10#${BASH_REMATCH[2]}))"
     done
+    [ -z "$CONTAS_CARIMBO" ] || _contas_cache_grava
     return 0
 }
 
 conta_aviso() { # Conta de trabalho em agente sem hook de fim de turno: o orca-espera.sh é quem cobra o worker_done.
-    local p
-    [ "$(conta_campo "$1" fim)" = sim ] && return 1
-    for p in $CONTAS_PAPEIS_TRABALHO; do conta_tem_papel "$1" "$p" && { echo 'sem fim de turno: coordenador cobra worker_done'; return 0; }; done
+    local p v=c_${1//-/_}_fim
+    [ "${!v}" = sim ] && return 1
+    for p in $CONTAS_PAPEIS_TRABALHO; do conta_tem_papel "$1" "$p" && { CONTA_AVISO='sem fim de turno: coordenador cobra worker_done'; echo "$CONTA_AVISO"; return 0; }; done
     return 1
 }
 
@@ -172,9 +218,9 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
         lanca) [ $# -ge 3 ] || { echo 'uso: contas.sh lanca <conta> <papel> [modelo]' >&2; exit 2; }
                contas_lanca "$2" "$3" "${4:-}" ;;
         lista) for c in $CONTAS; do
-                   printf '%s agente=%s vagas=%s peso=%s papeis=%s medidor=%s' "$c" "$(conta_campo "$c" agente)" \
-                       "$(conta_campo "$c" vagas)" "$(conta_campo "$c" peso)" "$(conta_campo "$c" papeis)" "$(conta_campo "$c" medidor)"
-                   aviso=$(conta_aviso "$c") && printf ' aviso=%s' "$aviso"
+                   p=c_${c//-/_}_; ag=${p}agente; va=${p}vagas; pe=${p}peso; pa=${p}papeis; me=${p}medidor
+                   printf '%s agente=%s vagas=%s peso=%s papeis=%s medidor=%s' "$c" "${!ag}" "${!va}" "${!pe}" "${!pa}" "${!me}"
+                   conta_aviso "$c" > /dev/null && printf ' aviso=%s' "$CONTA_AVISO"
                    echo
                done ;;
         *) echo 'uso: contas.sh lanca <conta> <papel> [modelo] | lista' >&2; exit 2 ;;

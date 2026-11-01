@@ -50,10 +50,8 @@ api() { rm -f "$tmp/marca"; MED_MARCA="$tmp/marca" CONTA_CONFIG="$cfg" bash "$me
 vazao=$(( ($(date +%s) + 3600) * 1000 ))
 cred "$vazao"; export LIMITES_USAGE_URL; LIMITES_USAGE_URL=$(url "$tmp/usage.json")
 api
-comeca 'api: linha humana' 'api    : sessão 14% usado, zera ' "$(printf '%s
-' "$saida" | head -1)"
-igual 'api: #cand com o reset da semana' '#cand api 14 29 1793721600 168' "$(printf '%s
-' "$saida" | grep '^#cand')"
+comeca 'api: linha humana' 'api    : sessão 14% usado, zera ' "$(printf '%s\n' "$saida" | head -1)"
+igual 'api: #cand com o reset da semana' '#cand api 14 29 1793721600 168' "$(printf '%s\n' "$saida" | grep '^#cand')"
 [ ! -e "$tmp/marca" ] && ok 'api: claude não foi chamado' || ruim 'api: chamou o claude'
 igual 'api: nenhuma saída contém o token' 0 "$(cat "$tmp/api.out" "$tmp/api.err" | grep -c "$tok")"
 cred 1000; api

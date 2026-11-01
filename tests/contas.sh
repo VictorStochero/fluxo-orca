@@ -199,4 +199,24 @@ saida=$(bash -c '
     source "$1" && contas_carrega && echo "$CONTAS $(conta_campo dev2 vagas)"' bash "$lib" 2>&1)
 igual 'sem arrays associativos' 'dev2 1' "$saida"
 
+# Cache do registro parseado (registro.cache): reaproveitado com o carimbo igual, invalidado por mudança, reconstruído se corrompido.
+cache="$HOME/.cache/agentes/registro.cache"
+printf 'team agente=claude peso=3\n' > "$HOME/.claude/agentes.conf"
+igual 'cache: primeira carga' 3 "$(carrega 'conta_campo team peso')"
+[ -s "$cache" ] && ok 'cache: gravado' || ruim 'cache: não gravado'
+c=$(<"$cache"); printf '%s\n' "${c/c_team_peso=3/c_team_peso=7}" > "$cache"
+igual 'cache: segunda carga usa o cache' 7 "$(carrega 'conta_campo team peso')"
+igual 'cache: CONTAS_CONF diferente tem outro carimbo' 'team pessoal codex agy' "$(carrega 'CONTAS_CONF=/dev/null; contas_carrega && echo $CONTAS')"
+printf 'team agente=claude peso=4\n' > "$HOME/.claude/agentes.conf"; touch -d '+1 minute' "$HOME/.claude/agentes.conf"
+igual 'cache: mudar o agentes.conf invalida' 4 "$(carrega 'conta_campo team peso')"
+printf 'lixo sem atribuição\n' >> "$cache"
+igual 'cache: corrompido é ignorado' 4 "$(carrega 'conta_campo team peso')"
+igual 'cache: corrompido é reconstruído' 0 "$(grep -c lixo "$cache")"
+printf 'c_team_peso=$(touch %s/executou)\n' "$tmp" >> "$cache"
+carrega 'conta_campo team peso' > /dev/null
+[ ! -e "$tmp/executou" ] && ok 'cache: substituição de comando não executa' || ruim 'cache: executou comando do cache'
+printf 'x agente=invalido\n' > "$HOME/.claude/agentes.conf"; rm -f "$cache"
+igual 'cache: registro inválido não grava' 2 "$(rc_carrega)"
+[ ! -e "$cache" ] && ok 'cache: erro de parse sem cache' || ruim 'cache: gravou registro inválido'
+
 [ "$falhas" = 0 ] && echo "tudo ok" || { echo "$falhas falha(s)"; exit 1; }
