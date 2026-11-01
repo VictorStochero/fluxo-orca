@@ -107,4 +107,86 @@ PATH="$tmp/vazio" "$BASH" "$raiz/skills/delegacao/painel.sh" --json > "$tmp/s.ou
 grep -q 'painel indisponível (sem Python)' "$tmp/s.err" && ok 'sem Python: aviso' || ruim 'sem Python: sem aviso'
 painel --nada >/dev/null 2>&1; igual 'uso: opção inválida' 2 $?
 
+
+# --config da fila: grava fila.conf e o --json reflete, com fila.conf acima do ambiente (como no fila-teste.sh).
+cfg() { painel --config "$@" > "$tmp/c.out" 2> "$tmp/c.err"; }
+conf_fila=$HOME/.claude/fila.conf
+junta() { tr '\n' '|' | sed 's/|$//'; }
+cfg fila.modo=projeto fila.vagas_projeto=3 fila.teto=4; igual 'config fila: exit 0' 0 $?
+igual 'config fila: ok por chave' 'ok fila.modo|ok fila.vagas_projeto|ok fila.teto' "$(junta '|' < "$tmp/c.out")"
+igual 'config fila: fila.conf criado' 'FILA_TESTE_FILA=projeto|FILA_TESTE_VAGAS_PROJETO=3|FILA_TESTE_TETO=4' "$(junta '|' < "$conf_fila")"
+FILA_TESTE_TETO=9 FILA_TESTE_VAGAS_PROJETO=8 painel --json > "$tmp/e.json"
+igual 'config fila: --json lê fila.conf acima do ambiente' 'projeto 3 4 3' "$(j 'd["fila"]["modo"]+" "+str(d["fila"]["vagas"])+" "+str(d["fila"]["teto"])+" "+str(d["config"]["fila"]["vagas_projeto"])' "$tmp/e.json")"
+FILA_TESTE_PROCESSOS=7 painel --json > "$tmp/e.json"
+igual 'config fila: ambiente vale quando o arquivo não define a chave' 7 "$(j 'd["config"]["fila"]["processos"]' "$tmp/e.json")"
+antes=$(cat "$conf_fila")
+cfg fila.vagas=0; igual 'config fila: valor inválido, exit 2' 2 $?
+grep -q '^erro: ' "$tmp/c.err" && ok 'config fila: mensagem de erro' || ruim 'config fila: sem mensagem'
+igual 'config fila: arquivo intacto' "$antes" "$(cat "$conf_fila")"
+cfg fila.teto=2 fila.modo=xx; igual 'config fila: tudo ou nada, exit 2' 2 $?
+igual 'config fila: tudo ou nada, arquivo intacto' "$antes" "$(cat "$conf_fila")"
+cfg fila.nada=1; igual 'config: chave desconhecida' 2 $?
+cfg semigual; igual 'config: argumento sem =' 2 $?
+printf '# minha fila\nFILA_TESTE_TETO=4\n' > "$conf_fila"; cfg fila.teto=5 fila.processos=6
+igual 'config fila: preserva comentário e troca no lugar' '# minha fila|FILA_TESTE_TETO=5|FILA_TESTE_PROCESSOS=6' "$(junta '|' < "$conf_fila")"
+
+# --config do pool e das contas: preserva comentário, ordem e tokens alheios; contas.sh reprovando restaura o arquivo.
+conf_ag=$HOME/.claude/agentes.conf
+printf '# comentário\nteto=4\nescolha=ritmo\na agente=claude vagas=2 peso=5 papeis=escritor,revisor modelo=m1\na=9\nk agente=kimi vagas=1 papeis=segunda-opiniao\n' > "$conf_ag"
+cfg pool.ram_min=2 pool.teto=6 pool.escolha=ordem conta.a.vagas=3 conta.a.peso=7; igual 'config pool: exit 0' 0 $?
+igual 'config pool: arquivo reescrito' '# comentário|teto=6|escolha=ordem|ram_min=2|a agente=claude vagas=3 peso=7 papeis=escritor,revisor modelo=m1|k agente=kimi vagas=1 papeis=segunda-opiniao' "$(junta '|' < "$conf_ag")"
+painel --json > "$tmp/e.json"
+igual 'config pool: --json reflete' '6 2 ordem 3 7' "$(j 'str(d["config"]["pool"]["teto"])+" "+str(d["config"]["pool"]["ram_min"])+" "+d["config"]["pool"]["escolha"]+" "+str(d["config"]["contas"][0]["vagas"])+" "+str(d["config"]["contas"][0]["peso"])' "$tmp/e.json")"
+cfg conta.a.papeis=revisor,mecanico conta.k.papeis= conta.k.peso=2; igual 'config conta: papéis, papel vazio e token novo' 0 $?
+igual 'config conta: linhas' 'a agente=claude vagas=3 peso=7 papeis=revisor,mecanico modelo=m1|k agente=kimi vagas=1 papeis= peso=2' "$(grep -E '^(a|k) ' "$conf_ag" | junta '|')"
+cp "$conf_ag" "$tmp/ag.bak"
+cfg conta.zz.vagas=1; igual 'config conta: inexistente, exit 2' 2 $?
+grep -q 'inexistente' "$tmp/c.err" && ok 'config conta: mensagem de conta inexistente' || ruim 'config conta: sem mensagem'
+cfg conta.a.papeis=banana; igual 'config conta: papel inválido, exit 2' 2 $?
+cfg conta.a.peso=0; igual 'config conta: peso 0, exit 2' 2 $?
+cfg pool.ram_min=-1; igual 'config pool: ram_min negativo, exit 2' 2 $?
+cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'config: erros de validação não gravam nada' || ruim 'config: arquivo mudou'
+cfg conta.a.vagas=1 conta.k.papeis=escritor; igual 'config conta: contas.sh reprova, exit 2' 2 $?
+grep -q 'kimi' "$tmp/c.err" && ok 'config conta: mensagem do contas.sh' || ruim "config conta: sem mensagem do contas.sh ($(cat "$tmp/c.err"))"
+cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'config conta: arquivo restaurado byte a byte' || ruim 'config conta: arquivo não restaurado'
+rm -f "$conf_ag"; cfg pool.teto=3; igual 'config pool: cria agentes.conf' 'teto=3' "$(cat "$conf_ag" 2>/dev/null)"
+cfg conta.a.vagas=1; igual 'config conta: sem conta no arquivo não cria conta' 2 $?
+printf 'teto=4\nram_min=3\na agente=claude vagas=2 peso=5 papeis=escritor,revisor\nb agente=codex vagas=1\nb=3\n' > "$conf_ag"
+
+# Servidor: sobe dentro do teste e morre no trap.
+porta=$("$py" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+trap 'kill "${srv:-0}" 2>/dev/null; rm -rf "$tmp"' EXIT
+bash "$raiz/skills/delegacao/painel.sh" --servir "$porta" > "$tmp/srv.out" 2> "$tmp/srv.err" &  # sem a função: o kill tem de alcançar o servidor
+srv=$!
+url=http://127.0.0.1:$porta
+for _ in $(seq 40); do curl -s -o /dev/null "$url/" && break; sleep 0.25; done
+igual 'servir: imprime a URL' "$url/" "$(head -1 "$tmp/srv.out")"
+curl -s "$url/" > "$tmp/pag.html"
+grep -q 'Painel fluxo-orca' "$tmp/pag.html" && ok 'servir: GET / devolve a página' || ruim 'servir: página ausente'
+grep -q 'http-equiv' "$tmp/pag.html" && ruim 'servir: página ainda tem meta refresh' || ok 'servir: página sem meta refresh'
+token=$(grep -o 'var T="[^"]*"' "$tmp/pag.html" | cut -d'"' -f2)
+[ ${#token} -ge 20 ] && ok 'servir: token embutido' || ruim 'servir: sem token na página'
+curl -s "$url/estado.json" > "$tmp/s.json"
+igual 'servir: /estado.json traz o bloco config' 'a b' "$(j '" ".join(c["nome"] for c in d["config"]["contas"])' "$tmp/s.json")"
+post() { curl -s -o "$tmp/post.out" -w '%{http_code}' "$@"; }
+cod=$(post -X POST -d 'fila.vagas=5' "$url/config"); case $cod in 400|403) ok "servir: POST sem token recusado ($cod)" ;; *) ruim "servir: POST sem token deu $cod" ;; esac
+cod=$(post -X POST -d 'token=errado' -d 'fila.vagas=5' "$url/config"); case $cod in 400|403) ok "servir: POST com token errado recusado ($cod)" ;; *) ruim "servir: token errado deu $cod" ;; esac
+grep -q '^FILA_TESTE_VAGAS=' "$conf_fila" && ruim 'servir: POST recusado gravou' || ok 'servir: POST recusado não grava'
+cod=$(post -X POST -d "token=$token" -d 'fila.vagas=5' "$url/config"); igual 'servir: POST com token, HTTP' 200 "$cod"
+grep -q '"ok": true' "$tmp/post.out" && ok 'servir: POST com token devolve ok' || ruim "servir: resposta $(cat "$tmp/post.out")"
+grep -q '^FILA_TESTE_VAGAS=5$' "$conf_fila" && ok 'servir: POST gravou o fila.conf' || ruim 'servir: fila.conf não gravado'
+cod=$(post -X POST -H 'Content-Type: application/json' -d "{\"token\":\"$token\",\"conta.a.vagas\":\"4\",\"conta.a.papeis\":[\"revisor\"]}" "$url/config"); igual 'servir: POST em JSON, HTTP' 200 "$cod"
+grep -q '^a agente=claude vagas=4 peso=5 papeis=revisor$' "$conf_ag" && ok 'servir: POST em JSON gravou o agentes.conf' || ruim "servir: agentes.conf $(cat "$conf_ag")"
+cod=$(post -X POST -d "token=$token" -d 'fila.vagas=0' "$url/config"); igual 'servir: valor inválido, HTTP' 400 "$cod"
+grep -q '"ok": false' "$tmp/post.out" && grep -q '"erro"' "$tmp/post.out" && ok 'servir: valor inválido devolve erro' || ruim "servir: resposta $(cat "$tmp/post.out")"
+igual 'servir: rota desconhecida' 404 "$(post "$url/nada")"
+igual 'servir: POST em rota desconhecida' 404 "$(post -X POST -d "token=$token" "$url/estado.json")"
+igual 'servir: método PUT' 405 "$(post -X PUT "$url/config")"
+igual 'servir: método DELETE' 405 "$(post -X DELETE "$url/")"
+igual 'servir: Host estranho' 403 "$(post -H 'Host: exemplo.com' "$url/estado.json")"
+painel --servir "$porta" > /dev/null 2> "$tmp/ocup.err"; igual 'servir: porta ocupada, exit 2' 2 $?
+grep -q 'porta' "$tmp/ocup.err" && ok 'servir: porta ocupada, mensagem' || ruim 'servir: porta ocupada sem mensagem'
+kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null
+curl -s -m 2 -o /dev/null "$url/" && ruim 'servir: servidor seguiu vivo após o kill' || ok 'servir: servidor encerrado'
+painel --servir 99999 >/dev/null 2>&1; igual 'servir: porta inválida' 2 $?
 [ "$falhas" = 0 ] && echo 'TUDO OK' || { echo "$falhas falha(s)"; exit 1; }
