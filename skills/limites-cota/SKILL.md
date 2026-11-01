@@ -6,6 +6,8 @@ description: Use antes de despachar uma onda de workers ou quando perguntarem so
 # Revisão de limite das contas
 
 ## Registro de contas
+O painel (`painel.sh --servir` ou `--config conta.<nome>.vagas=N`) edita o registro: troca só o token pedido na linha da conta, preserva comentários e ordem, remove a linha legada `<conta>=N` ao gravar `vagas` e só troca o arquivo depois de o `contas.sh lista` aprovar o candidato (num `.tmp`). `papeis=` vazio vale e deixa a conta só como medida.
+
 As contas da máquina vêm de `~/.claude/agentes.conf` sobre o catálogo do plugin (`agentes-catalogo.conf`: os 45 agentes da tela do Orca, com comando, argumentos e medidor). Uma conta por linha, `nome chave=valor ...`; a ordem das linhas é a prioridade:
 
 ```
