@@ -19,7 +19,9 @@ if [ "$1 $2 $3" = 'account list --json' ]; then
     longa=weekly; min=10080; [ -n "${POOL_CODEX_MENSAL:-}" ] && { longa=monthly; min=43200; }
     agy=""
     # Antigravity com um grupo acima de 80% e outro abaixo.
-    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s}]}' "${POOL_AGY_GEMINI:-10}" "$zs" "${POOL_AGY_MISTO:-85}" "$zs")
+    # POOL_AGY_ARGON: grupo próprio "Gemini 4 Argon" (só semana), onde o uso real do modelo é medido.
+    argon=""; [ -n "${POOL_AGY_ARGON:-}" ] && argon=$(printf ',{"group":"Gemini 4 Argon","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s}' "$POOL_AGY_ARGON" "$zs")
+    [ -n "${POOL_AGY_ALTO:-}" ] && agy=$(printf ',"antigravity":{"status":"ok","error":null,"buckets":[{"group":"Gemini Models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s},{"group":"Claude and GPT models","usedPercent":%s,"windowMinutes":10080,"resetsAt":%s}%s]}' "${POOL_AGY_GEMINI:-10}" "$zs" "${POOL_AGY_MISTO:-85}" "$zs" "$argon")
     printf '{"ok":true,"result":{"rateLimits":{"codex":{"session":{"usedPercent":%s,"windowMinutes":300,"resetsAt":%s},"%s":{"usedPercent":%s,"windowMinutes":%s,"resetsAt":%s},"status":"ok","error":null}%s}}}\n' "$c" "$z5" "$longa" "$l" "$min" "$zs" "$agy"
     exit 0
 fi
@@ -437,6 +439,19 @@ POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 confere_rc 0 'segunda: fallback codex' bash "
 grep -q '^segunda: codex - modelo=gpt-6.1-sol ' "$tmp/saida" && ok 'segunda cai para codex' || ruim 'fallback codex ausente'
 POOL_AGY_ALTO=1 POOL_AGY_GEMINI=90 confere_rc 75 'segunda: GPT sem outra família livre' bash "$tmp/seletor/limites.sh" --segunda --familia gpt
 grep -qx 'segunda: nenhuma (cota)' "$tmp/saida" && ok 'segunda esgotada informa cota' || ruim 'diagnóstico da segunda'
+# Escolha por folga e Argon medido no grupo próprio.
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=70 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=10 POOL_CODEX_SEMANA=38 confere_rc 0 'segunda: Argon alto não é escolhido' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy claude-and-gpt-models modelo=gpt-oss-120b-medium (90% livre' "$tmp/saida" && ok 'segunda: misto de maior folga vence o Gemini' || { ruim 'segunda: escolha com Argon a 70%'; cat "$tmp/saida"; }
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=30 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=50 POOL_CODEX_SEMANA=38 confere_rc 0 'segunda: Argon livre' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy gemini-4-argon modelo=gemini-4-argon-high (70% livre' "$tmp/saida" && ok 'segunda: Gemini pelo grupo gemini-4-argon' || { ruim 'segunda: Argon a 30%'; cat "$tmp/saida"; }
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=70 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=70 POOL_CODEX_SEMANA=70 confere_rc 75 'segunda: tudo acima do teto' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -qx 'segunda: nenhuma (cota)' "$tmp/saida" && ok 'segunda: nenhuma (cota) acima de 60' || ruim 'segunda: diagnóstico acima do teto'
+LIMITES_SEGUNDA_TETO=80 POOL_AGY_ALTO=1 POOL_AGY_ARGON=70 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=70 POOL_CODEX_SEMANA=70 confere_rc 0 'segunda: teto 80 volta a aceitar' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy gemini-4-argon ' "$tmp/saida" && ok 'segunda: empate na folga fica com o Gemini' || ruim 'segunda: teto 80'
+printf 'segunda_teto=40\n' > "$HOME/.claude/agentes.conf"
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=50 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=50 POOL_CODEX_SEMANA=50 confere_rc 75 'segunda: segunda_teto do agentes.conf' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+LIMITES_SEGUNDA_TETO=60 POOL_AGY_ALTO=1 POOL_AGY_ARGON=50 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=50 POOL_CODEX_SEMANA=50 confere_rc 0 'segunda: variável vence o agentes.conf' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+rm "$HOME/.claude/agentes.conf"
 
 # Peso altera o ritmo, mas a ordem explícita continua soberana.
 cat > "$HOME/.claude/agentes.conf" <<'EOF'

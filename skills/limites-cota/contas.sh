@@ -130,7 +130,7 @@ _contas_cache_le() { # Só aceita carimbo igual e linhas de atribuição do regi
     [ -f "$arq" ] || return 1
     while IFS= read -r linha || [ -n "$linha" ]; do
         if [ "$primeira" = 1 ]; then [ "$linha" = "$CONTAS_CARIMBO" ] || return 1; primeira=0; continue; fi
-        [[ "$linha" =~ ^(c_[a-z0-9_]+|CONTAS|ESCOLHA|CONTAS_TETO|RAM_MIN_GB)= ]] || return 1
+        [[ "$linha" =~ ^(c_[a-z0-9_]+|CONTAS|ESCOLHA|CONTAS_TETO|CONTAS_SEGUNDA_TETO|RAM_MIN_GB)= ]] || return 1
         case "$linha" in *'$('* | *'${'* | *'`'*) return 1 ;; esac
     done < "$arq"
     [ "$primeira" = 0 ] || return 1
@@ -142,7 +142,7 @@ _contas_cache_grava() { # Atômico (.tmp + mv); falha de gravação não afeta o
     mkdir -p "${arq%/*}" 2>/dev/null || return 0
     {
         printf '%s\n' "$CONTAS_CARIMBO"
-        printf '%s=%q\n' CONTAS "$CONTAS" ESCOLHA "$ESCOLHA" CONTAS_TETO "$CONTAS_TETO" RAM_MIN_GB "$RAM_MIN_GB"
+        printf '%s=%q\n' CONTAS "$CONTAS" ESCOLHA "$ESCOLHA" CONTAS_TETO "$CONTAS_TETO" CONTAS_SEGUNDA_TETO "$CONTAS_SEGUNDA_TETO" RAM_MIN_GB "$RAM_MIN_GB"
         for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do v=c_${conta//-/_}_$f; printf '%s=%q\n' "$v" "${!v}"; done; done
     } > "$arq.tmp.$$" 2>/dev/null && mv -f "$arq.tmp.$$" "$arq" 2>/dev/null
     rm -f "$arq.tmp.$$" 2>/dev/null
@@ -152,11 +152,11 @@ _contas_cache_grava() { # Atômico (.tmp + mv); falha de gravação não afeta o
 contas_carrega() {
     local linha legado=() proprias=0 i conta f
     for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do unset "c_${conta//-/_}_$f"; done; done
-    CONTAS=""; ESCOLHA=ritmo; CONTAS_TETO=0; RAM_MIN_GB=0
+    CONTAS=""; ESCOLHA=ritmo; CONTAS_TETO=0; RAM_MIN_GB=0; CONTAS_SEGUNDA_TETO=60
     if _contas_carimbo; then _contas_cache_le && return 0; else CONTAS_CARIMBO=""; fi
     # Cache parcial ou ilegível pode ter atribuído algo antes de falhar.
     for conta in $CONTAS; do for f in $CONTAS_CAMPOS; do unset "c_${conta//-/_}_$f"; done; done
-    CONTAS=""; ESCOLHA=ritmo; CONTAS_TETO=0; RAM_MIN_GB=0
+    CONTAS=""; ESCOLHA=ritmo; CONTAS_TETO=0; RAM_MIN_GB=0; CONTAS_SEGUNDA_TETO=60
     if [ -f "$CONTAS_CONF" ]; then
         while IFS= read -r linha || [ -n "$linha" ]; do
             linha=${linha%$'\r'}
@@ -165,6 +165,9 @@ contas_carrega() {
                 case "${BASH_REMATCH[1]}" in ritmo | ordem) ESCOLHA=${BASH_REMATCH[1]} ;; *) _contas_erro 'escolha inválida' "$linha"; return ;; esac
             elif [[ "$linha" =~ ^[[:space:]]*ram_min=([0-9]+([.][0-9]+)?)[[:space:]]*$ ]]; then
                 RAM_MIN_GB=${BASH_REMATCH[1]}
+            elif [[ "$linha" =~ ^[[:space:]]*segunda_teto=(.*)$ ]]; then
+                [[ "${BASH_REMATCH[1]}" =~ ^([0-9]+)[[:space:]]*$ ]] || { _contas_erro 'segunda_teto inválido' "$linha"; return; }
+                CONTAS_SEGUNDA_TETO=$((10#${BASH_REMATCH[1]}))
             elif [[ "$linha" =~ ^[[:space:]]*teto=(.*)$ ]]; then
                 [[ "${BASH_REMATCH[1]}" =~ ^([0-9]+)[[:space:]]*$ ]] || { _contas_erro 'teto inválido' "$linha"; return; }
                 CONTAS_TETO=$((10#${BASH_REMATCH[1]}))
