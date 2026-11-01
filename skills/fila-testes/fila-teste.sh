@@ -24,6 +24,7 @@ env_testing() { # $1 chave: .env.testing, senão .env
     printf '%s' "$v"
 }
 # ~/.claude/fila.conf (o painel grava): chave=valor validado, sem source; vale sobre o ambiente e cede ao .orca/worktree.conf.
+do_conf=""
 if [ -f "$HOME/.claude/fila.conf" ]; then
     while IFS= read -r linha || [ -n "$linha" ]; do
         linha=${linha%$'\r'}
@@ -36,12 +37,15 @@ if [ -f "$HOME/.claude/fila.conf" ]; then
                 FILA_TESTE_VAGAS | FILA_TESTE_VAGAS_PROJETO | FILA_TESTE_TETO | FILA_TESTE_PROCESSOS) [[ "$valor" =~ ^[1-9][0-9]*$ ]] && valido=1 ;;
             esac
         fi
-        if [ $valido = 1 ]; then printf -v "$chave" '%s' "$valor"; else echo "fila.conf: linha ignorada ($linha)" >&2; fi
+        if [ $valido = 1 ]; then printf -v "$chave" '%s' "$valor"; do_conf="$do_conf ${chave#FILA_TESTE_}"; else echo "fila.conf: linha ignorada ($linha)" >&2; fi
     done < "$HOME/.claude/fila.conf"
 fi
+# O nome antigo (GS_TESTE_*) no worktree.conf ainda vence o fila.conf: limpa o legado herdado do ambiente antes do source e lê o que o arquivo definiu.
+for k in $do_conf; do unset "GS_TESTE_$k"; done
 comum=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 # shellcheck source=/dev/null
 [ -n "$comum" ] && [ -z "${FILA_TESTE_RUNNER:-${GS_TESTE_RUNNER:-}}" ] && [ -f "$(dirname "$comum")/.orca/worktree.conf" ] && . "$(dirname "$comum")/.orca/worktree.conf"
+for k in $do_conf; do v="GS_TESTE_$k"; [ -n "${!v:-}" ] && printf -v "FILA_TESTE_$k" '%s' "${!v}"; done
 FILA_TESTE_RUNNER=${FILA_TESTE_RUNNER:-${GS_TESTE_RUNNER:-}}
 VAGAS=${FILA_TESTE_VAGAS:-${GS_TESTE_VAGAS:-2}}
 TETO=${FILA_TESTE_TETO:-${GS_TESTE_TETO:-3}}

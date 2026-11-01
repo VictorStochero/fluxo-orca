@@ -149,6 +149,19 @@ cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'config: erros de validação não gravam 
 cfg conta.a.vagas=1 conta.k.papeis=escritor; igual 'config conta: contas.sh reprova, exit 2' 2 $?
 grep -q 'kimi' "$tmp/c.err" && ok 'config conta: mensagem do contas.sh' || ruim "config conta: sem mensagem do contas.sh ($(cat "$tmp/c.err"))"
 cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'config conta: arquivo restaurado byte a byte' || ruim 'config conta: arquivo não restaurado'
+ls "$conf_ag".*.tmp >/dev/null 2>&1 && ruim 'config conta: sobrou .tmp' || ok 'config conta: sem .tmp sobrando'
+# O contas.sh confere o candidato (.tmp) enquanto o agentes.conf real continua intacto para os outros processos.
+cat > "$HOME/.cache/contas.sh" <<'STUBC'
+#!/usr/bin/env bash
+[ "$1" = lista ] || exit 2
+case "$CONTAS_CONF" in *.tmp) ;; *) echo "CONTAS_CONF não é o candidato: $CONTAS_CONF" >&2; exit 2 ;; esac
+cmp -s "$HOME/.claude/agentes.conf" "$HOME/.claude/agentes.antes" || { echo 'agentes.conf mudou durante a validação' >&2; exit 2; }
+grep -q 'vagas=5' "$CONTAS_CONF" || { echo 'candidato sem o valor novo' >&2; exit 2; }
+STUBC
+cp "$conf_ag" "$HOME/.claude/agentes.antes"
+cfg conta.a.vagas=5; igual 'config conta: contas.sh valida o candidato com o arquivo real intacto' 0 $?
+grep -q '^a .*vagas=5' "$conf_ag" && ok 'config conta: candidato aprovado vira o arquivo' || ruim 'config conta: valor novo não gravado'
+rm -f "$HOME/.cache/contas.sh" "$HOME/.claude/agentes.antes"
 rm -f "$conf_ag"; cfg pool.teto=3; igual 'config pool: cria agentes.conf' 'teto=3' "$(cat "$conf_ag" 2>/dev/null)"
 cfg conta.a.vagas=1; igual 'config conta: sem conta no arquivo não cria conta' 2 $?
 printf 'teto=4\nram_min=3\na agente=claude vagas=2 peso=5 papeis=escritor,revisor\nb agente=codex vagas=1\nb=3\n' > "$conf_ag"

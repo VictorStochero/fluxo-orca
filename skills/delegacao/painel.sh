@@ -293,39 +293,43 @@ def edita_agentes(L, chaves):
             L = [l for l in L if not re.fullmatch(r"\s*%s=[0-9]+\s*" % re.escape(nome), l.rstrip("\r\n"))]
     return L
 
-def roda_contas():
+def roda_contas(conf):  # valida o candidato (.tmp) antes de ele virar o agentes.conf: nenhum outro processo vê registro inválido
     sh = os.path.join(cache, "contas.sh")
     if not os.path.isfile(sh): sh = E["PAINEL_CONTAS"]
     try:
-        r = subprocess.run([shutil.which("bash") or "bash", sh, "lista"], capture_output=True, timeout=60, stdin=subprocess.DEVNULL)
+        env = dict(E, CONTAS_CONF=conf.replace("\\", "/"))
+        r = subprocess.run([shutil.which("bash") or "bash", sh, "lista"], capture_output=True, timeout=60, stdin=subprocess.DEVNULL, env=env)
     except (OSError, subprocess.SubprocessError) as e:
         return "contas.sh indisponível (%s)" % e
     if r.returncode == 0: return None
     return (r.stderr.decode("utf-8", "replace").strip() or r.stdout.decode("utf-8", "replace").strip() or "contas.sh reprovou a configuração")
 
 def aplica_config(pares):
-    """Tudo ou nada: valida, grava agentes.conf (restaurando se o contas.sh reprovar) e só então fila.conf. Devolve as chaves gravadas."""
+    """Tudo ou nada: valida, o contas.sh confere o agentes.conf candidato num .tmp, e só então os arquivos são trocados. Devolve as chaves gravadas."""
     novos = {}
     for k, v in pares: novos[k] = confere(k, str(v).strip())
     if not novos: raise Erro("nada a gravar")
     fila = {k: v for k, v in novos.items() if k in FILA_CHAVES}
     agentes = {k: v for k, v in novos.items() if k not in FILA_CHAVES}
     novo_ag = novo_fila = None
-    antigo_ag = le_bytes(CONF_AGENTES); antigo_fila = le_bytes(CONF_FILA)
     if agentes:
-        novo_ag = "".join(edita_agentes(linhas_de(antigo_ag), agentes)).encode("utf-8", "surrogateescape")
+        novo_ag = "".join(edita_agentes(linhas_de(le_bytes(CONF_AGENTES)), agentes)).encode("utf-8", "surrogateescape")
     if fila:
-        L = linhas_de(antigo_fila)
+        L = linhas_de(le_bytes(CONF_FILA))
         for k, v in fila.items(): edita_chaves(L, FILA_CHAVES[k], v)
         novo_fila = "".join(L).encode("utf-8", "surrogateescape")
+    candidato = "%s.%d.tmp" % (CONF_AGENTES, os.getpid())
     try:
         if novo_ag is not None:
-            grava_bytes(CONF_AGENTES, novo_ag)
-            erro = roda_contas()
+            os.makedirs(os.path.dirname(candidato), exist_ok=True)
+            with open(candidato, "wb") as f: f.write(novo_ag)
+            erro = roda_contas(candidato)
             if erro: raise Erro(erro)
+            os.replace(candidato, CONF_AGENTES)
         if novo_fila is not None: grava_bytes(CONF_FILA, novo_fila)
     except (Erro, OSError) as e:
-        if novo_ag is not None: grava_bytes(CONF_AGENTES, antigo_ag)
+        try: os.remove(candidato)
+        except OSError: pass
         raise e if isinstance(e, Erro) else Erro("não consegui gravar: %s" % e)
     return list(novos)
 

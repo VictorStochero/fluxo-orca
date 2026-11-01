@@ -275,15 +275,19 @@ fila_conf() (
     [ "$(FILA_TESTE_VAGAS=3 espera)" = 1 ] || exit 1
     mkdir -p "$tmp/fc/p/.orca"; echo 'FILA_TESTE_VAGAS=2' > "$tmp/fc/p/.orca/worktree.conf"
     [ "$(espera)" = 0 ] || exit 2
+    # Nome antigo: GS_TESTE_* no worktree.conf também vence o fila.conf; GS_TESTE_* só no ambiente perde para ele.
+    echo 'GS_TESTE_VAGAS=2' > "$tmp/fc/p/.orca/worktree.conf"
+    [ "$(espera)" = 0 ] || exit 4
     rm -rf "$tmp/fc/p/.orca"
+    [ "$(GS_TESTE_VAGAS=3 espera)" = 1 ] || exit 5
     printf 'FILA_TESTE_VAGAS=abc\nFILA_TESTE_TETO=2\n' > "$HOME/.claude/fila.conf"
     aviso=$(cd "$tmp/fc/p" && bash "$fila_script" -- true 2>&1 >/dev/null)
     case "$aviso" in *'fila.conf: linha ignorada (FILA_TESTE_VAGAS=abc)'*) ;; *) exit 3 ;; esac
 )
 fila_conf; rc=$?
 case $rc in
-    0) ok "fila.conf: sobrepõe o ambiente (1 vaga), cede ao worktree.conf (2 vagas) e ignora linha inválida com aviso" ;;
-    *) ruim "fila.conf: etapa $rc falhou (1 ambiente, 2 worktree.conf, 3 aviso)" ;;
+    0) ok "fila.conf: sobrepõe o ambiente (1 vaga), cede ao worktree.conf (2 vagas, FILA_ ou GS_) e ignora linha inválida com aviso" ;;
+    *) ruim "fila.conf: etapa $rc falhou (1 ambiente, 2 worktree.conf, 3 aviso, 4 GS_ no worktree.conf, 5 GS_ no ambiente)" ;;
 esac
 
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
