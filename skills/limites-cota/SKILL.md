@@ -43,7 +43,7 @@ minimax  agente=opencode modelo="minimax/MiniMax-M2" vagas=1 medidor=orca:minima
 
 | Medidor | Origem | Contas |
 |---|---|---|
-| `claude` | `claude -p "/usage"` com `CLAUDE_CONFIG_DIR` da conta (sem ela, a principal); sessão e semana | contas Claude |
+| `claude` | API de uso (`api.anthropic.com/api/oauth/usage`) com o token de `<config>/.credentials.json` (~1 s); cai no `claude -p "/usage"` com `CLAUDE_CONFIG_DIR` da conta (sem ela, a principal) quando falta credencial (macOS usa o Keychain), o token venceu, a API recusa ou falha; `LIMITES_SEM_API=1` força o `/usage`; `LIMITES_USAGE_URL` troca a URL (testes); sessão e semana | contas Claude |
 | `orca:<fornecedor>` | `rateLimits.<fornecedor>` do `orca account list --json`, uma consulta por execução; janela curta e semana (ou mês) | `codex`, `antigravity` (uma linha por grupo de modelos; a conta vale pelo pior grupo), `kimi`, `minimax`, `cursor`, `grok`, `zcode`, `gemini`, `opencodeGo` |
 | `-` | sem medição: só vagas | os demais agentes |
 
@@ -60,7 +60,7 @@ Com `teto>0`, a reserva conta todas as vagas e sai 75 com `POOL CHEIO: teto da m
 
 - **Antes de cada onda de workers**: rodar; conta acima de 80% sai da vez.
 - Revisão obrigatória continua em Opus mesmo com cota apertada: espera a janela zerar em vez de rebaixar o modelo.
-- Linha `ilegível (...)`: o `/usage` mudou de formato, a conta não está logada ou o Orca não tem a cota do fornecedor — dizer o motivo da linha, não estimar.
+- Linha `ilegível (...)`: o `/usage` (ou a API de uso) mudou de formato, a conta não está logada ou o Orca não tem a cota do fornecedor — dizer o motivo da linha, não estimar.
 
 ## Responder ao usuário
 - `bash ~/.cache/limites.sh` — uso por conta e janela, horário de renovação e escritor escolhido; exit 3 indica algum uso acima de 80%. Apresentar como tabela (conta · janela · uso · zera às), sem reformular números.
