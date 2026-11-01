@@ -130,7 +130,7 @@ cfg semigual; igual 'config: argumento sem =' 2 $?
 printf '# minha fila\nFILA_TESTE_TETO=4\n' > "$conf_fila"; cfg fila.teto=5 fila.processos=6
 igual 'config fila: preserva comentário e troca no lugar' '# minha fila|FILA_TESTE_TETO=5|FILA_TESTE_PROCESSOS=6' "$(junta '|' < "$conf_fila")"
 
-# --config do pool e das contas: preserva comentário, ordem e tokens alheios; contas.sh reprovando restaura o arquivo.
+# --config do pool e das contas: preserva comentário, ordem e tokens alheios; contas.sh reprovando, o arquivo não é trocado.
 conf_ag=$HOME/.claude/agentes.conf
 printf '# comentário\nteto=4\nescolha=ritmo\na agente=claude vagas=2 peso=5 papeis=escritor,revisor modelo=m1\na=9\nk agente=kimi vagas=1 papeis=segunda-opiniao\n' > "$conf_ag"
 cfg pool.ram_min=2 pool.teto=6 pool.escolha=ordem conta.a.vagas=3 conta.a.peso=7; igual 'config pool: exit 0' 0 $?
@@ -148,7 +148,7 @@ cfg pool.ram_min=-1; igual 'config pool: ram_min negativo, exit 2' 2 $?
 cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'config: erros de validação não gravam nada' || ruim 'config: arquivo mudou'
 cfg conta.a.vagas=1 conta.k.papeis=escritor; igual 'config conta: contas.sh reprova, exit 2' 2 $?
 grep -q 'kimi' "$tmp/c.err" && ok 'config conta: mensagem do contas.sh' || ruim "config conta: sem mensagem do contas.sh ($(cat "$tmp/c.err"))"
-cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'config conta: arquivo restaurado byte a byte' || ruim 'config conta: arquivo não restaurado'
+cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'config conta: arquivo intacto byte a byte' || ruim 'config conta: arquivo mudou'
 ls "$conf_ag".*.tmp >/dev/null 2>&1 && ruim 'config conta: sobrou .tmp' || ok 'config conta: sem .tmp sobrando'
 # O contas.sh confere o candidato (.tmp) enquanto o agentes.conf real continua intacto para os outros processos.
 cat > "$HOME/.cache/contas.sh" <<'STUBC'
@@ -162,6 +162,12 @@ cp "$conf_ag" "$HOME/.claude/agentes.antes"
 cfg conta.a.vagas=5; igual 'config conta: contas.sh valida o candidato com o arquivo real intacto' 0 $?
 grep -q '^a .*vagas=5' "$conf_ag" && ok 'config conta: candidato aprovado vira o arquivo' || ruim 'config conta: valor novo não gravado'
 rm -f "$HOME/.cache/contas.sh" "$HOME/.claude/agentes.antes"
+# Tudo ou nada com fila e conta na mesma chamada: fila.conf que não pode ser gravado (é um diretório) deixa o agentes.conf como estava.
+cp "$conf_ag" "$tmp/ag.bak"; mv "$conf_fila" "$tmp/fila.bak"; mkdir "$conf_fila"
+cfg conta.a.vagas=9 fila.teto=2; igual 'config misto: fila.conf não gravável, exit 2' 2 $?
+cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'config misto: agentes.conf intacto' || ruim 'config misto: agentes.conf mudou'
+ls "$conf_ag".*.tmp >/dev/null 2>&1 && ruim 'config misto: sobrou .tmp' || ok 'config misto: sem .tmp sobrando'
+rmdir "$conf_fila"; mv "$tmp/fila.bak" "$conf_fila"
 rm -f "$conf_ag"; cfg pool.teto=3; igual 'config pool: cria agentes.conf' 'teto=3' "$(cat "$conf_ag" 2>/dev/null)"
 cfg conta.a.vagas=1; igual 'config conta: sem conta no arquivo não cria conta' 2 $?
 printf 'teto=4\nram_min=3\na agente=claude vagas=2 peso=5 papeis=escritor,revisor\nb agente=codex vagas=1\nb=3\n' > "$conf_ag"

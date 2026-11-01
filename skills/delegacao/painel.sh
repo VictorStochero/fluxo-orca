@@ -244,7 +244,9 @@ def grava_bytes(caminho, dados):  # atômica: .tmp + os.replace; None remove
     os.makedirs(os.path.dirname(caminho), exist_ok=True)
     novo = "%s.%d.tmp" % (caminho, os.getpid())
     with open(novo, "wb") as f: f.write(dados)
-    os.replace(novo, caminho)
+    try: os.replace(novo, caminho)
+    except OSError:
+        os.remove(novo); raise
 
 def linhas_de(dados):
     return re.findall(r"[^\n]*\n|[^\n]+", (dados or b"").decode("utf-8", "surrogateescape"))
@@ -325,8 +327,9 @@ def aplica_config(pares):
             with open(candidato, "wb") as f: f.write(novo_ag)
             erro = roda_contas(candidato)
             if erro: raise Erro(erro)
-            os.replace(candidato, CONF_AGENTES)
+        # fila.conf antes da troca do agentes.conf: falha de E/S aqui ainda não gravou nada (tudo ou nada).
         if novo_fila is not None: grava_bytes(CONF_FILA, novo_fila)
+        if novo_ag is not None: os.replace(candidato, CONF_AGENTES)
     except (Erro, OSError) as e:
         try: os.remove(candidato)
         except OSError: pass
