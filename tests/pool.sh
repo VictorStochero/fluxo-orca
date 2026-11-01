@@ -29,7 +29,23 @@ fi
     printf '{"ok":true,"result":{"host":{"availableMemory":%s}}}\n' "$(( ${POOL_RAM_GB:-4} * 1073741824 ))"
     exit 0
 }
+if [ "$1 $2 $3" = 'orchestration worker-list --json' ]; then
+    echo list >> "$POOL_ESTADOS/chamadas"
+    # POOL_LISTA=1: as 100 mais recentes trazem os dispatches de estado conhecido; sem ele, a lista vem vazia.
+    printf '{"ok":true,"result":{"workers":['; sep=""
+    if [ -n "${POOL_LISTA:-}" ]; then
+        for f in "$POOL_ESTADOS"/ctx_*; do
+            [ -f "$f" ] || continue
+            case "$(cat "$f")" in pending | running | completed | failed | stopped | abandoned)
+                printf '%s{"dispatchId":"%s","dispatchStatus":"%s"}' "$sep" "${f##*/}" "$(cat "$f")"; sep=, ;;
+            esac
+        done
+    fi
+    printf '],"page":{"hasMore":false}}}\n'
+    exit 0
+fi
 [ "$1 $2 $3 $5" = 'orchestration worker-show --dispatch --json' ] || exit 2
+echo "show $4" >> "$POOL_ESTADOS/chamadas"
 estado=$(cat "$POOL_ESTADOS/$4" 2>/dev/null || echo pending)
 case "$estado" in
     inexistente) echo '{"ok":false,"error":{"code":"dispatch_not_found"}}'; exit 1 ;;
@@ -109,6 +125,22 @@ for estado in completed failed stopped abandoned inexistente; do
     pool solta ctx_3; echo pending > "$POOL_ESTADOS/ctx_2"; pool pega team ctx_2
 done
 pool solta ctx_2
+# Lista de workers resolve sem worker-show; dispatch ausente da lista confirma no worker-show.
+export POOL_LISTA=1
+pool pega team ctx_2; : > "$POOL_ESTADOS/chamadas"
+echo completed > "$POOL_ESTADOS/ctx_2"
+confere_rc 0 'lista: dispatch terminal libera a vaga' pool pega team ctx_3
+[ "$(cat "$HOME/.cache/agentes/team.lock1/dispatch" 2>/dev/null)" = ctx_3 ] && ok 'lista: novo dono' || ruim 'lista: vaga não trocou de dono'
+grep -qx list "$POOL_ESTADOS/chamadas" && ! grep -q '^show' "$POOL_ESTADOS/chamadas" && ok 'lista: uma consulta, nenhum worker-show' || ruim 'lista: consultou worker-show'
+pool solta ctx_3; pool pega team ctx_2; : > "$POOL_ESTADOS/chamadas"
+echo running > "$POOL_ESTADOS/ctx_2"
+confere_rc 75 'lista: dispatch ativo conserva a vaga' pool pega team ctx_3
+! grep -q '^show' "$POOL_ESTADOS/chamadas" && ok 'lista: ativo sem worker-show' || ruim 'lista: ativo consultou worker-show'
+: > "$POOL_ESTADOS/chamadas"; echo inexistente > "$POOL_ESTADOS/ctx_2"
+confere_rc 0 'lista: ausente da lista confirma no worker-show' pool pega team ctx_3
+grep -qx 'show ctx_2' "$POOL_ESTADOS/chamadas" && ok 'lista: worker-show só para o ausente' || ruim 'lista: ausente sem worker-show'
+unset POOL_LISTA
+pool solta ctx_3; pool solta ctx_2
 mkdir -p "$HOME/.cache/agentes/team.lock1"
 confere_rc 75 'trava sem dispatch é preservada' pool pega team ctx_sem_dono
 confere_rc 0 'livres consulta trava sem dono' pool livres
