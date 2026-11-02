@@ -73,9 +73,9 @@ Máquina já instalada: mande para o Claude Code (ou para o agente que coordena)
 
 "Em uso" = já rodava antes do catálogo ter a coluna `testado` (que fica `-` até a prova de despacho do GUIA, fase 4b, passo 7). As capacidades dos agentes não testados vêm da documentação oficial, citada no cabeçalho de `agentes-catalogo.conf`.
 
-Na 2.13.0, o coordenador dispara a onda inteira e encerra o turno: o Orca 1.4.246 (Orchestrator V3) o acorda com as mensagens dos workers. Ao acordar, executa o `check` indicado no wake e responde `question` com `reply`; `orca-espera.sh` fica opcional em background somente como vigia de saúde. Correções voltam ao mesmo worker com `send --to dispatch:<id>`, inclusive depois de concluído ou fechado (follow-up Task). Workers em worktree existente fecham sozinhos; worktree novo ou `--keep-open` exige liberação explícita.
+Na 2.13.0, o coordenador dispara a onda inteira e encerra o turno: o Orca 1.4.246 (Orchestrator V3) o acorda com as mensagens dos workers. Ao acordar, executa o `check` indicado no wake e responde `question` com `reply`; `orca-espera.sh` fica opcional em background somente como vigia de saúde. Correções voltam ao mesmo worker com `send --to dispatch:<id>`, inclusive depois de concluído ou fechado (follow-up Task). Worker aberto por `worker-start --agent` em worktree existente fecha sozinho; com `--terminal` (aba do `--cria`), worktree novo ou `--keep-open`, liberar com `orca-libera.sh <dispatch>`.
 
-**Ação manual ao atualizar para 2.13.0:** remover a cópia antiga de `~/.cache/orca-inicia.sh`, se existir. O plugin usa diretamente `orca orchestration worker-start --spec-file ~/.cache/handoff/<tarefa>/spec.md`, que já imprime o recibo resumido e `Next:`; a instalação não apaga a cópia antiga.
+**Ação manual ao atualizar para 2.13.0:** requer Orca 1.4.246 ou mais novo (`orca --version`): atualizar o Orca antes do plugin. Remover a cópia antiga de `~/.cache/orca-inicia.sh`, se existir. O plugin usa diretamente `orca orchestration worker-start --spec-file ~/.cache/handoff/<tarefa>/spec.md`, que já imprime o recibo resumido e `Next:`; a instalação não apaga a cópia antiga.
 
 ## Licença
 
