@@ -155,10 +155,11 @@ def confere(chave, v):
     elif chave == "pool.escolha": ok = v in ("ritmo", "ordem")
     elif chave == "pool.ordem": ok = re.fullmatch(r"[a-z0-9_-]{1,32}(,[a-z0-9_-]{1,32})*", v) is not None
     else:
-        m = re.fullmatch(r"conta\.([a-z0-9_-]{1,32})\.(vagas|peso|papeis|config|comando|ativo|adicionar|remover)", chave)
+        m = re.fullmatch(r"conta\.([a-z0-9_-]{1,32})\.(vagas|peso|papeis|config|comando|ativo|adicionar|remover|medidor)", chave)
         if not m: raise Erro("chave desconhecida (%s)" % chave)
         campo = m.group(2)
-        if campo == "papeis": ok = v == "" or all(p in PAPEIS for p in v.split(","))
+        if campo == "medidor": ok = v == "-"  # só tirar o medidor (conta só medida pelo Orca ou sem medida); o contas.sh confere o resto
+        elif campo == "papeis": ok = v == "" or all(p in PAPEIS for p in v.split(","))
         elif campo == "ativo": ok = v in ("sim", "nao")  # nao = "n\u00e3o utilizar": a linha fica no arquivo, fora da escolha
         elif campo == "adicionar": ok = re.fullmatch(r"[a-z0-9_-]{1,32}", v) is not None  # agente do catálogo: o contas.sh confere
         elif campo == "remover": ok = v == "1"
@@ -204,6 +205,20 @@ def edita_chaves(L, chave, valor, antes=None):
         if padrao.match(c): L[i] = "%s=%s%s" % (chave, valor, eol); achou = True
     if not achou: insere(L, antes() if antes else None, "%s=%s\n" % (chave, valor))
 
+MARCA_REMOVIDA = re.compile(r"\s*#\s*removida:(.*)")
+
+def removidas_de(L):
+    """Nomes que o usuário removeu do pool e a auto-adição não deve recriar (linha `# removida: a b`, comentário para o contas.sh)."""
+    return {n for l in L for m in [MARCA_REMOVIDA.fullmatch(l.rstrip("\r\n"))] if m for n in m.group(1).split()}
+
+def marca_removidas(L, poe=(), tira=()):
+    atual = removidas_de(L)
+    novo = (atual | set(poe)) - set(tira)
+    if novo == atual: return L
+    L = [l for l in L if not MARCA_REMOVIDA.fullmatch(l.rstrip("\r\n"))]
+    if novo: insere(L, None, "# removida: %s\n" % " ".join(sorted(novo)))
+    return L
+
 def edita_agentes(L, chaves):
     L = list(L); chaves = dict(chaves)
     def primeira_conta():
@@ -213,9 +228,13 @@ def edita_agentes(L, chaves):
         if k.startswith("pool.") and k != "pool.ordem": edita_chaves(L, k[5:], v, primeira_conta)
     def acha(nome):
         return next((j for j, l in enumerate(L) if re.match(r"\s*%s\s+\S" % re.escape(nome), l)), None)
+    sem_contas = primeira_conta() is None
     for k, v in list(chaves.items()):  # conta nova: linha mínima no fim; vagas, peso, papéis e config entram pelos campos abaixo
         m = re.fullmatch(r"conta\.(.+)\.adicionar", k)
         if not m: continue
+        # Uma linha de conta num arquivo só com globais trocaria o registro padrão do contas.sh pelo arquivo.
+        if sem_contas: raise Erro("o agentes.conf usa o registro padrão; escreva as contas antes")
+        L = marca_removidas(L, tira={m.group(1)})
         if acha(m.group(1)) is not None: raise Erro("conta já existe no agentes.conf: %s" % m.group(1))
         if v == "auto":  # conta manual: o agente sai do executavel do comando (ou do diretorio de config)
             nome = m.group(1)
@@ -234,7 +253,7 @@ def edita_agentes(L, chaves):
         insere(L, None, "%s agente=%s vagas=1 peso=1\n" % (m.group(1), v))
     removidas = {k.split(".")[1] for k in chaves if k.endswith(".remover")}
     for k, v in chaves.items():
-        m = re.fullmatch(r"conta\.(.+)\.(vagas|peso|papeis|config|comando|ativo)", k)
+        m = re.fullmatch(r"conta\.(.+)\.(vagas|peso|papeis|config|comando|ativo|medidor)", k)
         if not m or m.group(1) in removidas: continue
         nome, campo = m.groups()
         i = acha(nome)
@@ -251,7 +270,11 @@ def edita_agentes(L, chaves):
         if campo == "vagas":  # a linha legada nome=N sobrescreveria o valor gravado
             L = [l for l in L if not re.fullmatch(r"\s*%s=[0-9]+\s*" % re.escape(nome), l.rstrip("\r\n"))]
     for nome in sorted(removidas):  # a linha da conta e a legada nome=N
-        if acha(nome) is None: raise Erro("conta inexistente no agentes.conf: %s" % nome)
+        i = acha(nome)
+        if i is None: raise Erro("conta inexistente no agentes.conf: %s" % nome)
+        # A auto-adição do --json recriaria a conta detectada (codex-padrao, claude-padrao, agente instalado): a remoção deixa a marca.
+        ag = re.search(r"(?:^|\s)agente=(\S+)", L[i]); ag = ag.group(1) if ag else nome
+        L = marca_removidas(L, poe={nome, ag} | (set() if re.search(r"(?:^|\s)config=", L[i]) else {ag + "-padrao"}))
         L = [l for l in L if not (re.match(r"\s*%s\s+\S" % re.escape(nome), l) or re.fullmatch(r"\s*%s=[0-9]+\s*" % re.escape(nome), l.rstrip("\r\n")))]
     if "pool.ordem" in chaves: L = reordena(L, chaves["pool.ordem"].split(","))
     return L
@@ -292,10 +315,31 @@ def roda_contas(conf):  # valida o candidato (.tmp) antes de ele virar o agentes
     if r.returncode == 0: return None
     return (r.stderr.decode("utf-8", "replace").strip() or r.stdout.decode("utf-8", "replace").strip() or "contas.sh reprovou a configuração")
 
+def pega_trava():
+    """Um escritor por vez no agentes.conf (--config e auto-adição do --json): mkdir atômico, de ler a trocar."""
+    d = CONF_AGENTES + ".trava"
+    os.makedirs(os.path.dirname(d), exist_ok=True)
+    for _ in range(400):
+        try: os.mkdir(d); return d
+        except FileExistsError:
+            # shortcut: trava de processo morto sai por idade (> 120 s, acima do timeout de 60 s do contas.sh); dois a limpar ao mesmo tempo é raro demais para tratar.
+            try:
+                if time.time() - os.path.getmtime(d) > 120: os.rmdir(d)
+            except OSError: pass
+            time.sleep(0.1)
+    raise Erro("o agentes.conf está em uso por outra gravação; tente de novo")
+
 def aplica_config(pares):
     """Tudo ou nada: valida, o contas.sh confere o agentes.conf candidato num .tmp, e só então os arquivos são trocados. Devolve as chaves gravadas."""
     novos = {}
     for k, v in pares: novos[k] = confere(k, v.strip())
+    trava = pega_trava()
+    try: return grava_config(novos)
+    finally:
+        try: os.rmdir(trava)
+        except OSError: pass
+
+def grava_config(novos):
     fila = {k: v for k, v in novos.items() if k in FILA_CHAVES}
     agentes = {k: v for k, v in novos.items() if k not in FILA_CHAVES}
     novo_ag = novo_fila = None
@@ -404,11 +448,16 @@ travas.sort(key=lambda t: (t["fila"], t["vaga"]))
 def projeto_de(caminho): return re.split(r"[\\/]", caminho.rstrip("/\\"))[-1] if caminho else None
 
 # fila.testes: o que roda (trava viva), o que aguarda vaga (registro com pid vivo) e o que parou (trava com pid morto); a trava do teto nao entra.
-testes = [{"pid": t["pid"], "estado": "execucao" if t["viva"] else "parado", "recurso": t["recurso"], "worktree": t["worktree"], "projeto": projeto_de(t["worktree"]),
-           "comando": t["comando"], "vaga": t["vaga"], "desde_ts": t["desde_ts"]} for t in travas if not t["teto"] and t["pid"] is not None]
-for l in le(os.path.join(tmp, "espera")).split("\n"):
-    if not l: continue
-    pid_, recurso_, ts_, wt_, cmd_, _fila = (l.split("\t") + [""] * 6)[:6]
+esperas = [(l.split("\t") + [""] * 6)[:6] for l in le(os.path.join(tmp, "espera")).split("\n") if l]
+# Quem já tem vaga da fila e espera a do teto (fila-teste.sh) é um teste só: aguardando, com o início da espera.
+espera_teto = {inteiro(e[0], None): e for e in esperas if e[5].startswith("gs-teste-teto")}
+testes = [{"pid": t["pid"], "estado": ("aguardando" if t["pid"] in espera_teto else "execucao") if t["viva"] else "parado", "recurso": t["recurso"], "worktree": t["worktree"], "projeto": projeto_de(t["worktree"]),
+           "comando": t["comando"], "vaga": t["vaga"],
+           "desde_ts": (int(espera_teto[t["pid"]][2]) if re.fullmatch(r"\d+", espera_teto[t["pid"]][2]) else t["desde_ts"]) if t["viva"] and t["pid"] in espera_teto else t["desde_ts"]}
+          for t in travas if not t["teto"] and t["pid"] is not None]
+com_vaga = {t["pid"] for t in testes}
+for pid_, recurso_, ts_, wt_, cmd_, _fila in esperas:
+    if inteiro(pid_, None) in espera_teto and inteiro(pid_, None) in com_vaga: continue
     testes.append({"pid": inteiro(pid_, None), "estado": "aguardando", "recurso": recurso_ or None, "worktree": wt_ or None, "projeto": projeto_de(wt_),
                    "comando": cmd_ or None, "vaga": None, "desde_ts": int(ts_) if re.fullmatch(r"\d+", ts_) else None})
 testes.sort(key=lambda x: ({"execucao": 0, "aguardando": 1, "parado": 2}[x["estado"]], x["desde_ts"] is None, x["desde_ts"] or 0))
@@ -507,6 +556,7 @@ def cota_orca(prov):
 
 def slug(x): return re.sub(r"[^a-z0-9-]+", "-", x.lower()).strip("-")[:32] or "conta"
 
+so_medida = set()  # gerenciada do Orca (claude/codex): o despacho usa a conta padrão, então entra sem papel e sem medidor
 erros_orca = {}  # conta -> mensagem do Orca quando a leitura nativa da cota falha
 for prov in ("claude", "codex", "opencode", "devin"):
     d = res_contas.get(prov) or {}
@@ -514,6 +564,7 @@ for prov in ("claude", "codex", "opencode", "devin"):
     achadas = [(slug("%s-%s" % (prov, str(a.get("id"))[:8])), a.get("email") or a.get("label") or str(a.get("id")), False) for a in d.get("accounts") or []]
     if sd.get("hasAuth") or (prov == "claude" and cota_orca("claude")): achadas.append((slug(prov + "-padrao"), sd.get("email") or "padrão do sistema", True))
     for nome, rotulo, padrao in achadas:
+        if not padrao and prov in ("claude", "codex"): so_medida.add(nome)
         # O padrão do sistema é a conta manual do mesmo agente sem config; a gerenciada, a de mesmo nome.
         dono = next((c for c in contas if c["origem"] == "manual" and ((c["agente"] == prov and not c["config"]) if padrao else c["nome"] == nome)), None)
         nativa = cota_orca(prov) if padrao else None
@@ -546,25 +597,33 @@ for chave, id_orca in instalados:
         contas.append({"nome": slug(chave), "agente": chave, "vagas": 0, "usadas": 0, "peso": 1, "papeis": [], "ocupantes": [], "cota": None,
                        "origem": "orca", "rotulo": "agente instalado (orca agent launch --agent %s)" % id_orca, "config": None, "detectada": True, "ativo": True})
 # Conta ou agente detectado que ainda nao esta no agentes.conf entra sozinho, com os padroes do catalogo (vagas 1, peso 1 e os papeis padrao do contas.sh).
-# Idempotente: nunca regrava linha existente, nem a de ativo=nao. Sem agentes.conf nao cria um (o registro padrao valeria).
+# Idempotente: nunca regrava linha existente, nem a de ativo=nao, nem recria a removida pelo usuario. Sem conta no agentes.conf nao cria (o registro padrao valeria).
 def papeis_padrao(agente): return ["escritor", "revisor", "verificador", "mecanico"] if agente in ("claude", "codex", "antigravity") else []
 
 def marca_adicionada(c):
-    c["origem"] = "manual"; c["vagas"] = 1; c["peso"] = 1; c["papeis"] = papeis_padrao(c["agente"])
+    c["origem"] = "manual"; c["vagas"] = 1; c["peso"] = 1; c["papeis"] = [] if c["nome"] in so_medida else papeis_padrao(c["agente"])
 
-if os.path.isfile(CONF_AGENTES):
-    no_arquivo = set(re.findall(r"^\s*([a-z0-9_-]+)\s+\S", le(CONF_AGENTES), re.M))
-    novas = [c for c in contas if c["origem"] == "orca" and c["nome"] not in no_arquivo]
+def pares_de(c):
+    p = [("conta.%s.adicionar" % c["nome"], c["agente"])]
+    return p + [("conta.%s.papeis" % c["nome"], ""), ("conta.%s.medidor" % c["nome"], "-")] if c["nome"] in so_medida else p
+
+# Só com conta escrita no arquivo (como o contas.sh): arquivo só com globais usa o registro padrão, e uma linha de conta o trocaria.
+no_arquivo = set(re.findall(r"^\s*([a-z0-9_-]+)\s+\S", le(CONF_AGENTES), re.M))
+if no_arquivo:
+    removidas_antes = removidas_de(linhas_de(le_bytes(CONF_AGENTES)))
+    novas = [c for c in contas if c["origem"] == "orca" and c["nome"] not in no_arquivo and c["nome"] not in removidas_antes]
     if novas:
         try:
-            aplica_config([("conta.%s.adicionar" % c["nome"], c["agente"]) for c in novas])
+            aplica_config([p for c in novas for p in pares_de(c)])
             for c in novas: marca_adicionada(c)
         except Erro:  # uma conta recusada pelo contas.sh nao pode travar as outras: uma por vez
             for c in novas:
                 try:
-                    aplica_config([("conta.%s.adicionar" % c["nome"], c["agente"])])
+                    aplica_config(pares_de(c))
                     marca_adicionada(c)
-                except Erro as e: aviso.append("n\u00e3o consegui adicionar %s ao pool: %s" % (c["nome"], e))
+                except Erro as e:
+                    if "já existe" in str(e): marca_adicionada(c)  # outro processo gravou a mesma conta
+                    else: aviso.append("não consegui adicionar %s ao pool: %s" % (c["nome"], e))
 # Estado da cota por conta: sem medida nem leitura vira objeto sem números, com estado; o erro do Orca só vale sem medida própria.
 for c in contas:
     if c["cota"] is None:
