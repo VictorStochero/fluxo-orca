@@ -19,6 +19,12 @@ export const t = {
   orcaRodando: 'rodando',
   orcaForaDoAr: 'fora do ar',
   dicaLinha: 'Clique numa linha para ver os detalhes.',
+  configuracoes: { titulo: 'Configurações', fila: 'Fila', pool: 'Pool', painel: 'Painel' },
+  painel: {
+    intervalo: 'Atualizar a cada (segundos)',
+    dica: 'Coleta local feita pelo próprio painel, sem IA e sem gastar tokens; valores baixos só aumentam o uso de CPU.',
+    invalido: (min: number, max: number) => `Informe um número inteiro de ${min} a ${max}.`
+  },
 
   fila: {
     titulo: 'Fila de testes',
@@ -53,8 +59,7 @@ export const t = {
       vagas_projeto: 'Testes ao mesmo tempo em cada projeto. Só vale no modo Por projeto.',
       teto: 'Máximo de testes ao mesmo tempo na máquina, somando todas as filas.'
     },
-    origem: (origem: string, projetos: string) => `origem: ${origem}${projetos ? ` · sobrescrito pelo projeto (${projetos})` : ''}`,
-    origens: { padrao: 'padrão', ambiente: 'variável de ambiente', 'fila.conf': 'fila.conf' }
+    sobrescrito: (projetos: string) => `sobrescrito pelo projeto (${projetos})`
   },
 
   pool: {
@@ -76,6 +81,7 @@ export const t = {
     janelas: 'Zera',
     semMedida: 'sem medida',
     medidaHa: 'Medida há',
+    medidaAntiga: (min: number) => `Medida antiga: há ${min} min. A cota desta conta vem do medidor local; rode o medidor de novo (limites.sh) antes de confiar nela.`,
     minutos: (n: number) => `${n} min`,
     vagasEmUso: 'Vagas em uso',
     nenhuma: 'nenhuma',
@@ -84,10 +90,6 @@ export const t = {
     teto: 'Teto da máquina (0 = sem teto)',
     ramMin: 'RAM mínima livre (GB)',
     escolha: 'Escolha do escritor',
-    origemManual: 'agentes.conf',
-    origemOrca: 'Orca (fora do pool)',
-    origemManualOrca: 'Orca + agentes.conf',
-    origem: 'Origem',
     rotulo: 'Conta no Orca',
     editar: (nome: string) => `Editar ${nome}`,
     adicionar: 'Adicionar ao pool',
@@ -97,6 +99,26 @@ export const t = {
     cancelar: 'Cancelar',
     config: 'Diretório de config (CLAUDE_CONFIG_DIR etc.)',
     comando: 'Comando do lançador',
+    dicas: {
+      vagas: 'Quantos agentes desta conta podem trabalhar ao mesmo tempo. 0 = sem limite próprio (o teto da máquina continua valendo).',
+      peso: 'Prioridade na escolha do escritor: multiplica o ritmo da cota. Peso 10 é escolhido bem antes de peso 1 com a mesma folga. Ignorado quando a escolha é Ordem.',
+      config: 'Pasta de configuração do agente (por exemplo CLAUDE_CONFIG_DIR) que separa esta conta das outras do mesmo agente. Vazio = a conta padrão do sistema.',
+      comando: 'Comando que o lançador usa para abrir este agente, quando for diferente do comando padrão do catálogo.',
+      agente: 'Agente do catálogo (agentes-catalogo.conf) a que esta conta pertence: define comando, argumentos e medidor.',
+      teto: 'Máximo de agentes trabalhando ao mesmo tempo na máquina, somando todas as contas. 0 = sem limite.',
+      ramMin: 'Memória livre mínima (GB) para reservar uma vaga nova. 0 = desligado.',
+      escolha: 'Ritmo: escolhe o escritor pela cota que mais sobra × peso. Ordem: vale a ordem da tabela do Pool, de cima para baixo.'
+    },
+    dicasPapel: {
+      escritor: 'Implementa a tarefa: código, testes e commit no worktree.',
+      revisor: 'Gate de merge só leitura: revisa comportamento e arquitetura; também faz a auditoria antes de subir.',
+      verificador: 'Contraprova só leitura: tenta refutar os achados da auditoria ou um diagnóstico.',
+      mecanico: 'Tarefas mecânicas e conferíveis (fixtures, edição literal, mover por mapa) com modelo menor.',
+      'segunda-opiniao': 'Revisão adversarial de outra família de modelo, só leitura, em entregas de alto risco.',
+      orquestra: 'Coordena os workers; conta só com este papel nunca é escolhida para trabalho.'
+    } as Record<string, string>,
+    subir: 'Subir',
+    descer: 'Descer',
     nova: 'Nova conta manual',
     novaNome: 'Nome da conta',
     novaAgente: 'Agente do catálogo',

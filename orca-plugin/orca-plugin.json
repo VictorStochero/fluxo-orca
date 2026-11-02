@@ -10,6 +10,11 @@
   "execution": "trusted-worker",
   "pluginApi": 1,
   "main": "src/worker.ts",
+  "capabilities": [
+    {
+      "kind": "storage:own"
+    }
+  ],
   "contributes": {
     "panels": [
       {
