@@ -384,14 +384,24 @@ for prov in ("claude", "codex", "opencode", "devin"):
         dono = next((c for c in contas if c["origem"] == "manual" and ((c["agente"] == prov and not c["config"]) if padrao else c["nome"] == nome)), None)
         nativa = cota_orca(prov) if padrao else None
         if dono:
-            dono["detectada"] = True; dono["rotulo"] = rotulo
+            dono["detectada"] = True; dono["origem"] = "ambos"; dono["rotulo"] = rotulo
             if nativa: dono["cota"] = nativa
         else:
             contas.append({"nome": nome, "agente": prov, "vagas": 0, "usadas": 0, "peso": 1, "papeis": [], "ocupantes": [], "cota": nativa,
                            "origem": "orca", "rotulo": rotulo, "config": None, "detectada": True})
-catalogo = []
-for l in le(os.path.join(os.path.dirname(E["PAINEL_CONTAS"]), "agentes-catalogo.conf")).split("\n"):
-    if l.strip() and not l.startswith("#") and "|" in l: catalogo.append(l.split("|", 1)[0])
+catalogo = []; instalados = []
+arq_catalogo = os.environ.get("CONTAS_CATALOGO") or os.path.join(os.path.dirname(E["PAINEL_CONTAS"]), "agentes-catalogo.conf")
+for l in le(arq_catalogo).split("\n"):
+    if l.strip() and not l.startswith("#") and "|" in l:
+        campos = l.split("|")
+        catalogo.append(campos[0])
+        # Agente que o Orca abre (`orca agent launch --agent <id-orca>`) com o CLI no PATH: o Orca não lista agentes instalados, então cruza id-orca e comando do catálogo.
+        if len(campos) > 2 and campos[1] and campos[2].split() and shutil.which(campos[2].split()[0]): instalados.append((campos[0], campos[1]))
+# Agente instalado cujo tipo ainda não tem conta (do agentes.conf ou detectada) entra como conta fora do pool.
+for chave, id_orca in instalados:
+    if not any(c["agente"] == chave for c in contas):
+        contas.append({"nome": slug(chave), "agente": chave, "vagas": 0, "usadas": 0, "peso": 1, "papeis": [], "ocupantes": [], "cota": None,
+                       "origem": "orca", "rotulo": "agente instalado (orca agent launch --agent %s)" % id_orca, "config": None, "detectada": True})
 teto = conf.get("teto", 0); ram_min = conf.get("ram_min", 0)
 pool = {"teto": teto, "ram_min": ram_min, "escolha": escolha, "papeis_validos": list(PAPEIS), "catalogo": catalogo, "maquina": {"usadas": total, "teto": teto}, "contas": contas}
 

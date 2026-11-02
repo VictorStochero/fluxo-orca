@@ -56,6 +56,18 @@ igual 'orca: conta sem cota nativa mantém a medida' 'None 90 False' "$(j 'str(d
 igual 'orca: conta gerenciada fora do agentes.conf entra com origem orca' 'claude-abcdef12 orca gerenciada@x.com claude' "$(j '" ".join([c["nome"],c["origem"],c["rotulo"],c["agente"]]) if (c:=[x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]) else 0' "$tmp/e.json")"
 igual 'orca: contas detectadas não entram nas vagas' '0 0' "$(j 'str([x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]["vagas"])+" "+str([x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]["usadas"])' "$tmp/e.json")"
 igual 'orca: manual não perde a origem' manual "$(j 'd["pool"]["contas"][0]["origem"]' "$tmp/e.json")"
+igual 'origem: conta do agentes.conf que o Orca também detecta é ambos' ambos "$(j 'd["pool"]["contas"][1]["origem"]' "$tmp/e.json")"
+igual 'origem: só no agentes.conf é manual, só no Orca é orca' 'manual orca' "$(j 'd["pool"]["contas"][0]["origem"]+" "+[x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["origem"]' "$tmp/e.json")"
+# Agentes instalados: catálogo (id-orca + comando) cruzado com o PATH; só entra o tipo que ainda não tem conta.
+printf '%s
+' 'claude|claude|claude||claude|sim|sim|-|-|-|' 'pi|pi|pi-cli||-|nao|nao|-|-|-|' 'ghost|ghost|ghost-cli||-|nao|nao|-|-|-|' 'semid||pi-cli||-|nao|nao|-|-|-|' > "$tmp/cat.conf"
+printf '#!/usr/bin/env bash
+' > "$tmp/bin/pi-cli"; chmod +x "$tmp/bin/pi-cli"; cp "$tmp/bin/pi-cli" "$tmp/bin/pi-cli.cmd"  # .cmd: o PATHEXT do Windows
+PATH="$tmp/bin:$PATH" CONTAS_CATALOGO="$tmp/cat.conf" painel --json > "$tmp/i.json"
+igual 'instalado: agente do catálogo no PATH entra fora do pool' 'pi orca pi' "$(j '" ".join([c["nome"],c["origem"],c["agente"]]) if (c:=[x for x in d["pool"]["contas"] if x["nome"]=="pi"][0]) else 0' "$tmp/i.json")"
+igual 'instalado: o rótulo diz como o Orca abre' True "$(j '"orca agent launch --agent pi" in [x for x in d["pool"]["contas"] if x["nome"]=="pi"][0]["rotulo"]' "$tmp/i.json")"
+igual 'instalado: sem CLI no PATH ou sem id-orca não aparece' 0 "$(j 'len([x for x in d["pool"]["contas"] if x["nome"] in ("ghost","semid")])' "$tmp/i.json")"
+igual 'instalado: tipo que já tem conta não duplica' 0 "$(j 'len([x for x in d["pool"]["contas"] if x["agente"]=="claude" and x["origem"]=="orca" and x["nome"]=="claude"])' "$tmp/i.json")"
 igual 'catálogo: agentes para a conta nova' True "$(j '"claude" in d["pool"]["catalogo"] and "codex" in d["pool"]["catalogo"]' "$tmp/e.json")"
 igual 'pool: linha conta=N muda as vagas' 3 "$(j 'd["pool"]["contas"][1]["vagas"]' "$tmp/e.json")"
 igual 'pool: máquina' '1/4 ram_min 3' "$(j 'str(d["pool"]["maquina"]["usadas"])+"/"+str(d["pool"]["maquina"]["teto"])+" ram_min "+str(d["pool"]["ram_min"])' "$tmp/e.json")"
