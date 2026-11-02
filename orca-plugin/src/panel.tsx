@@ -223,9 +223,13 @@ function TabelaExpansivel(props: {
       label={props.label}
       columns={props.colunas}
       rows={rows}
-      selectionMode="multiple"
-      selected={props.abertas}
-      onSelectionChange={({ keys }) => props.onAbrir(keys.filter((k) => !k.includes('#')))}
+      // Seleção sempre vazia: todo clique chega como evento e alterna a linha (o clique comum do Orca substitui a seleção e não recolhe).
+      selectionMode="single"
+      selected={[]}
+      onSelectionChange={({ keys }) => {
+        const k = keys.find((x) => !x.includes('#'))
+        if (k) props.onAbrir(props.abertas.includes(k) ? props.abertas.filter((x) => x !== k) : [...props.abertas, k])
+      }}
     />
   )
 }
@@ -326,9 +330,10 @@ function SecaoFila({ e }: { e: Estado }) {
         <TabelaExpansivel
           label={t.fila.tabela}
           colunas={[
-            { key: 'projeto', label: t.fila.colProjeto, width: 'md' },
-            { key: 'fila', label: t.fila.colFila, width: 'md' },
-            { key: 'estado', label: t.fila.colEstado, width: 'md' },
+            // Larguras automáticas: com colunas fixas a tabela passava da largura do painel e rolava sem o cabeçalho.
+            { key: 'projeto', label: t.fila.colProjeto, width: 'auto', minWidth: 'xs' },
+            { key: 'fila', label: t.fila.colFila, width: 'auto', minWidth: 'xs' },
+            { key: 'estado', label: t.fila.colEstado, width: 'auto', minWidth: 'xs' },
             { key: 'ha', label: t.fila.colHa, width: 'xs' }
           ]}
           linhas={linhas}

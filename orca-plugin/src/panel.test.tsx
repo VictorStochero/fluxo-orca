@@ -57,12 +57,13 @@ test('fila: clicar abre os detalhes na própria tabela (onde roda, comando, pid,
   assert.deepEqual(view.rowsOf(FILA), ['p4242', 'p4242#0', 'p4242#1', 'p4242#2', 'p4242#3', 'p4120', 'p99'])
   assert.ok(view.find({ type: 'Table', label: 'Testes na fila', text: /Onde roda.*mysql 127\.0\.0\.1:3308/ }))
   assert.ok(view.find({ type: 'Table', label: 'Testes na fila', text: /runner tests\/X\.php/ }))
-  await view.selectRows(FILA, ['p4242', 'p99'])
+  // Cada selectRows é um clique numa linha: alterna aquela linha e mantém as outras.
+  await view.selectRows(FILA, ['p99'])
   assert.equal(view.rowsOf(FILA).length, 3 + 4 + 5) // o parado traz a linha extra de Situação
   assert.ok(view.find({ type: 'Table', text: /O processo terminou e deixou a vaga presa/ }))
-  await view.selectRows(FILA, ['p99'])
+  await view.selectRows(FILA, ['p4242'])
   assert.deepEqual(view.rowsOf(FILA), ['p4242', 'p4120', 'p99', 'p99#0', 'p99#1', 'p99#2', 'p99#3', 'p99#4'])
-  await view.selectRows(FILA, [])
+  await view.selectRows(FILA, ['p99'])
   assert.deepEqual(view.rowsOf(FILA), ['p4242', 'p4120', 'p99'])
 })
 
@@ -87,11 +88,12 @@ test('fila: a coluna Fila segue o modo (Global · Banco · Container · Geral ·
 
 test('pool: detalhes dentro da tabela, várias abertas, sem botão nem campo na linha', async () => {
   view = await mount(panel, { host: hostCom() })
-  await view.selectRows(POOL, ['pessoal', 'codex'])
-  assert.ok(view.rowsOf(POOL).includes('pessoal#0') && view.rowsOf(POOL).includes('codex#0'))
+  await view.selectRows(POOL, ['pessoal'])
   await view.selectRows(POOL, ['codex'])
+  assert.ok(view.rowsOf(POOL).includes('pessoal#0') && view.rowsOf(POOL).includes('codex#0'))
+  await view.selectRows(POOL, ['pessoal'])
   assert.ok(!view.rowsOf(POOL).includes('pessoal#0') && view.rowsOf(POOL).includes('codex#0'))
-  await view.selectRows(POOL, [])
+  await view.selectRows(POOL, ['codex'])
   assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
 })
 
@@ -99,6 +101,7 @@ test('medida antiga: a conta manual com medida de mais de 30 min ganha aviso no 
   view = await mount(panel, { host: hostCom() })
   await view.selectRows(POOL, ['pessoal'])
   assert.ok(view.find({ type: 'Table', text: /Medida antiga: há 45 min/ }))
+  await view.selectRows(POOL, ['pessoal'])
   await view.selectRows(POOL, ['codex'])
   assert.equal(view.find({ type: 'Table', text: /Medida antiga/ }), null)
 })
