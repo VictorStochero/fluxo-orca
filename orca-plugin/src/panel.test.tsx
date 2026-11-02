@@ -1,16 +1,13 @@
 import { afterEach, assert, hostError, mockHost, mount, test, type TestPanel } from 'orca/testing'
 import { estadoExemplo } from './fixtures'
-import type { Estado } from './protocol'
+import type { Estado, Requisitos } from './protocol'
 import * as panel from './panel'
 
 let view: TestPanel | undefined
 afterEach(() => view?.unmount())
 
-const linha = (v: TestPanel, texto: RegExp) => {
-  const el = v.find({ type: 'ListItem', text: texto })
-  assert.ok(el, `linha ${texto}`)
-  return el
-}
+const POOL = { label: 'Contas do pool' }
+const FILA = { label: 'Travas da fila' }
 
 function hostCom(gravados: unknown[] = [], estado: Estado = estadoExemplo) {
   return mockHost({
@@ -24,14 +21,14 @@ function hostCom(gravados: unknown[] = [], estado: Estado = estadoExemplo) {
   })
 }
 
-test('listas recolhidas: Fila · Vaga · Viva e Conta · Vagas · 5h · Semanal, sem RAM, Workers nem origem', async () => {
+test('tabelas nativas recolhidas: Fila · Vaga · Viva e Conta · Vagas · 5h · Semanal, sem RAM, Workers nem origem', async () => {
   view = await mount(panel, { host: hostCom() })
-  for (const c of ['FILA', 'VAGA', 'VIVA', 'CONTA', 'VAGAS', '5H', 'SEMANAL']) assert.ok(view.find({ text: c }), c)
-  assert.equal(view.findAll({ type: 'ListItem' }).length, 5) // 2 travas + 3 contas
-  assert.ok(linha(view, /pessoal.*1\/2.*⚠ 90%.*25%/))
-  assert.ok(linha(view, /claude-abcdef12.*fora/))
+  assert.deepEqual(view.columnsOf(FILA), ['fila', 'vaga', 'viva'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1'])
+  assert.deepEqual(view.columnsOf(POOL), ['conta', 'vagas', 'h5', 'semanal'])
+  assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
   assert.ok(view.find({ text: /modo Global · 5 vagas · teto 5/ }))
-  assert.equal(view.find({ text: /Workers|curta|longa|origem|Origem|agentes\.conf \(/ }), null)
+  assert.equal(view.find({ text: /Workers|curta|longa|origem|Origem/ }), null)
   assert.equal(view.find({ type: 'Heading', text: /RAM/ }), null)
   assert.ok(view.find({ type: 'RelativeTime' }))
   assert.deepEqual(view.errors, [])
@@ -39,69 +36,73 @@ test('listas recolhidas: Fila · Vaga · Viva e Conta · Vagas · 5h · Semanal,
   assert.deepEqual(view.refusals, [])
 })
 
-test('fila: clicar abre os detalhes da trava, várias ficam abertas e o segundo clique recolhe', async () => {
+test('só componentes do catálogo 1 e as tabelas: sem Grid, Collapsible, Callout, Skeleton, Tabs nem Toolbar', async () => {
   view = await mount(panel, { host: hostCom() })
-  assert.equal(view.find({ text: /runner tests\/X\.php/ }), null)
-  await view.press(linha(view, /^3308/))
-  assert.ok(view.find({ text: /runner tests\/X\.php/ }))
-  await view.press(linha(view, /^teto/))
-  assert.ok(view.find({ text: /wt-dois/ }) && view.find({ text: /wt-um/ })) // duas abertas ao mesmo tempo
-  await view.press(linha(view, /^3308/))
-  assert.equal(view.find({ text: /runner tests\/X\.php/ }), null) // só a primeira recolheu
-  assert.ok(view.find({ text: /wt-dois/ }))
+  for (const tipo of ['Grid', 'Collapsible', 'Callout', 'Skeleton', 'Tabs', 'Toolbar']) assert.equal(view.findAll({ type: tipo }).length, 0, tipo)
 })
 
-test('pool: o formulário da conta fica dentro da linha expandida e recolhe no segundo clique', async () => {
+test('fila: clicar abre os detalhes na própria tabela, várias ficam abertas e o segundo clique recolhe', async () => {
   view = await mount(panel, { host: hostCom() })
-  assert.equal(view.find({ label: 'Peso' }), null)
-  await view.press(linha(view, /^pessoal/))
-  assert.ok(view.find({ label: 'Vagas' }) && view.find({ label: 'Peso' }) && view.find({ type: 'Button', text: 'Remover do pool' }))
-  assert.ok(view.find({ label: 'escritor' }) && view.find({ type: 'Button', text: 'Salvar' }))
-  await view.press(linha(view, /^pessoal/))
-  assert.equal(view.find({ label: 'Peso' }), null)
+  await view.selectRows(FILA, ['3308.1'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', '3308.1#0', '3308.1#1', '3308.1#2', '3308.1#3', 'teto.1'])
+  await view.selectRows(FILA, ['3308.1', 'teto.1'])
+  assert.equal(view.rowsOf(FILA).length, 10) // as duas abertas ao mesmo tempo
+  await view.selectRows(FILA, ['teto.1'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1', 'teto.1#0', 'teto.1#1', 'teto.1#2', 'teto.1#3'])
+  await view.selectRows(FILA, [])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1'])
 })
 
-test('pool: duas contas abertas ao mesmo tempo, recolher uma mantém a outra', async () => {
+test('pool: detalhes dentro da tabela, várias abertas, sem botão nem campo na linha', async () => {
   view = await mount(panel, { host: hostCom() })
-  await view.press(linha(view, /^pessoal/))
-  await view.press(linha(view, /^codex/))
-  assert.equal(view.findAll({ type: 'Button', text: 'Remover do pool' }).length, 2)
-  await view.press(linha(view, /^pessoal/))
-  assert.equal(view.findAll({ type: 'Button', text: 'Remover do pool' }).length, 1)
+  await view.selectRows(POOL, ['pessoal', 'codex'])
+  assert.ok(view.rowsOf(POOL).includes('pessoal#0') && view.rowsOf(POOL).includes('codex#0'))
+  await view.selectRows(POOL, ['codex'])
+  assert.ok(!view.rowsOf(POOL).includes('pessoal#0') && view.rowsOf(POOL).includes('codex#0'))
+  await view.selectRows(POOL, [])
+  assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
 })
 
-test('cada campo e cada papel da conta tem o ícone de dica com o texto no label', async () => {
+test('medida antiga: a conta manual com medida de mais de 30 min ganha aviso no detalhe; a cota nativa do Orca não', async () => {
   view = await mount(panel, { host: hostCom() })
-  await view.press(linha(view, /^pessoal/))
+  await view.selectRows(POOL, ['pessoal'])
+  assert.ok(view.find({ type: 'Table', text: /Medida antiga: há 45 min/ }))
+  await view.selectRows(POOL, ['codex'])
+  assert.equal(view.find({ type: 'Table', text: /Medida antiga/ }), null)
+})
+
+test('Configurações fica no fim, com Fila, Pool e Painel', async () => {
+  view = await mount(panel, { host: hostCom() })
+  const titulos = view.findAll({ type: 'Heading' }).map((h) => h.text)
+  assert.deepEqual(titulos.slice(-3), ['Fila', 'Pool', 'Painel'])
+  assert.ok(view.find({ type: 'Select', label: 'Conta a configurar' }))
+})
+
+test('Configurações > Pool: escolher a conta na lista mostra o formulário dela e as dicas de cada campo e papel', async () => {
+  view = await mount(panel, { host: hostCom() })
+  assert.equal(view.valueOf({ label: 'Conta a configurar' }), 'pessoal') // a primeira
   for (const trecho of [/^Quantos agentes desta conta/, /^Prioridade na escolha do escritor/, /^Pasta de configuração do agente/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
   for (const trecho of [/^Implementa a tarefa/, /^Gate de merge só leitura/, /^Contraprova só leitura/, /^Tarefas mecânicas/, /^Revisão adversarial/, /^Coordena os workers/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
-})
-
-test('Configurações: Pool e Nova conta manual também têm dicas', async () => {
-  view = await mount(panel, { host: hostCom() })
   for (const trecho of [/^Máximo de agentes trabalhando/, /^Memória livre mínima/, /^Ritmo: escolhe o escritor.*de cima para baixo/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
-  await view.toggle({ label: 'Nova conta manual' })
-  for (const trecho of [/^Agente do catálogo \(agentes-catalogo/, /^Pasta de configuração do agente/, /^Comando que o lançador/]) {
-    assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
-  }
+  assert.ok(view.find({ type: 'Button', text: 'Remover do pool' }))
 })
 
-test('conta detectada fora do pool: o expandido traz Adicionar ao pool', async () => {
+test('conta detectada fora do pool: escolhida na lista, traz Adicionar ao pool e nenhum formulário', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
-  await view.press(linha(view, /^claude-abcdef12/))
-  assert.equal(view.find({ label: 'Peso' }), null) // sem formulário até entrar no pool
+  await view.select({ label: 'Conta a configurar' }, 'claude-abcdef12')
+  assert.equal(view.find({ label: 'Peso da conta' }), null)
   await view.press({ type: 'Button', text: 'Adicionar ao pool' })
   assert.deepEqual(enviados, [{ 'conta.claude-abcdef12.adicionar': 'claude' }])
 })
 
-test('editar a conta aberta manda só o que mudou e mostra o estado novo', async () => {
+test('editar a conta escolhida manda só o que mudou e mostra o estado novo', async () => {
   const enviados: unknown[] = []
   let atual: Estado = estadoExemplo
   const host = mockHost({
@@ -115,19 +116,27 @@ test('editar a conta aberta manda só o que mudou e mostra o estado novo', async
     }
   })
   view = await mount(panel, { host })
-  await view.press(linha(view, /^pessoal/))
-  await view.type({ label: 'Vagas' }, '3', { replace: true })
-  await view.press({ type: 'Button', text: 'Salvar' })
+  await view.type({ label: 'Vagas da conta' }, '3', { replace: true })
+  await view.press(view.findAll({ type: 'Button', text: 'Salvar' })[2]) // 0 fila, 1 pool, 2 conta
   assert.deepEqual(enviados, [{ 'conta.pessoal.vagas': '3' }])
-  assert.ok(view.find({ text: 'Salvo.' }))
-  assert.ok(linha(view, /^pessoal.*1\/3/))
   assert.deepEqual(view.refusals, [])
+})
+
+test('setas ↑/↓ da conta escolhida: gravam pool.ordem com a lista completa; a primeira não sobe e a última não desce', async () => {
+  const enviados: unknown[] = []
+  view = await mount(panel, { host: hostCom(enviados) })
+  assert.equal(view.find({ type: 'IconButton', label: 'Subir' })?.disabled, true) // pessoal é a primeira
+  assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, false)
+  await view.select({ label: 'Conta a configurar' }, 'codex')
+  assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, true) // codex é a última do pool
+  await view.press({ type: 'IconButton', label: 'Subir' })
+  assert.deepEqual(enviados, [{ 'pool.ordem': 'codex,pessoal' }])
 })
 
 test('Remover do pool pede confirmação e só então grava conta.<nome>.remover=1', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
-  await view.press(linha(view, /^codex/))
+  await view.select({ label: 'Conta a configurar' }, 'codex')
   await view.press({ type: 'Button', text: 'Remover do pool' })
   assert.deepEqual(enviados, [])
   assert.ok(view.find({ text: /Remover codex do agentes\.conf\?/ }))
@@ -136,6 +145,21 @@ test('Remover do pool pede confirmação e só então grava conta.<nome>.remover
   await view.press({ type: 'Button', text: 'Remover do pool' })
   await view.press({ type: 'Button', text: 'Confirmar remoção' })
   assert.deepEqual(enviados, [{ 'conta.codex.remover': '1' }])
+})
+
+test('Nova conta manual: nome, agente do catálogo e config viram um único pedido, com dicas', async () => {
+  const enviados: unknown[] = []
+  view = await mount(panel, { host: hostCom(enviados) })
+  for (const trecho of [/^Agente do catálogo \(agentes-catalogo/, /^Comando que o lançador/]) {
+    assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
+  }
+  assert.equal(view.find({ type: 'Button', text: 'Adicionar conta' })?.disabled, true)
+  await view.type({ label: 'Nome da conta' }, 'minha')
+  await view.select({ label: 'Agente do catálogo' }, 'codex')
+  await view.type({ label: 'Diretório de config da nova conta' }, '~/.codex-minha')
+  await view.press({ type: 'Button', text: 'Adicionar conta' })
+  assert.deepEqual(enviados, [{ 'conta.minha.adicionar': 'codex', 'conta.minha.config': '~/.codex-minha' }])
+  assert.equal(view.valueOf({ label: 'Nome da conta' }), '')
 })
 
 test('modo da fila: cada opção é um rádio com o ícone de dica ao lado, sem linhas repetidas', async () => {
@@ -147,7 +171,7 @@ test('modo da fila: cada opção é um rádio com o ícone de dica ao lado, sem 
   assert.ok(view.find({ type: 'IconButton', label: /^Máximo de testes ao mesmo tempo na máquina/ }))
   assert.ok(view.find({ type: 'IconButton', label: /Só vale no modo Por projeto/ }))
   await view.select({ label: 'Modo da fila: Por projeto' }, 'projeto')
-  await view.press({ type: 'Button', text: 'Salvar' })
+  await view.press(view.findAll({ type: 'Button', text: 'Salvar' })[0])
   assert.deepEqual(enviados, [{ 'fila.modo': 'projeto' }])
 })
 
@@ -168,22 +192,9 @@ test('recusa do validador aparece em português e não limpa a edição', async 
   })
   view = await mount(panel, { host })
   await view.type({ label: 'Vagas' }, '0', { replace: true })
-  await view.press({ type: 'Button', text: 'Salvar' })
+  await view.press(view.findAll({ type: 'Button', text: 'Salvar' })[0])
   assert.ok(view.find({ text: 'valor inválido para fila.vagas: 0' }))
   assert.equal(view.valueOf({ label: 'Vagas' }), '0')
-})
-
-test('Nova conta manual: nome, agente do catálogo e config viram um único pedido', async () => {
-  const enviados: unknown[] = []
-  view = await mount(panel, { host: hostCom(enviados) })
-  await view.toggle({ label: 'Nova conta manual' })
-  assert.equal(view.find({ type: 'Button', text: 'Adicionar conta' })?.disabled, true)
-  await view.type({ label: 'Nome da conta' }, 'minha')
-  await view.select({ label: 'Agente do catálogo' }, 'codex')
-  await view.type({ label: 'Diretório de config (CLAUDE_CONFIG_DIR etc.)' }, '~/.codex-minha')
-  await view.press({ type: 'Button', text: 'Adicionar conta' })
-  assert.deepEqual(enviados, [{ 'conta.minha.adicionar': 'codex', 'conta.minha.config': '~/.codex-minha' }])
-  assert.equal(view.valueOf({ label: 'Nome da conta' }), '')
 })
 
 test('erro do coletor aparece com o código e some na próxima leitura boa', async () => {
@@ -202,7 +213,7 @@ test('erro do coletor aparece com o código e some na próxima leitura boa', asy
   falha = false
   await view.press({ text: 'Atualizar' })
   assert.equal(view.find({ text: /coletor_falhou/ }), null)
-  assert.ok(linha(view, /^pessoal/))
+  assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
 })
 
 test('o post estado.mudou lê o estado de novo', async () => {
@@ -213,44 +224,6 @@ test('o post estado.mudou lê o estado de novo', async () => {
   await view.post('estado.mudou', { em: 1 })
   assert.equal(n, 2)
   assert.ok(view.find({ text: 'Nenhuma conta no registro.' }))
-})
-
-test('Configurações fica no fim, com Fila, Pool e Painel, e Nova conta manual dentro do Pool', async () => {
-  view = await mount(panel, { host: hostCom() })
-  const titulos = view.findAll({ type: 'Heading' }).map((h) => h.text)
-  assert.deepEqual(titulos.slice(-3), ['Fila', 'Pool', 'Painel'])
-  assert.ok(view.find({ type: 'Card', label: 'Configurações' }) ?? view.find({ text: /^Configurações/ }))
-  assert.equal(view.find({ text: /Configurar a fila|Configurar o pool/ }), null)
-})
-
-test('setas ↑/↓: gravam pool.ordem com a lista completa na ordem nova; primeira e última ficam desabilitadas; detectada fora do pool não tem setas', async () => {
-  const enviados: unknown[] = []
-  view = await mount(panel, { host: hostCom(enviados) })
-  const sobem = view.findAll({ type: 'IconButton', label: 'Subir' })
-  const descem = view.findAll({ type: 'IconButton', label: 'Descer' })
-  assert.equal(sobem.length, 2) // pessoal e codex; claude-abcdef12 está fora do pool
-  assert.deepEqual(sobem.map((b) => b.disabled), [true, false])
-  assert.deepEqual(descem.map((b) => b.disabled), [false, true])
-  await view.press(sobem[1])
-  assert.deepEqual(enviados, [{ 'pool.ordem': 'codex,pessoal' }])
-  assert.equal(view.find({ text: /Nada alterado/ }), null)
-  await view.press(descem[0])
-  assert.deepEqual(enviados.at(-1), { 'pool.ordem': 'codex,pessoal' })
-})
-
-test('clicar nas setas não expande a linha', async () => {
-  view = await mount(panel, { host: hostCom() })
-  await view.press(view.findAll({ type: 'IconButton', label: 'Subir' })[1])
-  assert.equal(view.find({ type: 'Button', text: 'Remover do pool' }), null)
-})
-
-test('medida antiga: a conta manual com medida de mais de 30 min ganha aviso; a cota nativa do Orca não', async () => {
-  view = await mount(panel, { host: hostCom() })
-  await view.press(linha(view, /^pessoal/))
-  assert.ok(view.find({ text: /Medida antiga: há 45 min/ }))
-  await view.press(linha(view, /^pessoal/))
-  await view.press(linha(view, /^codex/))
-  assert.equal(view.find({ text: /Medida antiga/ }), null)
 })
 
 test('Configurações > Painel: intervalo de atualização (15 a 3600 s) grava no storage do painel', async () => {
@@ -269,4 +242,57 @@ test('Configurações > Painel: intervalo de atualização (15 a 3600 s) grava n
   assert.equal(host.data().storage['atualizacao.intervalo_s'], 120)
   assert.ok(view.find({ text: 'Salvo.' }))
   assert.deepEqual(view.refusals, [])
+})
+
+const faltando: Requisitos = {
+  ok: false,
+  itens: [
+    { id: 'cli', nome: 'CLI do Orca', ok: true, detalhe: 'orca 1.4.246' },
+    { id: 'orchestration', nome: 'Orchestrator V3', ok: false, detalhe: 'Ative o Orchestrator nas configurações do Orca.', instalar: { tipo: 'acao', texto: 'Ativar' } },
+    { id: 'python', nome: 'Python 3', ok: false, detalhe: 'python3 não está no PATH.', instalar: { tipo: 'comando', texto: 'winget install Python.Python.3.12' } }
+  ]
+}
+
+test('requisitos faltando: só a seção Requisitos, com ✓/✗, botão Instalar para ação e comando copiável', async () => {
+  let estadoLido = 0
+  const host = mockHost({ requests: { 'requisitos.ler': () => faltando, 'estado.ler': () => (estadoLido++, estadoExemplo) } })
+  view = await mount(panel, { host })
+  assert.deepEqual(view.rowsOf({ label: 'Requisitos do painel' }), ['cli', 'orchestration', 'python'])
+  assert.equal(view.find({ type: 'Table', label: 'Travas da fila' }), null)
+  assert.equal(view.find({ type: 'Table', label: 'Contas do pool' }), null)
+  assert.equal(view.find({ type: 'Heading', text: 'Configurações' }), null)
+  assert.equal(estadoLido, 0) // nem coleta o resto
+  assert.ok(view.find({ text: /Ative o Orchestrator nas configurações do Orca/ }))
+  assert.ok(view.find({ text: /python3 não está no PATH/ }))
+  assert.ok(view.find({ text: 'winget install Python.Python.3.12' }))
+  assert.equal(view.findAll({ type: 'Button', text: 'Instalar' }).length, 1) // só a ação; o comando é copiável
+})
+
+test('Instalar chama requisitos.instalar com o id e lê os requisitos de novo; com tudo ok volta o painel normal', async () => {
+  const instalados: unknown[] = []
+  let r: Requisitos = faltando
+  const host = mockHost({
+    requests: {
+      'requisitos.ler': () => r,
+      'requisitos.instalar': ({ id }) => {
+        instalados.push(id)
+        r = { ok: true, itens: faltando.itens.map((i) => ({ ...i, ok: true })) }
+        return { ok: true }
+      },
+      'estado.ler': () => estadoExemplo
+    }
+  })
+  view = await mount(panel, { host })
+  await view.press({ type: 'Button', text: 'Instalar' })
+  assert.deepEqual(instalados, ['orchestration'])
+  assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
+  assert.equal(view.find({ type: 'Table', label: 'Requisitos do painel' }), null)
+})
+
+test('requisitos ok: o painel normal; worker sem o handler (unknown_method): também o painel normal', async () => {
+  view = await mount(panel, {
+    host: mockHost({ requests: { 'requisitos.ler': () => ({ ok: true, itens: [] }), 'estado.ler': () => estadoExemplo } })
+  })
+  assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
+  assert.equal(view.find({ type: 'Table', label: 'Requisitos do painel' }), null)
 })

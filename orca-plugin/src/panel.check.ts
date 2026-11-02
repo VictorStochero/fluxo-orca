@@ -14,6 +14,18 @@ export default defineCheck({
       })
     }
   },
+  requisitosFaltando: {
+    requests: {
+      'requisitos.ler': () => ({
+        ok: false,
+        itens: [
+          { id: 'cli', nome: 'CLI do Orca', ok: true, detalhe: 'orca 1.4.246' },
+          { id: 'orchestration', nome: 'Orchestrator V3', ok: false, detalhe: 'Ative o Orchestrator nas configurações do Orca.', instalar: { tipo: 'acao', texto: 'Ativar' } },
+          { id: 'python', nome: 'Python 3', ok: false, detalhe: 'python3 não está no PATH.', instalar: { tipo: 'comando', texto: 'winget install Python.Python.3.12' } }
+        ]
+      })
+    }
+  },
   coletorFalhou: {
     requests: {
       'estado.ler': () => {

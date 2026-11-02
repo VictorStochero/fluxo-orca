@@ -1,19 +1,15 @@
 // Painel de fila de testes e pool de agentes. O estado e a gravação passam pelo worker (src/protocol.ts); textos em src/textos.ts.
+// Só leitura nas tabelas (Fila e Pool, nativas); toda a edição fica em Configurações, no fim.
 import {
   atom,
   Button,
-  Callout,
   Card,
   Checkbox,
-  Collapsible,
+  Code,
   EmptyState,
-  Grid,
   Heading,
   IconButton,
   Input,
-  KeyValue,
-  List,
-  ListItem,
   plugin,
   RadioGroup,
   read,
@@ -21,21 +17,25 @@ import {
   Row,
   Select,
   set,
-  storage,
-  Skeleton,
+  Spinner,
   Stack,
+  storage,
+  Table,
   Text,
   update,
   type OrcaNode,
-  type PanelContext
+  type PanelContext,
+  type TableRow
 } from 'orca'
-import type { Conta, Estado, ItemFila, ValorFila } from './protocol'
+import type { Conta, Estado, ItemFila, Requisitos, ValorFila } from './protocol'
 import { t } from './textos'
 
 type Erro = { code: string; message: string }
 type Aviso = { tom: 'success' | 'danger'; texto: string }
 
 const estado = atom<Estado | null>(null)
+/** null enquanto não lido ou quando o worker não tem o handler (painel normal). */
+const requisitos = atom<Requisitos | null>(null)
 const erro = atom<Erro | null>(null)
 const carregando = atom(false)
 /** Só o que a pessoa digitou e ainda não gravou, por chave do `painel.sh --config` (ex.: `conta.pessoal.vagas`). */
@@ -44,23 +44,50 @@ const avisos = atom<Record<string, Aviso>>({})
 const gravando = atom<string | null>(null)
 /** Conta com o pedido de remoção aguardando confirmação. */
 const removendo = atom<string | null>(null)
+/** Conta escolhida em Configurações > Pool (null = a primeira). */
+const contaEscolhida = atom<string | null>(null)
 /** Intervalo da atualização automática: o worker lê esta chave do storage e reprograma sozinho. */
 const CHAVE_INTERVALO = 'atualizacao.intervalo_s'
 const INTERVALO = { padrao: 60, min: 15, max: 3600 }
 const intervalo = atom(INTERVALO.padrao)
-
-/** Linhas abertas de cada lista (várias ao mesmo tempo; clicar de novo recolhe). */
+/** Linhas abertas de cada tabela (várias ao mesmo tempo; clicar de novo recolhe). */
 const abertasTrava = atom<string[]>([])
 const abertasConta = atom<string[]>([])
 
-/** Com uma coleta em andamento, a chamada é descartada. */
 let coletando = false
 
+/** Worker sem o handler `requisitos.ler` (versão antiga): devolve null e o painel segue normal. */
+async function lerRequisitos(): Promise<Requisitos | null> {
+  try {
+    return await plugin.request('requisitos.ler')
+  } catch (e) {
+    if ((e as { code?: string }).code === 'unknown_method') return null
+    throw e
+  }
+}
+
+export async function instalarRequisito(id: string): Promise<void> {
+  set(gravando, `req:${id}`)
+  try {
+    await plugin.request('requisitos.instalar', { id })
+    update(avisos, (p) => ({ ...p, requisitos: { tom: 'success' as const, texto: t.salvo } }))
+  } catch (e) {
+    update(avisos, (p) => ({ ...p, requisitos: { tom: 'danger' as const, texto: (e as { message?: string }).message ?? String(e) } }))
+  } finally {
+    set(gravando, null)
+  }
+  await atualizar()
+}
+
+/** Com uma coleta em andamento, a chamada é descartada (set() é em lote: o átomo `carregando` não serve de guarda). */
 export async function atualizar(): Promise<void> {
-  if (coletando) return // set() é em lote: o átomo `carregando` não serve de guarda entre duas chamadas seguidas
+  if (coletando) return
   coletando = true
   set(carregando, true)
   try {
+    const r = await lerRequisitos()
+    set(requisitos, r)
+    if (r && !r.ok) return set(erro, null) // faltou requisito: só a seção Requisitos, sem coletar o resto
     set(estado, await plugin.request('estado.ler'))
     set(erro, null)
   } catch (e) {
@@ -121,12 +148,10 @@ export async function salvar(secao: string, chaves: string[], extras: Record<str
 }
 
 const mudar = (chave: string, valor: string) => update(edicoes, (p) => ({ ...p, [chave]: valor }))
-const alternar = (lista: typeof abertasConta, chave: string) =>
-  update(lista, (a) => (a.includes(chave) ? a.filter((x) => x !== chave) : [...a, chave]))
 
 function Mensagem({ secao }: { secao: string }) {
   const a = read(avisos)[secao]
-  return a ? <Callout tone={a.tom === 'danger' ? 'danger' : 'success'}>{a.texto}</Callout> : null
+  return a ? <Text tone={a.tom === 'danger' ? 'danger' : 'success'}>{a.texto}</Text> : null
 }
 
 function Salvar({ secao, chaves }: { secao: string; chaves: string[] }) {
@@ -160,44 +185,36 @@ function ComDica({ texto, children }: { texto: string; children: OrcaNode }) {
   )
 }
 
-type Celula = { texto: string; tom?: 'warning' }
-type Colunas = 3 | 4
-
-function Cabecalho({ rotulos }: { rotulos: string[] }) {
-  return (
-    <Grid columns={rotulos.length as Colunas} gap="xs">
-      {rotulos.map((r) => (
-        <Text key={r} muted size="xs" weight="medium">
-          {r.toUpperCase()}
-        </Text>
-      ))}
-    </Grid>
-  )
-}
+type Linha = { key: string; cells: Record<string, string | number>; detalhes: [string, string | number][] }
+type Coluna = { key: string; label: string; align?: 'start' | 'center' | 'end'; width?: 'auto' | 'xs' | 'sm' | 'md' | 'lg'; minWidth?: 'auto' | 'xs' | 'sm' | 'md' }
 
 /**
- * Linha de tabela montada com layout (célula de Table não comporta controle): a linha inteira é um ListItem
- * (clicável e acessível por teclado) e o bloco expandido fica logo abaixo, no mesmo contêiner.
+ * Table nativa que expande a linha: a selecionada ganha, logo abaixo, linhas de detalhe (desabilitadas) com o rótulo na
+ * primeira coluna e o valor na segunda. `selectionMode="multiple"`: várias abertas, clicar de novo recolhe. Só leitura.
  */
-function LinhaExpansivel(props: { celulas: Celula[]; aberta: boolean; onAlternar: () => void; acoes?: OrcaNode; children: OrcaNode }) {
+function TabelaExpansivel(props: {
+  label: string
+  colunas: Coluna[]
+  linhas: Linha[]
+  abertas: string[]
+  onAbrir: (keys: string[]) => void
+}) {
+  const [c0, c1] = props.colunas
+  const rows: TableRow[] = props.linhas.flatMap((l) => [
+    { key: l.key, cells: l.cells } as TableRow,
+    ...(props.abertas.includes(l.key)
+      ? l.detalhes.map(([rotulo, valor], i) => ({ key: `${l.key}#${i}`, disabled: true, cells: { [c0.key]: rotulo, [c1.key]: valor } }) as TableRow)
+      : [])
+  ])
   return (
-    <Stack gap="xs">
-      <Row gap="xs" align="center">
-      <List label={props.celulas[0].texto}>
-        <ListItem current={props.aberta} onPress={props.onAlternar}>
-          <Grid columns={props.celulas.length as Colunas} gap="xs">
-            {props.celulas.map((c, i) => (
-              <Text key={i} tone={c.tom} weight={i === 0 ? 'medium' : 'regular'}>
-                {c.texto}
-              </Text>
-            ))}
-          </Grid>
-        </ListItem>
-      </List>
-      {props.acoes}
-      </Row>
-      {props.aberta ? <Stack gap="sm">{props.children}</Stack> : null}
-    </Stack>
+    <Table
+      label={props.label}
+      columns={props.colunas}
+      rows={rows}
+      selectionMode="multiple"
+      selected={props.abertas}
+      onSelectionChange={({ keys }) => props.onAbrir(keys.filter((k) => !k.includes('#')))}
+    />
   )
 }
 
@@ -253,88 +270,108 @@ function CampoFila({ item, e }: { item: Exclude<ItemFila, 'modo'>; e: Estado }) 
   )
 }
 
-/** Campos da fila: vale para a fila inteira, não para uma trava. */
-function ConfigFila({ e }: { e: Estado }) {
-  return (
-    <Stack gap="sm">
-      <Heading level={3}>{t.configuracoes.fila}</Heading>
-      <Text muted size="xs">
-        {t.fila.configurarDescricao}
-      </Text>
-      <CampoModo e={e} />
-      {(['vagas', 'vagas_projeto', 'teto', 'processos'] as const).map((i) => (
-        <CampoFila key={i} item={i} e={e} />
-      ))}
-      <Mensagem secao="fila" />
-      <Salvar secao="fila" chaves={ITENS_FILA.map((i) => `fila.${i}`)} />
-    </Stack>
-  )
-}
-
 function SecaoFila({ e }: { e: Estado }) {
   const { fila } = e
-  const abertas = read(abertasTrava)
+  const linhas: Linha[] = fila.travas.map((tr) => ({
+    key: `${tr.fila}.${tr.vaga}`,
+    cells: { fila: tr.fila, vaga: tr.vaga, viva: tr.viva ? t.fila.sim : t.fila.nao },
+    detalhes: [
+      [t.fila.worktree, tr.worktree ?? '-'],
+      [t.fila.comando, tr.comando ?? '-'],
+      [t.fila.pid, tr.pid ?? '-'],
+      [t.fila.desde, tr.desde ?? '-']
+    ]
+  }))
   return (
     <Card title={t.fila.titulo} description={t.fila.resumo(t.fila.modos[fila.modo] ?? fila.modo, fila.vagas, fila.teto)}>
       {fila.travas.length === 0 ? (
         <Text muted>{t.fila.semTravas}</Text>
       ) : (
-        <Stack gap="xs">
-          <Cabecalho rotulos={[t.fila.colFila, t.fila.colVaga, t.fila.colViva]} />
-          {fila.travas.map((tr) => {
-            const chave = `${tr.fila}.${tr.vaga}`
-            return (
-              <LinhaExpansivel
-                key={chave}
-                celulas={[{ texto: tr.fila }, { texto: String(tr.vaga) }, { texto: tr.viva ? t.fila.sim : t.fila.nao }]}
-                aberta={abertas.includes(chave)}
-                onAlternar={() => alternar(abertasTrava, chave)}
-              >
-                <KeyValue
-                  items={[
-                    { label: t.fila.worktree, value: tr.worktree ?? '-', code: true },
-                    { label: t.fila.comando, value: tr.comando ?? '-', code: true },
-                    { label: t.fila.pid, value: tr.pid ?? '-' },
-                    { label: t.fila.desde, value: tr.desde ?? '-' }
-                  ]}
-                />
-              </LinhaExpansivel>
-            )
-          })}
-        </Stack>
+        <TabelaExpansivel
+          label={t.fila.tabela}
+          colunas={[
+            { key: 'fila', label: t.fila.colFila, width: 'md' },
+            { key: 'vaga', label: t.fila.colVaga },
+            { key: 'viva', label: t.fila.colViva, width: 'xs' }
+          ]}
+          linhas={linhas}
+          abertas={read(abertasTrava)}
+          onAbrir={(k) => set(abertasTrava, k)}
+        />
       )}
     </Card>
   )
 }
 
-/** Detalhes e configuração da conta, dentro do espaço expandido da própria linha. */
-function BlocoConta({ c, e }: { c: Conta; e: Estado }) {
-  const secao = `conta.${c.nome}`
-  const detalhes = (
-    <KeyValue
-      items={[
-        ...(c.rotulo ? [{ label: t.pool.rotulo, value: c.rotulo }] : []),
-        { label: t.pool.agente, value: c.agente ?? '-' },
-        { label: t.pool.peso, value: c.peso },
-        { label: t.pool.papeis, value: c.papeis.join(', ') || '-' },
-        { label: t.pool.janelas, value: c.cota ? c.cota.texto : t.pool.semMedida },
-        { label: t.pool.medidaHa, value: c.cota ? t.pool.minutos(c.cota.medida_ha_min) : '-' },
-        { label: t.pool.vagasEmUso, value: c.ocupantes.map((o) => o.dispatch ?? '?').join(', ') || t.pool.nenhuma }
-      ]}
-    />
+const percentual = (v: number | null) => t.pool.percentual(v, (v ?? 0) > 80)
+
+function SecaoPool({ e }: { e: Estado }) {
+  const { pool } = e
+  const linhas: Linha[] = pool.contas.map((c) => ({
+    key: c.nome,
+    cells: {
+      conta: c.nome,
+      vagas: c.origem === 'orca' ? t.pool.foraDoPool : t.pool.vagasDaConta(c.usadas, c.vagas),
+      h5: percentual(c.cota?.curta ?? null),
+      semanal: percentual(c.cota?.longa ?? null)
+    },
+    detalhes: [
+      ...(c.rotulo ? ([[t.pool.rotulo, c.rotulo]] as [string, string][]) : []),
+      [t.pool.agente, c.agente ?? '-'],
+      [t.pool.peso, c.peso],
+      [t.pool.papeis, c.papeis.join(', ') || '-'],
+      [t.pool.janelas, c.cota ? c.cota.texto : t.pool.semMedida],
+      [t.pool.medidaHa, c.cota ? t.pool.minutos(c.cota.medida_ha_min) : '-'],
+      ...(c.cota && c.cota.fonte !== 'orca' && c.cota.medida_ha_min > 30 ? ([[t.pool.aviso, t.pool.medidaAntiga(c.cota.medida_ha_min)]] as [string, string][]) : []),
+      [t.pool.vagasEmUso, c.ocupantes.map((o) => o.dispatch ?? '?').join(', ') || t.pool.nenhuma]
+    ]
+  }))
+  return (
+    <Card title={t.pool.titulo} description={t.pool.resumo(pool.maquina.usadas, pool.maquina.teto, pool.ram_min, pool.escolha)}>
+      {pool.contas.length === 0 ? (
+        <Text muted>{t.pool.semContas}</Text>
+      ) : (
+        <TabelaExpansivel
+          label={t.pool.tabela}
+          colunas={[
+            { key: 'conta', label: t.pool.colConta, width: 'md' },
+            { key: 'vagas', label: t.pool.colVagas },
+            { key: 'h5', label: t.pool.col5h, align: 'end', width: 'xs' },
+            { key: 'semanal', label: t.pool.colSemanal, align: 'end', width: 'sm', minWidth: 'sm' }
+          ]}
+          linhas={linhas}
+          abertas={read(abertasConta)}
+          onAbrir={(k) => set(abertasConta, k)}
+        />
+      )}
+    </Card>
   )
-  // A cota nativa do Orca é viva; a medida das contas manuais depende do medidor local.
-  const antiga = c.cota && c.cota.fonte !== 'orca' && c.cota.medida_ha_min > 30 ? <Callout tone="warning">{t.pool.medidaAntiga(c.cota.medida_ha_min)}</Callout> : null
+}
+
+/** Sobe ou desce uma conta do pool: grava a lista completa das contas do pool na ordem nova (as detectadas ficam fora). */
+function mover(contas: Conta[], nome: string, delta: -1 | 1): Promise<boolean> {
+  const nomes = contas.filter((c) => c.origem !== 'orca').map((c) => c.nome)
+  const i = nomes.indexOf(nome)
+  const j = i + delta
+  if (i < 0 || j < 0 || j >= nomes.length) return Promise.resolve(false)
+  ;[nomes[i], nomes[j]] = [nomes[j], nomes[i]]
+  return salvar('ordem', [], { 'pool.ordem': nomes.join(',') })
+}
+
+/** Edição da conta escolhida: vagas, peso, config, papéis, ordem, remover ou adicionar ao pool. */
+function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
+  const secao = `conta.${c.nome}`
   if (c.origem === 'orca') {
     return (
-      <>
-        {detalhes}
-        {antiga}
+      <Stack gap="sm">
+        <Text muted size="xs">
+          {t.pool.foraDoPoolExplica}
+        </Text>
         <Mensagem secao={secao} />
         <Button size="sm" icon="add" disabled={read(gravando) !== null} onPress={() => void salvar(secao, [], { [`conta.${c.nome}.adicionar`]: c.agente ?? '' })}>
           {t.pool.adicionar}
         </Button>
-      </>
+      </Stack>
     )
   }
   const chaveVagas = `conta.${c.nome}.vagas`
@@ -345,15 +382,20 @@ function BlocoConta({ c, e }: { c: Conta; e: Estado }) {
   const papeis = (ed[chavePapeis] ?? c.papeis.join(',')).split(',').filter(Boolean)
   const alterna = (p: string, marcado: boolean) =>
     mudar(chavePapeis, e.pool.papeis_validos.filter((x) => (x === p ? marcado : papeis.includes(x))).join(','))
+  const noPool = e.pool.contas.filter((x) => x.origem !== 'orca').map((x) => x.nome)
+  const ocupado = read(gravando) !== null
   return (
-    <>
-      {detalhes}
-      {antiga}
+    <Stack gap="sm">
+      <Row gap="xs" align="center">
+        <Text size="sm">{t.pool.ordemNaTabela}</Text>
+        <IconButton icon="collapse" label={t.pool.subir} size="xs" variant="ghost" disabled={ocupado || noPool[0] === c.nome} onPress={() => void mover(e.pool.contas, c.nome, -1)} />
+        <IconButton icon="expand" label={t.pool.descer} size="xs" variant="ghost" disabled={ocupado || noPool[noPool.length - 1] === c.nome} onPress={() => void mover(e.pool.contas, c.nome, 1)} />
+      </Row>
       <ComDica texto={t.pool.dicas.vagas}>
         <Input label={t.pool.vagas} value={ed[chaveVagas] ?? String(c.vagas)} onChange={(x) => mudar(chaveVagas, x)} />
       </ComDica>
       <ComDica texto={t.pool.dicas.peso}>
-        <Input label={t.pool.peso} value={ed[chavePeso] ?? String(c.peso)} onChange={(x) => mudar(chavePeso, x)} />
+        <Input label={t.pool.pesoDaConta} value={ed[chavePeso] ?? String(c.peso)} onChange={(x) => mudar(chavePeso, x)} />
       </ComDica>
       <ComDica texto={t.pool.dicas.config}>
         <Input label={t.pool.config} value={ed[chaveConfig] ?? c.config ?? ''} onChange={(x) => mudar(chaveConfig, x)} />
@@ -372,7 +414,8 @@ function BlocoConta({ c, e }: { c: Conta; e: Estado }) {
       <Mensagem secao={secao} />
       <Salvar secao={secao} chaves={[chaveVagas, chavePeso, chavePapeis, chaveConfig]} />
       {read(removendo) === c.nome ? (
-        <Callout tone="warning" title={t.pool.confirmarRemocao(c.nome)}>
+        <Stack gap="xs">
+          <Text tone="warning">{t.pool.confirmarRemocao(c.nome)}</Text>
           <Row gap="sm">
             <Button
               size="sm"
@@ -380,7 +423,7 @@ function BlocoConta({ c, e }: { c: Conta; e: Estado }) {
               icon="delete"
               onPress={() => {
                 set(removendo, null)
-                update(abertasConta, (a) => a.filter((x) => x !== c.nome))
+                set(contaEscolhida, null)
                 void salvar(secao, [], { [`conta.${c.nome}.remover`]: '1' })
               }}
             >
@@ -390,13 +433,13 @@ function BlocoConta({ c, e }: { c: Conta; e: Estado }) {
               {t.pool.cancelar}
             </Button>
           </Row>
-        </Callout>
+        </Stack>
       ) : (
         <Button size="sm" variant="outline" tone="danger" icon="delete" onPress={() => set(removendo, c.nome)}>
           {t.pool.remover}
         </Button>
       )}
-    </>
+    </Stack>
   )
 }
 
@@ -411,38 +454,54 @@ function NovaConta({ e }: { e: Estado }) {
     if (await salvar('nova', [], extras)) update(edicoes, (p) => Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith('nova.'))))
   }
   return (
-    <Collapsible title={t.pool.nova}>
-      <Stack gap="sm">
-        <Input label={t.pool.novaNome} value={nome} onChange={(x) => mudar('nova.nome', x)} />
-        <ComDica texto={t.pool.dicas.agente}>
-          <Select
-            label={t.pool.novaAgente}
-            value={agente || undefined}
-            placeholder={t.pool.novaAgentePlaceholder}
-            options={e.pool.catalogo.map((a) => ({ value: a, label: a }))}
-            onChange={(x) => mudar('nova.agente', x)}
-          />
-        </ComDica>
-        <ComDica texto={t.pool.dicas.config}>
-          <Input label={t.pool.config} value={ed['nova.config'] ?? ''} onChange={(x) => mudar('nova.config', x)} />
-        </ComDica>
-        <ComDica texto={t.pool.dicas.comando}>
-          <Input label={t.pool.comando} value={ed['nova.comando'] ?? ''} onChange={(x) => mudar('nova.comando', x)} />
-        </ComDica>
-        <Mensagem secao="nova" />
-        <Button size="sm" icon="add" disabled={read(gravando) !== null || !nome || !agente} onPress={() => void criar()}>
-          {t.pool.novaCriar}
-        </Button>
-      </Stack>
-    </Collapsible>
+    <Stack gap="sm">
+      <Text weight="medium">{t.pool.nova}</Text>
+      <Input label={t.pool.novaNome} value={nome} onChange={(x) => mudar('nova.nome', x)} />
+      <ComDica texto={t.pool.dicas.agente}>
+        <Select
+          label={t.pool.novaAgente}
+          value={agente || undefined}
+          placeholder={t.pool.novaAgentePlaceholder}
+          options={e.pool.catalogo.map((a) => ({ value: a, label: a }))}
+          onChange={(x) => mudar('nova.agente', x)}
+        />
+      </ComDica>
+      <ComDica texto={t.pool.dicas.config}>
+        <Input label={t.pool.novaConfig} value={ed['nova.config'] ?? ''} onChange={(x) => mudar('nova.config', x)} />
+      </ComDica>
+      <ComDica texto={t.pool.dicas.comando}>
+        <Input label={t.pool.comando} value={ed['nova.comando'] ?? ''} onChange={(x) => mudar('nova.comando', x)} />
+      </ComDica>
+      <Mensagem secao="nova" />
+      <Button size="sm" icon="add" disabled={read(gravando) !== null || !nome || !agente} onPress={() => void criar()}>
+        {t.pool.novaCriar}
+      </Button>
+    </Stack>
   )
 }
 
-const percentual = (v: number | null): Celula => ({ texto: t.pool.percentual(v, (v ?? 0) > 80), tom: (v ?? 0) > 80 ? 'warning' : undefined })
+function ConfigFila({ e }: { e: Estado }) {
+  return (
+    <Stack gap="sm">
+      <Heading level={3}>{t.configuracoes.fila}</Heading>
+      <Text muted size="xs">
+        {t.fila.configurarDescricao}
+      </Text>
+      <CampoModo e={e} />
+      {(['vagas', 'vagas_projeto', 'teto', 'processos'] as const).map((i) => (
+        <CampoFila key={i} item={i} e={e} />
+      ))}
+      <Mensagem secao="fila" />
+      <Salvar secao="fila" chaves={ITENS_FILA.map((i) => `fila.${i}`)} />
+    </Stack>
+  )
+}
 
 function ConfigPool({ e }: { e: Estado }) {
   const { pool } = e
   const ed = read(edicoes)
+  const escolhida = read(contaEscolhida)
+  const conta = pool.contas.find((c) => c.nome === escolhida) ?? pool.contas[0]
   return (
     <Stack gap="sm">
       <Heading level={3}>{t.configuracoes.pool}</Heading>
@@ -462,6 +521,21 @@ function ConfigPool({ e }: { e: Estado }) {
       </ComDica>
       <Mensagem secao="pool" />
       <Salvar secao="pool" chaves={['pool.teto', 'pool.ram_min', 'pool.escolha']} />
+      {conta ? (
+        <Stack gap="sm">
+          <Text weight="medium">{t.pool.contasTitulo}</Text>
+          <Select
+            label={t.pool.escolherConta}
+            value={conta.nome}
+            options={pool.contas.map((c) => ({ value: c.nome, label: c.origem === 'orca' ? `${c.nome} (${t.pool.foraDoPool})` : c.nome }))}
+            onChange={(x) => {
+              set(removendo, null)
+              set(contaEscolhida, x)
+            }}
+          />
+          <EdicaoConta key={conta.nome} c={conta} e={e} />
+        </Stack>
+      ) : null}
       <NovaConta e={e} />
     </Stack>
   )
@@ -492,53 +566,40 @@ function SecaoConfiguracoes({ e }: { e: Estado }) {
   )
 }
 
-/** Sobe ou desce uma conta do pool: grava a lista completa das contas do pool na ordem nova (as detectadas ficam fora). */
-function mover(contas: Conta[], nome: string, delta: -1 | 1): Promise<boolean> {
-  const nomes = contas.filter((c) => c.origem !== 'orca').map((c) => c.nome)
-  const i = nomes.indexOf(nome)
-  const j = i + delta
-  if (i < 0 || j < 0 || j >= nomes.length) return Promise.resolve(false)
-  ;[nomes[i], nomes[j]] = [nomes[j], nomes[i]]
-  return salvar('ordem', [], { 'pool.ordem': nomes.join(',') })
-}
-
-function SecaoPool({ e }: { e: Estado }) {
-  const { pool } = e
-  const abertas = read(abertasConta)
-  const noPool = pool.contas.filter((c) => c.origem !== 'orca').map((c) => c.nome)
-  const ocupado = read(gravando) !== null
+function SecaoRequisitos({ r }: { r: Requisitos }) {
+  const linhas: TableRow[] = r.itens.map((i) => ({ key: i.id, cells: { requisito: i.nome, situacao: i.ok ? t.requisitos.ok : t.requisitos.falta } }))
   return (
-    <Card title={t.pool.titulo} description={t.pool.resumo(pool.maquina.usadas, pool.maquina.teto, pool.ram_min, pool.escolha)}>
-      {pool.contas.length === 0 ? (
-        <Text muted>{t.pool.semContas}</Text>
-      ) : (
-        <Stack gap="xs">
-          <Cabecalho rotulos={[t.pool.colConta, t.pool.colVagas, t.pool.col5h, t.pool.colSemanal]} />
-          {pool.contas.map((c) => (
-            <LinhaExpansivel
-              key={c.nome}
-              celulas={[
-                { texto: c.nome },
-                { texto: c.origem === 'orca' ? t.pool.foraDoPool : t.pool.vagasDaConta(c.usadas, c.vagas) },
-                percentual(c.cota?.curta ?? null),
-                percentual(c.cota?.longa ?? null)
-              ]}
-              aberta={abertas.includes(c.nome)}
-              onAlternar={() => alternar(abertasConta, c.nome)}
-              acoes={
-                c.origem === 'orca' ? undefined : (
-                  <Row gap="xs">
-                    <IconButton icon="expand" label={t.pool.subir} size="xs" variant="ghost" disabled={ocupado || noPool[0] === c.nome} onPress={() => void mover(pool.contas, c.nome, -1)} />
-                    <IconButton icon="collapse" label={t.pool.descer} size="xs" variant="ghost" disabled={ocupado || noPool[noPool.length - 1] === c.nome} onPress={() => void mover(pool.contas, c.nome, 1)} />
-                  </Row>
-                )
-              }
-            >
-              <BlocoConta c={c} e={e} />
-            </LinhaExpansivel>
-          ))}
-        </Stack>
-      )}
+    <Card title={t.requisitos.titulo} description={t.requisitos.explica}>
+      <Table
+        label={t.requisitos.tabela}
+        columns={[
+          { key: 'requisito', label: t.requisitos.colRequisito, width: 'lg' },
+          { key: 'situacao', label: t.requisitos.colSituacao, width: 'sm' }
+        ]}
+        rows={linhas}
+      />
+      {r.itens
+        .filter((i) => !i.ok)
+        .map((i) => (
+          <Stack key={i.id} gap="xs">
+            <Text weight="medium">{i.nome}</Text>
+            <Text muted size="xs">
+              {i.detalhe}
+            </Text>
+            {i.instalar?.tipo === 'acao' ? (
+              <Button size="sm" icon="download" disabled={read(gravando) !== null} onPress={() => void instalarRequisito(i.id)}>
+                {read(gravando) === `req:${i.id}` ? t.requisitos.instalando : t.requisitos.instalar}
+              </Button>
+            ) : null}
+            {i.instalar?.tipo === 'comando' ? (
+              <Stack gap="xs">
+                <Text size="xs">{t.requisitos.copiavel}</Text>
+                <Code block>{i.instalar.texto}</Code>
+              </Stack>
+            ) : null}
+          </Stack>
+        ))}
+      <Mensagem secao="requisitos" />
     </Card>
   )
 }
@@ -546,6 +607,7 @@ function SecaoPool({ e }: { e: Estado }) {
 export default function Painel() {
   const e = read(estado)
   const x = read(erro)
+  const r = read(requisitos)
   return (
     <Stack gap="md">
       <Row justify="between" align="center">
@@ -555,15 +617,20 @@ export default function Painel() {
         </Button>
       </Row>
       {x ? (
-        <Callout tone="danger" title={t.coletorFalhou(x.code)}>
-          {x.message}
-        </Callout>
+        <Stack gap="xs">
+          <Text tone="danger" weight="medium">
+            {t.coletorFalhou(x.code)}
+          </Text>
+          <Text tone="danger">{x.message}</Text>
+        </Stack>
       ) : null}
-      {e === null ? (
+      {r && !r.ok ? (
+        <SecaoRequisitos r={r} />
+      ) : e === null ? (
         x ? (
           <EmptyState title={t.semDados} description={t.coletorNaoRespondeu} icon="warning" />
         ) : (
-          <Skeleton shape="block" lines={4} label={t.carregando} />
+          <Spinner label={t.carregando} />
         )
       ) : (
         <Stack gap="md">
@@ -571,11 +638,9 @@ export default function Painel() {
             {t.atualizadoEm} <RelativeTime at={Date.parse(e.gerado_em)} />
             {` · ${t.dicaLinha}`}
           </Text>
-          {e.aviso ? <Callout tone="warning">{e.aviso}</Callout> : null}
+          {e.aviso ? <Text tone="warning">{e.aviso}</Text> : null}
           {e.saude.scripts_desatualizados.length > 0 ? (
-            <Callout tone="warning" title={t.scriptsDesatualizados}>
-              {e.saude.scripts_desatualizados.join(', ')}
-            </Callout>
+            <Text tone="warning">{`${t.scriptsDesatualizados}: ${e.saude.scripts_desatualizados.join(', ')}`}</Text>
           ) : null}
           <Text size="xs" muted>
             {`${t.plugin} ${e.saude.plugin_versao ?? '?'} · ${t.orca} ${e.saude.orca.rodando ? (e.saude.orca.versao ?? t.orcaRodando) : t.orcaForaDoAr}`}
