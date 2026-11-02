@@ -22,8 +22,13 @@ export type Cota = {
   texto: string
   curta: number | null
   longa: number | null
-  medida_ha_min: number
+  /** null quando não há medida. */
+  medida_ha_min: number | null
   alerta: boolean
+  /** `sem_login` e `erro` pedem ação do usuário; `antiga` = medida com mais de 30 min; `sem_medida` = nada lido. */
+  estado: 'ok' | 'sem_login' | 'erro' | 'antiga' | 'sem_medida'
+  /** Comando que resolve (`sem_login`), quando houver. */
+  acao?: string | null
   /** `orca` quando vem do `orca account list` (nativa); ausente na medida do cache. */
   fonte?: 'orca'
 }
@@ -58,10 +63,14 @@ export type ValorFila = {
   projetos: { projeto: string; valor: string | number }[]
 }
 
+/** Problema que o usuário precisa resolver; `acao` é o comando para copiar. */
+export type Alerta = { nivel: 'erro' | 'aviso'; texto: string; acao?: string }
+
 /** Saída de `painel.sh --json` (só os campos que o painel usa). */
 export type Estado = {
   gerado_em: string
   aviso: string | null
+  alertas: Alerta[]
   saude: { plugin_versao: string | null; scripts_desatualizados: string[]; orca: { rodando: boolean; versao: string | null } }
   fila: { modo: 'global' | 'banco' | 'projeto'; vagas: number; teto: number; testes: TesteFila[]; config: Record<ItemFila, ValorFila> }
   pool: {
