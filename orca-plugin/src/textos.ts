@@ -39,7 +39,8 @@ export const t = {
     linhas: {
       fila: 'Como os testes esperam a vez — ~/.claude/fila.conf',
       pool: 'Limites da máquina e como o escritor é escolhido — ~/.claude/agentes.conf',
-      contas: 'Vagas, peso, papéis e ordem de cada conta — ~/.claude/agentes.conf',
+      contas:
+        'Vagas, peso, papéis e ordem de cada conta — ~/.claude/agentes.conf. As contas detectadas pelo Orca entram no pool sozinhas; as manuais são CLIs personalizados, cadastrados em "Nova conta manual".',
       painel: 'Este painel — guardado no Orca'
     }
   },
@@ -50,20 +51,30 @@ export const t = {
   },
 
   fila: {
-    titulo: 'Fila de testes',
-    modos: { global: 'Global', projeto: 'Por projeto' } as Record<string, string>,
-    resumo: (modo: string, vagas: number, teto: number) => `modo ${modo} · ${vagas} vagas · teto ${teto}`,
-    semTravas: 'Nenhuma trava.',
-    tabela: 'Travas da fila',
+    titulo: 'Testes na fila',
+    explica: 'Os testes esperam a vez numa fila para a máquina não sobrecarregar: cada fila libera um número de vagas e o teto limita o total de testes ao mesmo tempo.',
+    modos: { global: 'Global', banco: 'Por banco', projeto: 'Por projeto' } as Record<string, string>,
+    resumo: (execucao: number, aguardando: number, teto: number, modo: string) =>
+      `${execucao} em execução · ${aguardando} aguardando · teto ${teto} · Modo ${modo}`,
+    comoFunciona: 'Como funciona a fila',
+    semTestes: 'Nenhum teste na fila',
+    tabela: 'Testes na fila',
+    colProjeto: 'Projeto',
     colFila: 'Fila',
-    colVaga: 'Vaga',
-    colViva: 'Viva',
-    sim: 'sim',
-    nao: 'não',
-    worktree: 'Worktree',
+    colEstado: 'Estado',
+    colHa: 'Há',
+    filaGlobal: 'Global',
+    filaProjeto: (nome: string) => `Projeto ${nome}`,
+    filaBanco: (endereco: string) => `Banco ${endereco}`,
+    filaContainer: 'Container',
+    filaGeral: 'Geral',
+    estados: { execucao: 'Em execução', aguardando: 'Aguardando vaga', parado: '⚠ Parado' } as Record<string, string>,
+    dicaParado: 'O processo terminou e deixou a vaga presa.',
+    ondeRoda: 'Onde roda',
     comando: 'Comando',
     pid: 'PID',
-    desde: 'Desde',
+    worktree: 'Worktree',
+    situacao: 'Situação',
     configurar: 'Configurar a fila',
     configurarDescricao: 'vale só para testes iniciados depois',
     campos: {
@@ -74,8 +85,9 @@ export const t = {
       processos: 'Processos (--parallel)'
     },
     dicas: {
-      global:
-        'Uma fila por recurso, compartilhada por todos os projetos da máquina: testes Laravel que usam o mesmo banco (mesma porta) esperam uns pelos outros; container e Python/JS têm filas próprias. Use quando os projetos dividem o banco de testes.',
+      global: 'Uma fila única para a máquina inteira: todos os testes, de qualquer projeto, esperam a mesma vez.',
+      banco:
+        'Uma fila por banco (endereço:porta), compartilhada entre projetos: testes que usam o mesmo banco esperam uns pelos outros; container e Python/JS têm filas próprias. Use quando os projetos dividem o banco de testes.',
       projeto:
         'Cada projeto tem a própria fila (vagas por projeto), independente dos outros; só o teto da máquina limita o total. Use quando cada projeto tem banco de testes próprio.',
       vagas: 'Testes ao mesmo tempo em cada fila.',
@@ -98,7 +110,9 @@ export const t = {
     colSemanal: 'Semanal',
     percentual: (v: number | null, alerta: boolean) => `${alerta ? '⚠ ' : ''}${pct(v)}`,
     vagasDaConta: (usadas: number, vagas: number) => `${usadas}/${vagas || '∞'}`,
-    foraDoPool: 'fora',
+    naoUtilizada: 'não utilizada',
+    situacao: 'Situação',
+    naoUtilizadaDetalhe: 'Não utilizada: continua listada e medida, mas não recebe trabalho nem conta no teto.',
     agente: 'Agente',
     peso: 'Peso',
     pesoDaConta: 'Peso da conta',
@@ -118,20 +132,21 @@ export const t = {
     escolha: 'Escolha do escritor',
     rotulo: 'Conta no Orca',
     editar: (nome: string) => `Editar ${nome}`,
-    adicionar: 'Adicionar ao pool',
+    naoUtilizar: 'Não utilizar',
     remover: 'Remover do pool',
     confirmarRemocao: (nome: string) => `Remover ${nome} do agentes.conf?`,
     confirmar: 'Confirmar remoção',
     cancelar: 'Cancelar',
     config: 'Diretório de config (CLAUDE_CONFIG_DIR etc.)',
-    comando: 'Comando do lançador',
-    novaConfig: 'Diretório de config da nova conta',
+    comandoCli: 'Comando do CLI',
+    novaConfig: 'Diretório de config',
     dicas: {
+      naoUtilizar: 'A conta continua listada e medida, mas não recebe trabalho nem conta no teto. Desmarque para voltar a usar.',
+      novoComando: 'Comando que abre o CLI desta conta, por exemplo claude-b ou CLAUDE_CONFIG_DIR=~/.claude-b claude. Informe o comando, o diretório de config ou os dois.',
+      novoConfig: 'Pasta de configuração do CLI, por exemplo ~/.claude-b. Informe o diretório de config, o comando ou os dois.',
       vagas: 'Quantos agentes desta conta podem trabalhar ao mesmo tempo. 0 = sem limite próprio (o teto da máquina continua valendo).',
       peso: 'Prioridade na escolha do escritor: multiplica o ritmo da cota. Peso 10 é escolhido bem antes de peso 1 com a mesma folga. Ignorado quando a escolha é Ordem.',
       config: 'Pasta de configuração do agente (por exemplo CLAUDE_CONFIG_DIR) que separa esta conta das outras do mesmo agente. Vazio = a conta padrão do sistema.',
-      comando: 'Comando que o lançador usa para abrir este agente, quando for diferente do comando padrão do catálogo.',
-      agente: 'Agente do catálogo (agentes-catalogo.conf) a que esta conta pertence: define comando, argumentos e medidor.',
       teto: 'Máximo de agentes trabalhando ao mesmo tempo na máquina, somando todas as contas. 0 = sem limite.',
       ramMin: 'Memória livre mínima (GB) para reservar uma vaga nova. 0 = desligado.',
       escolha: 'Ritmo da cota: o escritor é a conta com mais cota sobrando × peso. Ordem da tabela: a primeira conta da tabela do Pool com vaga e cota abaixo do teto.'
@@ -157,13 +172,10 @@ export const t = {
     contasTitulo: 'Contas',
     escolherConta: 'Conta a configurar',
     ordemNaTabela: 'Posição na tabela do Pool (usada quando o escritor é escolhido pela ordem da tabela)',
-    foraDoPoolExplica: 'Conta detectada pelo Orca que ainda não está no agentes.conf: adicione para ela entrar no pool.',
     subir: 'Subir',
     descer: 'Descer',
     nova: 'Nova conta manual',
-    novaNome: 'Nome da conta',
-    novaAgente: 'Agente do catálogo',
-    novaAgentePlaceholder: 'Escolha o agente',
+    novaNome: 'Nome',
     novaCriar: 'Adicionar conta'
   }
 }

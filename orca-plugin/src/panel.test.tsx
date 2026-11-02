@@ -13,7 +13,7 @@ async function abrir(v: TestPanel, aba?: string) {
   await v.toggle({ label: 'Configurações' })
   if (aba) await v.select({ label: 'Assuntos das configurações' }, aba)
 }
-const FILA = { label: 'Travas da fila' }
+const FILA = { label: 'Testes na fila' }
 
 function hostCom(gravados: unknown[] = [], estado: Estado = estadoExemplo) {
   return mockHost({
@@ -27,13 +27,17 @@ function hostCom(gravados: unknown[] = [], estado: Estado = estadoExemplo) {
   })
 }
 
-test('tabelas nativas recolhidas: Fila · Vaga · Viva e Conta · Vagas · 5h · Semanal, sem RAM, Workers nem origem', async () => {
+test('tabelas nativas: Testes na fila (Projeto · Fila · Estado · Há) e Contas do pool (Conta · Vagas · 5h · Semanal), sem RAM, Workers nem origem', async () => {
   view = await mount(panel, { host: hostCom() })
-  assert.deepEqual(view.columnsOf(FILA), ['fila', 'vaga', 'viva'])
-  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1'])
+  assert.deepEqual(view.columnsOf(FILA), ['projeto', 'fila', 'estado', 'ha'])
+  assert.deepEqual(view.rowsOf(FILA), ['p4242', 'p4120', 'p99']) // uma linha por teste, na ordem do backend; sem linha de teto
   assert.deepEqual(view.columnsOf(POOL), ['conta', 'vagas', 'h5', 'semanal'])
   assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
-  assert.ok(view.find({ text: /modo Global · 5 vagas · teto 5/ }))
+  assert.ok(view.find({ text: /1 em execução · 1 aguardando · teto 5 · Modo Global/ }))
+  const fila = { type: 'Table', label: 'Testes na fila' }
+  for (const trecho of [/wt-um/, /wt-tres/, /Global/, /Em execução/, /Aguardando vaga/, /⚠ Parado/]) assert.ok(view.find({ ...fila, text: trecho }), String(trecho))
+  assert.equal(view.find({ text: /Viva|Vaga|Fila teto|Rodando agora/ }), null)
+  assert.ok(view.find({ type: 'IconButton', label: /^Os testes esperam a vez numa fila/ }))
   assert.equal(view.find({ text: /Workers|curta|longa|origem|Origem/ }), null)
   assert.equal(view.find({ type: 'Heading', text: /RAM/ }), null)
   assert.ok(view.find({ type: 'RelativeTime' }))
@@ -47,16 +51,38 @@ test('sem os componentes de layout que quebraram o desenho: Grid, Callout, Skele
   for (const tipo of ['Grid', 'Callout', 'Skeleton', 'Toolbar']) assert.equal(view.findAll({ type: tipo }).length, 0, tipo)
 })
 
-test('fila: clicar abre os detalhes na própria tabela, várias ficam abertas e o segundo clique recolhe', async () => {
+test('fila: clicar abre os detalhes na própria tabela (onde roda, comando, pid, worktree), várias ficam abertas e o segundo clique recolhe', async () => {
   view = await mount(panel, { host: hostCom() })
-  await view.selectRows(FILA, ['3308.1'])
-  assert.deepEqual(view.rowsOf(FILA), ['3308.1', '3308.1#0', '3308.1#1', '3308.1#2', '3308.1#3', 'teto.1'])
-  await view.selectRows(FILA, ['3308.1', 'teto.1'])
-  assert.equal(view.rowsOf(FILA).length, 10) // as duas abertas ao mesmo tempo
-  await view.selectRows(FILA, ['teto.1'])
-  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1', 'teto.1#0', 'teto.1#1', 'teto.1#2', 'teto.1#3'])
+  await view.selectRows(FILA, ['p4242'])
+  assert.deepEqual(view.rowsOf(FILA), ['p4242', 'p4242#0', 'p4242#1', 'p4242#2', 'p4242#3', 'p4120', 'p99'])
+  assert.ok(view.find({ type: 'Table', label: 'Testes na fila', text: /Onde roda.*mysql 127\.0\.0\.1:3308/ }))
+  assert.ok(view.find({ type: 'Table', label: 'Testes na fila', text: /runner tests\/X\.php/ }))
+  await view.selectRows(FILA, ['p4242', 'p99'])
+  assert.equal(view.rowsOf(FILA).length, 3 + 4 + 5) // o parado traz a linha extra de Situação
+  assert.ok(view.find({ type: 'Table', text: /O processo terminou e deixou a vaga presa/ }))
+  await view.selectRows(FILA, ['p99'])
+  assert.deepEqual(view.rowsOf(FILA), ['p4242', 'p4120', 'p99', 'p99#0', 'p99#1', 'p99#2', 'p99#3', 'p99#4'])
   await view.selectRows(FILA, [])
-  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1'])
+  assert.deepEqual(view.rowsOf(FILA), ['p4242', 'p4120', 'p99'])
+})
+
+test('fila: a coluna Fila segue o modo (Global · Banco · Container · Geral · Projeto <nome>) e sem testes diz "Nenhum teste na fila"', async () => {
+  const com = (modo: Estado['fila']['modo'], recursos: string[]): Estado => ({
+    ...estadoExemplo,
+    fila: { ...estadoExemplo.fila, modo, testes: recursos.map((recurso, i) => ({ ...estadoExemplo.fila.testes[0], pid: 10 + i, recurso })) }
+  })
+  const tabela = { type: 'Table', label: 'Testes na fila' }
+  view = await mount(panel, { host: hostCom([], com('banco', ['mysql 127.0.0.1:3307', 'container exec-1', 'geral'])) })
+  for (const trecho of [/Banco 127\.0\.0\.1:3307/, /Container/, /Geral/]) assert.ok(view.find({ ...tabela, text: trecho }), String(trecho))
+  assert.ok(view.find({ text: /Modo Por banco/ }))
+  await view.unmount()
+  view = await mount(panel, { host: hostCom([], com('projeto', ['projeto meu-projeto'])) })
+  assert.ok(view.find({ ...tabela, text: /Projeto meu-projeto/ }))
+  assert.ok(view.find({ text: /Modo Por projeto/ }))
+  await view.unmount()
+  view = await mount(panel, { host: hostCom([], com('global', [])) })
+  assert.ok(view.find({ text: 'Nenhum teste na fila' }))
+  assert.equal(view.find(tabela), null)
 })
 
 test('pool: detalhes dentro da tabela, várias abertas, sem botão nem campo na linha', async () => {
@@ -87,7 +113,7 @@ test('Configurações: seção recolhida no fim, com abas Fila · Pool · Contas
   await view.select({ label: 'Assuntos das configurações' }, 'pool')
   assert.ok(view.find({ text: /^Limites da máquina e como o escritor é escolhido — ~\/\.claude\/agentes\.conf/ }))
   await view.select({ label: 'Assuntos das configurações' }, 'contas')
-  assert.ok(view.find({ text: /^Vagas, peso, papéis e ordem de cada conta — ~\/\.claude\/agentes\.conf/ }))
+  assert.ok(view.find({ text: /^Vagas, peso, papéis e ordem de cada conta — ~\/\.claude\/agentes\.conf\. As contas detectadas pelo Orca entram no pool sozinhas; as manuais são CLIs personalizados/ }))
   await view.select({ label: 'Assuntos das configurações' }, 'painel')
   assert.ok(view.find({ text: /^Este painel — guardado no Orca/ }))
 })
@@ -109,14 +135,30 @@ test('Configurações > Pool: escolher a conta na lista mostra o formulário del
   }
 })
 
-test('conta detectada fora do pool: escolhida na lista, traz Adicionar ao pool e nenhum formulário', async () => {
+test('conta inativa: marcada na tabela, explicada no detalhe e com "Não utilizar" marcado; não existe mais Adicionar ao pool', async () => {
+  view = await mount(panel, { host: hostCom() })
+  assert.ok(view.find({ type: 'Table', text: /claude-abcdef12 \(não utilizada\)/ }))
+  assert.equal(view.find({ type: 'Table', text: /pessoal \(não utilizada\)/ }), null)
+  await view.selectRows(POOL, ['claude-abcdef12'])
+  assert.ok(view.find({ type: 'Table', text: /Não utilizada: continua listada e medida/ }))
+  await abrir(view, 'contas')
+  assert.equal(view.find({ type: 'Checkbox', label: 'Não utilizar' })?.props.checked, false) // a primeira (pessoal) está ativa
+  await view.select({ label: 'Conta a configurar' }, 'claude-abcdef12')
+  assert.equal(view.find({ type: 'Checkbox', label: 'Não utilizar' })?.props.checked, true)
+  assert.equal(view.find({ type: 'Button', text: 'Adicionar ao pool' }), null)
+})
+
+test('"Não utilizar" grava conta.<nome>.ativo=nao e, desmarcada, =sim; a dica explica o efeito', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
   await abrir(view, 'contas')
+  assert.ok(view.find({ type: 'IconButton', label: /^A conta continua listada e medida, mas não recebe trabalho nem conta no teto/ }))
+  await view.toggle({ label: 'Não utilizar' })
+  await view.press({ type: 'Button', text: 'Salvar' })
   await view.select({ label: 'Conta a configurar' }, 'claude-abcdef12')
-  assert.equal(view.find({ label: 'Peso da conta' }), null)
-  await view.press({ type: 'Button', text: 'Adicionar ao pool' })
-  assert.deepEqual(enviados, [{ 'conta.claude-abcdef12.adicionar': 'claude' }])
+  await view.toggle({ label: 'Não utilizar' })
+  await view.press({ type: 'Button', text: 'Salvar' })
+  assert.deepEqual(enviados, [{ 'conta.pessoal.ativo': 'nao' }, { 'conta.claude-abcdef12.ativo': 'sim' }])
 })
 
 test('editar a conta escolhida manda só o que mudou e mostra o estado novo', async () => {
@@ -146,10 +188,11 @@ test('setas ↑/↓ da conta escolhida: gravam pool.ordem com a lista completa; 
   await abrir(view, 'contas')
   assert.equal(view.find({ type: 'IconButton', label: 'Subir' })?.disabled, true) // pessoal é a primeira
   assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, false)
+  await view.select({ label: 'Conta a configurar' }, 'claude-abcdef12')
+  assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, true) // a inativa também entra na ordem, e é a última
   await view.select({ label: 'Conta a configurar' }, 'codex')
-  assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, true) // codex é a última do pool
   await view.press({ type: 'IconButton', label: 'Subir' })
-  assert.deepEqual(enviados, [{ 'pool.ordem': 'codex,pessoal' }])
+  assert.deepEqual(enviados, [{ 'pool.ordem': 'codex,pessoal,claude-abcdef12' }])
 })
 
 test('Remover do pool pede confirmação e só então grava conta.<nome>.remover=1', async () => {
@@ -167,20 +210,40 @@ test('Remover do pool pede confirmação e só então grava conta.<nome>.remover
   assert.deepEqual(enviados, [{ 'conta.codex.remover': '1' }])
 })
 
-test('Nova conta manual: nome, agente do catálogo e config viram um único pedido, com dicas', async () => {
+test('Nova conta manual: nome, comando do CLI e diretório de config (um dos dois basta) viram adicionar=auto, com dicas e sem agente do catálogo', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
   await abrir(view, 'contas')
-  for (const trecho of [/^Agente do catálogo \(agentes-catalogo/, /^Comando que o lançador/]) {
+  for (const trecho of [/^Comando que abre o CLI desta conta/, /^Pasta de configuração do CLI/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
+  assert.equal(view.find({ label: 'Agente do catálogo' }), null)
   assert.equal(view.find({ type: 'Button', text: 'Adicionar conta' })?.disabled, true)
-  await view.type({ label: 'Nome da conta' }, 'minha')
-  await view.select({ label: 'Agente do catálogo' }, 'codex')
-  await view.type({ label: 'Diretório de config da nova conta' }, '~/.codex-minha')
+  await view.type({ label: 'Nome' }, 'minha')
+  assert.equal(view.find({ type: 'Button', text: 'Adicionar conta' })?.disabled, true) // falta comando ou config
+  await view.type({ label: 'Diretório de config' }, '~/.claude-b')
+  await view.type({ label: 'Comando do CLI' }, 'claude-b')
   await view.press({ type: 'Button', text: 'Adicionar conta' })
-  assert.deepEqual(enviados, [{ 'conta.minha.adicionar': 'codex', 'conta.minha.config': '~/.codex-minha' }])
-  assert.equal(view.valueOf({ label: 'Nome da conta' }), '')
+  assert.deepEqual(enviados, [{ 'conta.minha.adicionar': 'auto', 'conta.minha.config': '~/.claude-b', 'conta.minha.comando': 'claude-b' }])
+  assert.equal(view.valueOf({ label: 'Nome' }), '')
+})
+
+test('Nova conta manual: só o comando também vale, e a recusa do backend aparece em português', async () => {
+  const host = mockHost({
+    requests: {
+      'estado.ler': () => estadoExemplo,
+      'config.gravar': () => {
+        throw hostError('config_recusada', 'Não consegui deduzir o agente de "xpto".')
+      }
+    }
+  })
+  view = await mount(panel, { host })
+  await abrir(view, 'contas')
+  await view.type({ label: 'Nome' }, 'minha')
+  await view.type({ label: 'Comando do CLI' }, 'xpto')
+  await view.press({ type: 'Button', text: 'Adicionar conta' })
+  assert.ok(view.find({ text: 'Não consegui deduzir o agente de "xpto".' }))
+  assert.equal(view.valueOf({ label: 'Nome' }), 'minha')
 })
 
 test('modo da fila: cada opção é um rádio com o ícone de dica ao lado, sem linhas repetidas', async () => {
@@ -188,8 +251,8 @@ test('modo da fila: cada opção é um rádio com o ícone de dica ao lado, sem 
   view = await mount(panel, { host: hostCom(enviados) })
   await abrir(view)
   const grupos = view.findAll({ role: 'radiogroup' })
-  assert.deepEqual(grupos.map((g) => g.label), ['Modo da fila: Global', 'Modo da fila: Por projeto'])
-  assert.equal(view.findAll({ type: 'IconButton', label: /^Uma fila por recurso|^Cada projeto tem a própria fila/ }).length, 2)
+  assert.deepEqual(grupos.map((g) => g.label), ['Modo da fila: Global', 'Modo da fila: Por banco', 'Modo da fila: Por projeto'])
+  assert.equal(view.findAll({ type: 'IconButton', label: /^Uma fila única para a máquina|^Uma fila por banco|^Cada projeto tem a própria fila/ }).length, 3)
   assert.ok(view.find({ type: 'IconButton', label: /^Máximo de testes ao mesmo tempo na máquina/ }))
   assert.ok(view.find({ type: 'IconButton', label: /Só vale no modo Por projeto/ }))
   await view.select({ label: 'Modo da fila: Por projeto' }, 'projeto')
@@ -283,7 +346,7 @@ test('requisitos faltando: só a seção Requisitos, com ✓/✗, botão Instala
   const host = mockHost({ requests: { 'requisitos.ler': () => faltando, 'estado.ler': () => (estadoLido++, estadoExemplo) } })
   view = await mount(panel, { host })
   assert.deepEqual(view.rowsOf({ label: 'Requisitos do painel' }), ['cli', 'orchestration', 'python'])
-  assert.equal(view.find({ type: 'Table', label: 'Travas da fila' }), null)
+  assert.equal(view.find({ type: 'Table', label: 'Testes na fila' }), null)
   assert.equal(view.find({ type: 'Table', label: 'Contas do pool' }), null)
   assert.equal(view.find({ type: 'Heading', text: 'Configurações' }), null)
   assert.equal(estadoLido, 0) // nem coleta o resto

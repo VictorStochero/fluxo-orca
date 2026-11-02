@@ -29,9 +29,10 @@ import {
   update,
   type OrcaNode,
   type PanelContext,
+  type TableCell,
   type TableRow
 } from 'orca'
-import type { Conta, Estado, ItemFila, Requisitos, ValorFila } from './protocol'
+import type { Conta, Estado, ItemFila, Requisitos, TesteFila, ValorFila } from './protocol'
 import { manterAtualizando } from './atualizacao'
 import { t } from './textos'
 
@@ -195,7 +196,7 @@ function ComDica({ texto, children }: { texto: string; children: OrcaNode }) {
   )
 }
 
-type Linha = { key: string; cells: Record<string, string | number>; detalhes: [string, string | number][] }
+type Linha = { key: string; cells: Record<string, TableCell>; detalhes: [string, string | number][] }
 type Coluna = { key: string; label: string; align?: 'start' | 'center' | 'end'; width?: 'auto' | 'xs' | 'sm' | 'md' | 'lg'; minWidth?: 'auto' | 'xs' | 'sm' | 'md' }
 
 /**
@@ -247,7 +248,7 @@ function CampoModo({ e }: { e: Estado }) {
       <Text weight="medium" size="sm">
         {t.fila.campos.modo}
       </Text>
-      {(['global', 'projeto'] as const).map((m) => (
+      {(['global', 'banco', 'projeto'] as const).map((m) => (
         <Row key={m} gap="xs" align="center">
           {/* Um RadioGroup de uma opção por linha (RadioOption não tem ícone): o valor marcado é o do estado, então só uma fica selecionada. */}
           <RadioGroup
@@ -280,29 +281,54 @@ function CampoFila({ item, e }: { item: Exclude<ItemFila, 'modo'>; e: Estado }) 
   )
 }
 
+/** Rótulo da coluna Fila: depende do modo; o detalhe do recurso fica na linha expandida. */
+function rotuloFila(modo: Estado['fila']['modo'], x: TesteFila): string {
+  if (modo === 'global') return t.fila.filaGlobal
+  const r = x.recurso ?? ''
+  if (modo === 'projeto') return t.fila.filaProjeto(r.replace(/^projeto\s+/, '') || x.projeto || '-')
+  if (r.startsWith('mysql ')) return t.fila.filaBanco(r.slice(6))
+  if (r.startsWith('container')) return t.fila.filaContainer
+  return r === 'geral' ? t.fila.filaGeral : r || '-'
+}
+
 function SecaoFila({ e }: { e: Estado }) {
   const { fila } = e
-  const linhas: Linha[] = fila.travas.map((tr) => ({
-    key: `${tr.fila}.${tr.vaga}`,
-    cells: { fila: tr.fila, vaga: tr.vaga, viva: tr.viva ? t.fila.sim : t.fila.nao },
+  const testes = fila.testes
+  const execucao = testes.filter((x) => x.estado === 'execucao').length
+  const aguardando = testes.filter((x) => x.estado === 'aguardando').length
+  const linhas: Linha[] = testes.map((x, i) => ({
+    key: x.pid === null ? `i${i}` : `p${x.pid}`,
+    cells: {
+      projeto: x.projeto ?? '-',
+      fila: rotuloFila(fila.modo, x),
+      estado: t.fila.estados[x.estado] ?? x.estado,
+      ha: x.desde_ts ? { type: 'relative', at: x.desde_ts, format: 'duration' } : '-'
+    },
     detalhes: [
-      [t.fila.worktree, tr.worktree ?? '-'],
-      [t.fila.comando, tr.comando ?? '-'],
-      [t.fila.pid, tr.pid ?? '-'],
-      [t.fila.desde, tr.desde ?? '-']
+      ...(x.estado === 'parado' ? ([[t.fila.situacao, t.fila.dicaParado]] as [string, string][]) : []),
+      [t.fila.ondeRoda, x.recurso ?? '-'],
+      [t.fila.comando, x.comando ?? '-'],
+      [t.fila.pid, x.pid ?? '-'],
+      [t.fila.worktree, x.worktree ?? '-']
     ]
   }))
   return (
-    <Card title={t.fila.titulo} description={t.fila.resumo(t.fila.modos[fila.modo] ?? fila.modo, fila.vagas, fila.teto)}>
-      {fila.travas.length === 0 ? (
-        <Text muted>{t.fila.semTravas}</Text>
+    <Card title={t.fila.titulo} description={t.fila.resumo(execucao, aguardando, fila.teto, t.fila.modos[fila.modo] ?? fila.modo)}>
+      <ComDica texto={t.fila.explica}>
+        <Text muted size="xs">
+          {t.fila.comoFunciona}
+        </Text>
+      </ComDica>
+      {testes.length === 0 ? (
+        <Text muted>{t.fila.semTestes}</Text>
       ) : (
         <TabelaExpansivel
           label={t.fila.tabela}
           colunas={[
+            { key: 'projeto', label: t.fila.colProjeto, width: 'md' },
             { key: 'fila', label: t.fila.colFila, width: 'md' },
-            { key: 'vaga', label: t.fila.colVaga },
-            { key: 'viva', label: t.fila.colViva, width: 'xs' }
+            { key: 'estado', label: t.fila.colEstado, width: 'md' },
+            { key: 'ha', label: t.fila.colHa, width: 'xs' }
           ]}
           linhas={linhas}
           abertas={read(abertasTrava)}
@@ -320,12 +346,13 @@ function SecaoPool({ e }: { e: Estado }) {
   const linhas: Linha[] = pool.contas.map((c) => ({
     key: c.nome,
     cells: {
-      conta: c.nome,
-      vagas: c.origem === 'orca' ? t.pool.foraDoPool : t.pool.vagasDaConta(c.usadas, c.vagas),
+      conta: c.ativo ? c.nome : `${c.nome} (${t.pool.naoUtilizada})`,
+      vagas: t.pool.vagasDaConta(c.usadas, c.vagas),
       h5: percentual(c.cota?.curta ?? null),
       semanal: percentual(c.cota?.longa ?? null)
     },
     detalhes: [
+      ...(c.ativo ? [] : ([[t.pool.situacao, t.pool.naoUtilizadaDetalhe]] as [string, string][])),
       ...(c.rotulo ? ([[t.pool.rotulo, c.rotulo]] as [string, string][]) : []),
       [t.pool.agente, c.agente ?? '-'],
       [t.pool.peso, c.peso],
@@ -358,9 +385,9 @@ function SecaoPool({ e }: { e: Estado }) {
   )
 }
 
-/** Sobe ou desce uma conta do pool: grava a lista completa das contas do pool na ordem nova (as detectadas ficam fora). */
+/** Sobe ou desce uma conta: grava a lista completa das contas na ordem nova. */
 function mover(contas: Conta[], nome: string, delta: -1 | 1): Promise<boolean> {
-  const nomes = contas.filter((c) => c.origem !== 'orca').map((c) => c.nome)
+  const nomes = contas.map((c) => c.nome)
   const i = nomes.indexOf(nome)
   const j = i + delta
   if (i < 0 || j < 0 || j >= nomes.length) return Promise.resolve(false)
@@ -368,22 +395,10 @@ function mover(contas: Conta[], nome: string, delta: -1 | 1): Promise<boolean> {
   return salvar('ordem', [], { 'pool.ordem': nomes.join(',') })
 }
 
-/** Edição da conta escolhida: vagas, peso, config, papéis, ordem, remover ou adicionar ao pool. */
+/** Edição da conta escolhida: vagas, peso, config, papéis, ordem, "Não utilizar" e remover. */
 function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
   const secao = `conta.${c.nome}`
-  if (c.origem === 'orca') {
-    return (
-      <Stack gap="sm">
-        <Text muted size="xs">
-          {t.pool.foraDoPoolExplica}
-        </Text>
-        <Mensagem secao={secao} />
-        <Button size="sm" icon="add" disabled={read(gravando) !== null} onPress={() => void salvar(secao, [], { [`conta.${c.nome}.adicionar`]: c.agente ?? '' })}>
-          {t.pool.adicionar}
-        </Button>
-      </Stack>
-    )
-  }
+  const chaveAtivo = `conta.${c.nome}.ativo`
   const chaveVagas = `conta.${c.nome}.vagas`
   const chavePeso = `conta.${c.nome}.peso`
   const chavePapeis = `conta.${c.nome}.papeis`
@@ -392,7 +407,8 @@ function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
   const papeis = (ed[chavePapeis] ?? c.papeis.join(',')).split(',').filter(Boolean)
   const alterna = (p: string, marcado: boolean) =>
     mudar(chavePapeis, e.pool.papeis_validos.filter((x) => (x === p ? marcado : papeis.includes(x))).join(','))
-  const noPool = e.pool.contas.filter((x) => x.origem !== 'orca').map((x) => x.nome)
+  const noPool = e.pool.contas.map((x) => x.nome)
+  const naoUtilizar = (ed[chaveAtivo] ?? (c.ativo ? 'sim' : 'nao')) === 'nao'
   const ocupado = read(gravando) !== null
   return (
     <Stack gap="sm">
@@ -410,6 +426,10 @@ function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
       <ComDica texto={t.pool.dicas.config}>
         <Input label={t.pool.config} value={ed[chaveConfig] ?? c.config ?? ''} onChange={(x) => mudar(chaveConfig, x)} />
       </ComDica>
+      <Row gap="xs" align="center">
+        <Checkbox label={t.pool.naoUtilizar} checked={naoUtilizar} onChange={(m) => mudar(chaveAtivo, m ? 'nao' : 'sim')} />
+        <Dica texto={t.pool.dicas.naoUtilizar} />
+      </Row>
       <Stack gap="xs">
         <Text weight="medium" size="sm">
           {t.pool.papeis}
@@ -422,7 +442,7 @@ function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
         ))}
       </Stack>
       <Mensagem secao={secao} />
-      <Salvar secao={secao} chaves={[chaveVagas, chavePeso, chavePapeis, chaveConfig]} />
+      <Salvar secao={secao} chaves={[chaveVagas, chavePeso, chavePapeis, chaveConfig, chaveAtivo]} />
       {read(removendo) === c.nome ? (
         <Stack gap="xs">
           <Text tone="warning">{t.pool.confirmarRemocao(c.nome)}</Text>
@@ -453,37 +473,29 @@ function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
   )
 }
 
-function NovaConta({ e }: { e: Estado }) {
+function NovaConta() {
   const ed = read(edicoes)
   const nome = ed['nova.nome'] ?? ''
-  const agente = ed['nova.agente'] ?? ''
+  const comando = (ed['nova.comando'] ?? '').trim()
+  const config = (ed['nova.config'] ?? '').trim()
   const criar = async () => {
-    const extras: Record<string, string> = { [`conta.${nome}.adicionar`]: agente }
-    if (ed['nova.config']) extras[`conta.${nome}.config`] = ed['nova.config']
-    if (ed['nova.comando']) extras[`conta.${nome}.comando`] = ed['nova.comando']
+    const extras: Record<string, string> = { [`conta.${nome}.adicionar`]: 'auto' }
+    if (config) extras[`conta.${nome}.config`] = config
+    if (comando) extras[`conta.${nome}.comando`] = comando
     if (await salvar('nova', [], extras)) update(edicoes, (p) => Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith('nova.'))))
   }
   return (
     <Stack gap="sm">
       <Text weight="medium">{t.pool.nova}</Text>
       <Input label={t.pool.novaNome} value={nome} onChange={(x) => mudar('nova.nome', x)} />
-      <ComDica texto={t.pool.dicas.agente}>
-        <Select
-          label={t.pool.novaAgente}
-          value={agente || undefined}
-          placeholder={t.pool.novaAgentePlaceholder}
-          options={e.pool.catalogo.map((a) => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) }))}
-          onChange={(x) => mudar('nova.agente', x)}
-        />
+      <ComDica texto={t.pool.dicas.novoComando}>
+        <Input label={t.pool.comandoCli} value={ed['nova.comando'] ?? ''} onChange={(x) => mudar('nova.comando', x)} />
       </ComDica>
-      <ComDica texto={t.pool.dicas.config}>
+      <ComDica texto={t.pool.dicas.novoConfig}>
         <Input label={t.pool.novaConfig} value={ed['nova.config'] ?? ''} onChange={(x) => mudar('nova.config', x)} />
       </ComDica>
-      <ComDica texto={t.pool.dicas.comando}>
-        <Input label={t.pool.comando} value={ed['nova.comando'] ?? ''} onChange={(x) => mudar('nova.comando', x)} />
-      </ComDica>
       <Mensagem secao="nova" />
-      <Button size="sm" icon="add" disabled={read(gravando) !== null || !nome || !agente} onPress={() => void criar()}>
+      <Button size="sm" icon="add" disabled={read(gravando) !== null || !nome.trim() || (!comando && !config)} onPress={() => void criar()}>
         {t.pool.novaCriar}
       </Button>
     </Stack>
@@ -551,7 +563,7 @@ function ConfigContas({ e }: { e: Estado }) {
           <Select
             label={t.pool.escolherConta}
             value={conta.nome}
-            options={pool.contas.map((c) => ({ value: c.nome, label: c.origem === 'orca' ? `${c.nome} (${t.pool.foraDoPool})` : c.nome }))}
+            options={pool.contas.map((c) => ({ value: c.nome, label: c.ativo ? c.nome : `${c.nome} (${t.pool.naoUtilizada})` }))}
             onChange={(x) => {
               set(removendo, null)
               set(contaEscolhida, x)
@@ -560,7 +572,7 @@ function ConfigContas({ e }: { e: Estado }) {
           <EdicaoConta key={conta.nome} c={conta} e={e} />
         </Stack>
       ) : null}
-      <NovaConta e={e} />
+      <NovaConta />
     </Stack>
   )
 }

@@ -9,9 +9,10 @@ export const estadoExemplo: Estado = {
     modo: 'global',
     vagas: 5,
     teto: 5,
-    travas: [
-      { fila: '3308', vaga: 1, worktree: 'C:/Herd/wt-um', desde: '20:14:25', comando: 'runner tests/X.php', pid: 4242, viva: true },
-      { fila: 'teto', vaga: 1, worktree: 'C:/Herd/wt-dois', desde: null, comando: null, pid: null, viva: false }
+    testes: [
+      { pid: 4242, estado: 'execucao', recurso: 'mysql 127.0.0.1:3308', worktree: 'C:/Herd/wt-um', projeto: 'wt-um', comando: 'runner tests/X.php', vaga: 1, desde_ts: 1793650465000 },
+      { pid: 4120, estado: 'aguardando', recurso: 'mysql 127.0.0.1:3308', worktree: 'C:/Herd/wt-tres', projeto: 'wt-tres', comando: 'php artisan test', vaga: null, desde_ts: 1793650500000 },
+      { pid: 99, estado: 'parado', recurso: 'container exec-1', worktree: 'C:/Herd/wt-dois', projeto: 'wt-dois', comando: null, vaga: 1, desde_ts: 1793640000000 }
     ],
     config: {
       modo: { valor: 'global', origem: 'padrao', projetos: [] },
@@ -41,10 +42,11 @@ export const estadoExemplo: Estado = {
         rotulo: null,
         config: null,
         detectada: false,
+        ativo: true,
         cota: { texto: 'pessoal: sessão 90% usado | semana 25% usado, zera 6 nov 20:00', curta: 90, longa: 25, medida_ha_min: 45, alerta: true }
       },
-      { nome: 'codex', agente: 'codex', vagas: 1, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: { texto: '5h 24% (zera 14:48) · semana 42% (zera qua., 10:01)', curta: 24, longa: 42, medida_ha_min: 1, alerta: false, fonte: 'orca' }, origem: 'manual', rotulo: 'eu@exemplo.com', config: null, detectada: true },
-      { nome: 'claude-abcdef12', agente: 'claude', vagas: 0, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: null, origem: 'orca', rotulo: 'gerenciada@exemplo.com', config: null, detectada: true }
+      { nome: 'codex', agente: 'codex', vagas: 1, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: { texto: '5h 24% (zera 14:48) · semana 42% (zera qua., 10:01)', curta: 24, longa: 42, medida_ha_min: 1, alerta: false, fonte: 'orca' }, origem: 'manual', rotulo: 'eu@exemplo.com', config: null, detectada: true, ativo: true },
+      { nome: 'claude-abcdef12', agente: 'claude', vagas: 1, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: null, origem: 'manual', rotulo: 'gerenciada@exemplo.com', config: null, detectada: true, ativo: false }
     ]
   }
 }

@@ -11,13 +11,23 @@ const semVigia = {
 
 export default defineCheck({
   carregado: { requests: { ...semVigia, 'estado.ler': () => estadoExemplo } },
+  // Conta inativa ("não utilizada") na tabela do Pool.
+  contaInativa: {
+    requests: {
+      ...semVigia,
+      'estado.ler': () => ({
+        ...estadoExemplo,
+        pool: { ...estadoExemplo.pool, contas: estadoExemplo.pool.contas.map((c) => ({ ...c, ativo: false })) }
+      })
+    }
+  },
   vazio: {
     requests: {
       ...semVigia,
       'estado.ler': () => ({
         ...estadoExemplo,
         aviso: 'Orca indisponível',
-        fila: { ...estadoExemplo.fila, travas: [] },
+        fila: { ...estadoExemplo.fila, testes: [] },
         pool: { ...estadoExemplo.pool, contas: [] }
       })
     }

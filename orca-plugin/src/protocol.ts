@@ -1,14 +1,20 @@
 // Contrato painel <-> worker, declarado uma vez: src/panel.tsx e src/worker.ts leem este arquivo.
 export {}
 
-export type Trava = {
-  fila: string
-  vaga: number
-  worktree: string | null
-  desde: string | null
-  comando: string | null
+/** Um teste na fila; a trava do teto não entra. Ordem do backend: execução, aguardando, parado (do mais antigo ao mais novo). */
+export type TesteFila = {
   pid: number | null
-  viva: boolean
+  estado: 'execucao' | 'aguardando' | 'parado'
+  /** `mysql 127.0.0.1:3307`, `container <executor>`, `geral`, `global` ou `projeto <nome>`. */
+  recurso: string | null
+  worktree: string | null
+  /** Último segmento do worktree. */
+  projeto: string | null
+  comando: string | null
+  /** null para quem aguarda. */
+  vaga: number | null
+  /** Epoch em ms: início da trava (execução, parado) ou da espera (aguardando). */
+  desde_ts: number | null
 }
 
 /** Cota da conta: 5h = janela curta, Semanal = janela longa (percentuais de 0 a 100). */
@@ -39,6 +45,8 @@ export type Conta = {
   config: string | null
   /** O Orca também enxerga esta conta (cota nativa). */
   detectada: boolean
+  /** false = "Não utilizar": listada e medida, mas fora do trabalho e do teto. */
+  ativo: boolean
 }
 
 export type ItemFila = 'modo' | 'vagas' | 'vagas_projeto' | 'teto' | 'processos'
@@ -55,7 +63,7 @@ export type Estado = {
   gerado_em: string
   aviso: string | null
   saude: { plugin_versao: string | null; scripts_desatualizados: string[]; orca: { rodando: boolean; versao: string | null } }
-  fila: { modo: string; vagas: number; teto: number; travas: Trava[]; config: Record<ItemFila, ValorFila> }
+  fila: { modo: 'global' | 'banco' | 'projeto'; vagas: number; teto: number; testes: TesteFila[]; config: Record<ItemFila, ValorFila> }
   pool: {
     teto: number
     ram_min: number
