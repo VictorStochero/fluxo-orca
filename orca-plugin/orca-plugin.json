@@ -1,0 +1,24 @@
+{
+  "manifestVersion": 2,
+  "id": "fluxo-orca",
+  "name": "Fluxo Orca",
+  "version": "0.1.0",
+  "description": "Painel de monitoramento do fluxo-orca: fila de testes, pool de agentes, RAM e workers do Orca.",
+  "engines": {
+    "orca": ">=1.4.246"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "panels": [
+      {
+        "id": "painel",
+        "title": "Fluxo Orca",
+        "icon": "gauge",
+        "entry": "src/panel.tsx",
+        "ui": "components"
+      }
+    ]
+  }
+}

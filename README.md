@@ -77,6 +77,12 @@ Na 2.13.0, o coordenador dispara a onda inteira e encerra o turno: o Orca 1.4.24
 
 **Ação manual ao atualizar para 2.13.0:** requer Orca 1.4.246 ou mais novo (`orca --version`): atualizar o Orca antes do plugin. Remover a cópia antiga de `~/.cache/orca-inicia.sh`, se existir. O plugin usa diretamente `orca orchestration worker-start --spec-file ~/.cache/handoff/<tarefa>/spec.md`, que já imprime o recibo resumido e `Next:`; a instalação não apaga a cópia antiga.
 
+## Painel do Orca (monitoramento)
+
+`orca-plugin/` é um plugin do Orca (`trusted-worker`, Orca ≥ 1.4.246) com um painel lateral só de leitura: **fila de testes** (modo, vagas, teto; travas com worktree, comando, pid e se está viva), **pool de agentes** (vagas usadas/total, peso, papéis e cota curta/longa), **RAM** (GB disponíveis e sessões ociosas) e **workers** do Orca. O worker roda `bash ~/.cache/painel.sh --json` (o coletor, copiado pelo `instalar.sh`) e observa `~/.cache/gs-teste*` e `~/.cache/agentes/`: quando mudam, avisa o painel; o botão **Atualizar** lê de novo. Sem servidor HTTP nem polling.
+
+Para carregar: `orca plugin dev load orca-plugin`. O worker roda código na sua conta, então o Orca pede a sua aprovação do acesso; confira com `orca plugin inspect orca-plugin` antes de aprovar. Validação: `orca plugin validate|check|test orca-plugin` e `npx tsc -p orca-plugin` (depois de `orca plugin types orca-plugin`).
+
 ## Licença
 
 MIT © Victor Stochero. As skills de metodologia vêm do [obra/superpowers](https://github.com/obra/superpowers) (MIT © Jesse Vincent, ver `skills/LICENSE-superpowers`), com pequenas adaptações para a delegação pelo Orca. **Não use junto com o plugin `superpowers`**: as skills ficam duplicadas e as originais conflitam com o fluxo.
