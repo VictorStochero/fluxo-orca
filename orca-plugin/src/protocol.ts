@@ -50,17 +50,6 @@ export type ValorFila = {
   projetos: { projeto: string; valor: string | number }[]
 }
 
-/** Requisito do painel (CLI do Orca, Orchestrator V3 etc.) e, se faltar, como instalar. */
-export type Requisito = {
-  id: string
-  nome: string
-  ok: boolean
-  detalhe: string
-  instalar?: { tipo: 'acao' | 'comando'; texto: string }
-}
-
-export type Requisitos = { ok: boolean; itens: Requisito[] }
-
 /** Saída de `painel.sh --json` (só os campos que o painel usa). */
 export type Estado = {
   gerado_em: string
@@ -97,10 +86,6 @@ declare module 'orca' {
     'requisitos.instalar': { input: { id: 'orchestration' }; output: Requisitos }
     /** Roda o coletor (`~/.cache/painel.sh --json`) e devolve o estado da máquina. */
     'estado.ler': { output: Estado }
-    /** Confere o que o painel precisa para funcionar; com `ok: false` o painel mostra só os requisitos. */
-    'requisitos.ler': { output: Requisitos }
-    /** Instala o requisito de tipo `acao` (hoje: `orchestration`); o painel lê os requisitos de novo depois. */
-    'requisitos.instalar': { input: { id: string }; output: { ok: boolean } }
     /**
      * Grava pelo `painel.sh --config chave=valor ...` (fila.conf e agentes.conf; tudo ou nada) e devolve o estado novo.
      * Recusa do validador: erro `config_recusada` com a mensagem em português.

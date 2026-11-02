@@ -71,10 +71,10 @@ async function lerRequisitos(): Promise<Requisitos | null> {
   }
 }
 
-export async function instalarRequisito(id: string): Promise<void> {
+export async function instalarRequisito(id: 'orchestration'): Promise<void> {
   set(gravando, `req:${id}`)
   try {
-    await plugin.request('requisitos.instalar', { id })
+    set(requisitos, await plugin.request('requisitos.instalar', { id })) // devolve os requisitos já lidos de novo
     update(avisos, (p) => ({ ...p, requisitos: { tom: 'success' as const, texto: t.salvo } }))
   } catch (e) {
     update(avisos, (p) => ({ ...p, requisitos: { tom: 'danger' as const, texto: (e as { message?: string }).message ?? String(e) } }))
@@ -633,7 +633,7 @@ function SecaoRequisitos({ r }: { r: Requisitos }) {
               {i.detalhe}
             </Text>
             {i.instalar?.tipo === 'acao' ? (
-              <Button size="sm" icon="download" disabled={read(gravando) !== null} onPress={() => void instalarRequisito(i.id)}>
+              <Button size="sm" icon="download" disabled={read(gravando) !== null} onPress={() => void instalarRequisito(i.id as 'orchestration')}>
                 {read(gravando) === `req:${i.id}` ? t.requisitos.instalando : t.requisitos.instalar}
               </Button>
             ) : null}

@@ -2,10 +2,18 @@
 import { defineCheck, hostError } from 'orca/testing'
 import { estadoExemplo } from './fixtures'
 
+// A vigília (auto.assistir) é um long-poll que nunca responde: o check esperaria para sempre; ele só confere o desenho.
+const semVigia = {
+  'auto.assistir': () => {
+    throw hostError('unavailable', 'sem vigília no check')
+  }
+}
+
 export default defineCheck({
-  carregado: { requests: { 'estado.ler': () => estadoExemplo } },
+  carregado: { requests: { ...semVigia, 'estado.ler': () => estadoExemplo } },
   vazio: {
     requests: {
+      ...semVigia,
       'estado.ler': () => ({
         ...estadoExemplo,
         aviso: 'Orca indisponível',
@@ -16,6 +24,7 @@ export default defineCheck({
   },
   requisitosFaltando: {
     requests: {
+      ...semVigia,
       'requisitos.ler': () => ({
         ok: false,
         itens: [
@@ -28,6 +37,7 @@ export default defineCheck({
   },
   coletorFalhou: {
     requests: {
+      ...semVigia,
       'estado.ler': () => {
         throw hostError('coletor_falhou', 'painel.sh saiu com 1')
       }

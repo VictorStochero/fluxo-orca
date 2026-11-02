@@ -104,7 +104,7 @@ test('Configurações > Pool: escolher a conta na lista mostra o formulário del
   }
   assert.ok(view.find({ type: 'Button', text: 'Remover do pool' }))
   await view.select({ label: 'Assuntos das configurações' }, 'pool')
-  for (const trecho of [/^Máximo de agentes trabalhando/, /^Memória livre mínima/, /^Ritmo: escolhe o escritor.*de cima para baixo/]) {
+  for (const trecho of [/^Máximo de agentes trabalhando/, /^Memória livre mínima/, /^Ritmo da cota: o escritor é a conta com mais cota sobrando/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
 })
@@ -302,7 +302,7 @@ test('Instalar chama requisitos.instalar com o id e lê os requisitos de novo; c
       'requisitos.instalar': ({ id }) => {
         instalados.push(id)
         r = { ok: true, itens: faltando.itens.map((i) => ({ ...i, ok: true })) }
-        return { ok: true }
+        return r
       },
       'estado.ler': () => estadoExemplo
     }
