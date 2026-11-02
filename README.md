@@ -81,7 +81,7 @@ Na 2.13.0, o coordenador dispara a onda inteira e encerra o turno: o Orca 1.4.24
 
 `orca-plugin/` é um plugin do Orca (`trusted-worker`, Orca ≥ 1.4.246) com um painel lateral só de leitura: **fila de testes** (modo, vagas, teto; travas com worktree, comando, pid e se está viva), **pool de agentes** (vagas usadas/total, peso, papéis e cota curta/longa), **RAM** (GB disponíveis e sessões ociosas) e **workers** do Orca. O worker roda `bash ~/.cache/painel.sh --json` (o coletor, copiado pelo `instalar.sh`) e observa `~/.cache/gs-teste*` e `~/.cache/agentes/`: quando mudam, avisa o painel; o botão **Atualizar** lê de novo. Sem servidor HTTP nem polling.
 
-Para carregar: `orca plugin dev load orca-plugin`. O worker roda código na sua conta, então o Orca pede a sua aprovação do acesso; confira com `orca plugin inspect orca-plugin` antes de aprovar. Validação: `orca plugin validate|check|test orca-plugin` e `npx tsc -p orca-plugin` (depois de `orca plugin types orca-plugin`).
+Para carregar: `orca plugin dev load orca-plugin`. O worker roda código na sua conta, então o Orca pede a sua aprovação do acesso; confira com `orca plugin inspect orca-plugin` antes de aprovar. Validação: `orca plugin validate|check|test orca-plugin` e tipos com `orca plugin types orca-plugin` (grava `.orca/types/`, ignorado pelo git), `npm install --no-package-lock` e `npx tsc -p .` dentro de `orca-plugin/` (o `orca-plugin/package.json` só traz `typescript` e `@types/node` para o worker).
 
 ## Licença
 

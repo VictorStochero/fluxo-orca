@@ -38,14 +38,17 @@ test('estado.ler devolve o JSON do coletor', async () => {
 test('coletor que sai com erro vira coletor_falhou com a mensagem', async () => {
   novaCasa('echo "AVISO: sem Python" >&2; exit 2\n')
   const worker = await mountWorker(main)
-  await assert.rejects(worker.request('estado.ler'), (e: { code?: string; message?: string }) => e.code === 'coletor_falhou' && /sem Python/.test(e.message ?? ''))
+  await assert.rejects(worker.request('estado.ler'), (e: unknown) => {
+    const x = e as { code?: string; message?: string }
+    return x.code === 'coletor_falhou' && /sem Python/.test(x.message ?? '')
+  })
   await worker.deactivate()
 })
 
 test('saída que não é JSON vira coletor_json_invalido', async () => {
   novaCasa('echo isto não é json\n')
   const worker = await mountWorker(main)
-  await assert.rejects(worker.request('estado.ler'), (e: { code?: string }) => e.code === 'coletor_json_invalido')
+  await assert.rejects(worker.request('estado.ler'), (e: unknown) => (e as { code?: string }).code === 'coletor_json_invalido')
   await worker.deactivate()
 })
 
