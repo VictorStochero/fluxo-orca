@@ -55,8 +55,9 @@ igual 'pool: cota curta/longa/alerta' '90 25 True' "$(j 'str(d["pool"]["contas"]
 igual 'orca: cota nativa vale sobre a medida (codex sem medida)' '95 50 orca True' "$(j 'str(d["pool"]["contas"][1]["cota"]["curta"])+" "+str(d["pool"]["contas"][1]["cota"]["longa"])+" "+d["pool"]["contas"][1]["cota"]["fonte"]+" "+str(d["pool"]["contas"][1]["detectada"])' "$tmp/e.json")"
 igual 'orca: conta sem cota nativa mantém a medida' 'None 90 False' "$(j 'str(d["pool"]["contas"][0]["cota"].get("fonte"))+" "+str(d["pool"]["contas"][0]["cota"]["curta"])+" "+str(d["pool"]["contas"][0]["detectada"])' "$tmp/e.json")"
 igual 'auto: conta gerenciada do Orca entra sozinha no pool' 'claude-abcdef12 manual gerenciada@x.com claude' "$(j '" ".join([c["nome"],c["origem"],c["rotulo"],c["agente"]]) if (c:=[x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]) else 0' "$tmp/e.json")"
-igual 'auto: a linha gravada no agentes.conf tem os padroes (vagas 1, peso 1)' 1 "$(grep -c '^claude-abcdef12 agente=claude vagas=1 peso=1$' "$HOME/.claude/agentes.conf")"
-igual 'auto: papeis padrao do agente e ativa' 'escritor,revisor,verificador,mecanico True' "$(j '",".join([x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["papeis"])+" "+str([x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["ativo"])' "$tmp/e.json")"
+igual 'auto: conta gerenciada entra so como medida (sem papel e sem medidor), porque o despacho usa a conta padrao' 1 "$(grep -c '^claude-abcdef12 agente=claude vagas=1 peso=1 papeis= medidor=-$' "$HOME/.claude/agentes.conf")"
+igual 'auto: gerenciada sem papeis e ativa' ' True' "$(j '",".join([x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["papeis"])+" "+str([x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["ativo"])' "$tmp/e.json")"
+igual 'auto: o contas.sh le a gerenciada sem papel e sem medidor (nao entra na escolha do escritor)' 'papeis= medidor=-' "$(CONTAS_CONF="$HOME/.claude/agentes.conf" bash "$raiz/skills/limites-cota/contas.sh" lista | grep '^claude-abcdef12 ' | grep -o 'papeis=.*')"
 cp "$HOME/.claude/agentes.conf" "$tmp/ag.antes"; painel --json > "$tmp/e2.json"
 cmp -s "$HOME/.claude/agentes.conf" "$tmp/ag.antes" && ok 'auto: idempotente, a segunda coleta nao muda o arquivo' || ruim 'auto: a segunda coleta mudou o arquivo' 
 igual 'orca: manual não perde a origem' manual "$(j 'd["pool"]["contas"][0]["origem"]' "$tmp/e.json")"
@@ -157,6 +158,14 @@ ls "$conf_ag".*.tmp >/dev/null 2>&1 && ruim 'config misto: sobrou .tmp' || ok 'c
 rmdir "$conf_fila"; mv "$tmp/fila.bak" "$conf_fila"
 rm -f "$conf_ag"; cfg pool.teto=3; igual 'config pool: cria agentes.conf' 'teto=3' "$(cat "$conf_ag" 2>/dev/null)"
 cfg conta.a.vagas=1; igual 'config conta: sem conta no arquivo não cria conta' 2 $?
+# Registro padrao (arquivo so com globais): nem a auto-adicao do --json nem "Nova conta" trocam o registro padrao por uma conta so.
+printf 'ram_min=2\n' > "$conf_ag"
+PATH="$tmp/bin:$PATH" CONTAS_CATALOGO="$tmp/cat.conf" painel --json > "$tmp/r.json"
+igual 'registro padrao: o --json com agente instalado nao grava conta' 'ram_min=2' "$(cat "$conf_ag")"
+cfg conta.novo.adicionar=codex; igual 'registro padrao: adicionar conta recusa, exit 2' 2 $?
+grep -q 'registro padrão' "$tmp/c.err" && ok 'registro padrao: mensagem pede as contas antes' || ruim "registro padrao: mensagem $(cat "$tmp/c.err")"
+igual 'registro padrao: recusa nao grava' 'ram_min=2' "$(cat "$conf_ag")"
+igual 'registro padrao: o contas.sh ainda traz as contas padrao' 1 "$(CONTAS_CONF="$conf_ag" bash "$raiz/skills/limites-cota/contas.sh" lista | grep -c '^team ')"
 printf 'teto=4\nram_min=3\na agente=claude vagas=2 peso=5 papeis=escritor,revisor\nb agente=codex vagas=1\nb=3\n' > "$conf_ag"
 
 # Modo da fila: global | banco | projeto; recurso (nome antigo) é aceito e gravado como banco.
@@ -211,11 +220,33 @@ cfg 'conta.zz.config=com espaço' conta.zz.adicionar=codex; igual 'conta nova: c
 cfg conta.Zz.adicionar=codex; igual 'conta nova: nome inválido, exit 2' 2 $?
 cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'conta nova: recusas não gravam nada' || ruim 'conta nova: arquivo mudou'
 cfg conta.b.remover=1; igual 'remover: exit 0' 0 $?
-igual 'remover: some a linha da conta e a legada nome=N' '# minhas contas|teto=4|a agente=claude vagas=2 peso=5 papeis=escritor,revisor|nova agente=codex vagas=2 peso=1 config=~/.codex-nova papeis=revisor' "$(junta '|' < "$conf_ag")"
+igual 'remover: some a linha da conta e a legada nome=N' '# minhas contas|teto=4|a agente=claude vagas=2 peso=5 papeis=escritor,revisor|nova agente=codex vagas=2 peso=1 config=~/.codex-nova papeis=revisor|# removida: b codex codex-padrao' "$(junta '|' < "$conf_ag")"
 cfg conta.b.remover=1; igual 'remover: conta inexistente, exit 2' 2 $?
 cfg conta.a.remover=2; igual 'remover: valor diferente de 1, exit 2' 2 $?
 cfg conta.a.remover=1 conta.a.vagas=3 conta.nova.comando=codex; igual 'remover: edição da conta removida é descartada' 0 $?
-igual 'remover: só a nova sobra, com o comando' '# minhas contas|teto=4|nova agente=codex vagas=2 peso=1 config=~/.codex-nova papeis=revisor comando=codex' "$(junta '|' < "$conf_ag")"
+igual 'remover: só a nova sobra, com o comando' '# minhas contas|teto=4|nova agente=codex vagas=2 peso=1 config=~/.codex-nova papeis=revisor comando=codex|# removida: a b claude claude-padrao codex codex-padrao' "$(junta '|' < "$conf_ag")"
+
+# Remover conta detectada: a auto-adicao do --json nao a recria (codex-padrao), ate o usuario adicionar de novo.
+printf 'teto=4\na agente=claude vagas=2 peso=5\nb agente=codex vagas=1\n' > "$conf_ag"
+cfg conta.b.remover=1; igual 'remover detectada: exit 0' 0 $?
+grep -q '^# removida: .*\bb\b' "$conf_ag" && ok 'remover detectada: a marca guarda o nome e o agente' || ruim "remover detectada: sem marca ($(junta '|' < "$conf_ag"))"
+painel --json > "$tmp/rm.json"
+igual 'remover detectada: o --json nao recria a conta (nem codex-padrao)' 0 "$(grep -c '^codex' "$conf_ag")"
+igual 'remover detectada: a conta fica so como detectada, fora do pool' 'orca 0' "$(j '[x for x in d["pool"]["contas"] if x["nome"]=="codex-padrao"][0]["origem"]+" "+str([x for x in d["pool"]["contas"] if x["nome"]=="codex-padrao"][0]["vagas"])' "$tmp/rm.json")"
+cfg conta.b.adicionar=codex; igual 'remover detectada: adicionar de novo, exit 0' 0 $?
+igual 'remover detectada: adicionar tira a marca do nome' 0 "$(grep -c '^# removida: .*\bb\b' "$conf_ag")"
+igual 'remover detectada: a conta voltou ao arquivo' 1 "$(grep -c '^b agente=codex' "$conf_ag")"
+
+# Duas gravacoes ao mesmo tempo no agentes.conf (--config e auto-adicao do --json): nenhuma se perde.
+printf 'teto=4\na agente=claude vagas=1 peso=1\nb agente=codex vagas=1 peso=1\n' > "$conf_ag"
+printf '#!/usr/bin/env bash\nsleep 2\nexit 0\n' > "$HOME/.cache/contas.sh"
+painel --config conta.a.vagas=3 > "$tmp/p1.out" 2>&1 & p1=$!
+painel --config conta.b.peso=5 > "$tmp/p2.out" 2>&1 & p2=$!
+wait $p1; r1=$?; wait $p2; r2=$?
+igual 'trava: as duas gravacoes simultaneas terminam, exit 0' '0 0' "$r1 $r2"
+igual 'trava: as duas mudancas estao no arquivo' 'a agente=claude vagas=3 peso=1|b agente=codex vagas=1 peso=5' "$(grep -E '^(a|b) ' "$conf_ag" | junta '|')"
+[ -d "$conf_ag.trava" ] && ruim 'trava: sobrou a pasta de trava' || ok 'trava: liberada ao fim'
+rm -f "$HOME/.cache/contas.sh"
 
 # pool.ordem: só as linhas de conta mudam de lugar; comentário colado e linhas globais ficam.
 printf '# minhas contas\nteto=4\n# principal\na agente=claude vagas=2 peso=5\nescolha=ordem\nb agente=codex vagas=1\n# extra\nc agente=claude vagas=1 config=~/.claude-c\nram_min=2\n' > "$conf_ag"
@@ -235,13 +266,13 @@ igual 'ordem: combinada, teto gravado' 1 "$(grep -c '^teto=5$' "$conf_ag")"
 
 
 # Conta manual sem escolher agente: o agente sai do executavel do comando (cruzado com o catalogo) ou do diretorio de config.
-printf '# minhas contas\nteto=4\n' > "$conf_ag"
+printf '# minhas contas\nteto=4\nbase agente=claude vagas=1 peso=1\n' > "$conf_ag"
 cfg conta.cfg.adicionar=auto conta.cfg.config=~/.claude-x; igual 'manual: so diretorio de config e claude' 0 $?
 cfg conta.env.adicionar=auto 'conta.env.comando=CLAUDE_CONFIG_DIR=~/.claude-e claude'; igual 'manual: claude por comando com env' 0 $?
 cfg conta.oc.adicionar=auto conta.oc.comando=opencode; igual 'manual: opencode por comando' 0 $?
 cfg conta.cb.adicionar=auto conta.cb.comando=claude-b; igual 'manual: claude-b e claude pelo prefixo' 0 $?
 cfg conta.ca.adicionar=auto 'conta.ca.comando=claude --x'; igual 'manual: comando com argumento' 0 $?
-igual 'manual: linhas gravadas (comentario preservado, comando do catalogo nao gravado, espaco entre aspas)' '# minhas contas|teto=4|cfg agente=claude vagas=1 peso=1 config=~/.claude-x|env agente=claude vagas=1 peso=1 config=~/.claude-e|oc agente=opencode vagas=1 peso=1|cb agente=claude vagas=1 peso=1 comando=claude-b|ca agente=claude vagas=1 peso=1 comando="claude --x"' "$(junta '|' < "$conf_ag")"
+igual 'manual: linhas gravadas (comentario preservado, comando do catalogo nao gravado, espaco entre aspas)' '# minhas contas|teto=4|base agente=claude vagas=1 peso=1|cfg agente=claude vagas=1 peso=1 config=~/.claude-x|env agente=claude vagas=1 peso=1 config=~/.claude-e|oc agente=opencode vagas=1 peso=1|cb agente=claude vagas=1 peso=1 comando=claude-b|ca agente=claude vagas=1 peso=1 comando="claude --x"' "$(junta '|' < "$conf_ag")"
 cp "$conf_ag" "$tmp/ag.bak"
 cfg conta.zz.adicionar=auto conta.zz.comando=xyzzy; igual 'manual: executavel desconhecido, exit 2' 2 $?
 grep -q 'não reconheço o agente do comando xyzzy; agentes conhecidos: ' "$tmp/c.err" && grep -q 'claude' "$tmp/c.err" && ok 'manual: a mensagem lista os agentes conhecidos' || ruim "manual: mensagem $(cat "$tmp/c.err")"
@@ -325,6 +356,14 @@ echo $$ > "$HOME/.cache/gs-teste-3307.lock2/pid"; mkdir -p "$HOME/.cache/fila-es
 painel --json > "$tmp/t.json"
 igual 'testes: dois em execucao saem do mais antigo para o mais novo' '1793600000000 1793640000000' "$(j '" ".join(str(t["desde_ts"]) for t in d["fila"]["testes"] if t["estado"]=="execucao")' "$tmp/t.json")"
 
+# Teste que ja tem a vaga da fila e espera a do teto (fila-teste.sh): um item so, aguardando, com o inicio da espera.
+rm -rf "$HOME/.cache/gs-teste"*.lock* "$HOME/.cache/fila-espera"
+mkdir -p "$HOME/.cache/gs-teste-3307.lock1" "$HOME/.cache/fila-espera/$$"
+echo $$ > "$HOME/.cache/gs-teste-3307.lock1/pid"; echo 'C:/Herd/proj-um [db] desde 20:00:00: pest' > "$HOME/.cache/gs-teste-3307.lock1/dono"; echo 1793640000000 > "$HOME/.cache/gs-teste-3307.lock1/inicio"
+echo 1793650000000 > "$HOME/.cache/fila-espera/$$/inicio_ts"; echo gs-teste-teto.lock > "$HOME/.cache/fila-espera/$$/fila"; echo 'C:/Herd/proj-um' > "$HOME/.cache/fila-espera/$$/worktree"
+painel --json > "$tmp/te.json"
+igual 'testes: vaga da fila + espera do teto e um item so, aguardando, com o inicio da espera' '1 aguardando 1793650000000 1' "$(j 'str(len(d["fila"]["testes"]))+" "+d["fila"]["testes"][0]["estado"]+" "+str(d["fila"]["testes"][0]["desde_ts"])+" "+str(d["fila"]["testes"][0]["vaga"])' "$tmp/te.json")"
+
 # Alertas: estado da cota por conta (medidas falsas de cada tipo) e a lista de alertas no topo.
 rm -rf "$HOME/.cache/gs-teste"*.lock* "$HOME/.cache/fila-espera"
 printf 'a agente=claude vagas=2\nb agente=codex vagas=1\nsl agente=claude vagas=1 config=/x/team\nil agente=claude vagas=1\nan agente=claude vagas=1\nsm agente=claude vagas=1\ninat agente=claude vagas=1 ativo=nao\n' > "$HOME/.claude/agentes.conf"
@@ -363,5 +402,25 @@ rm -rf "$HOME/.cache/gs-teste-3308.lock1"
 rm -f "$m/medida.sl" "$m/medida.il" "$m/medida.an" "$m/medida.inat"
 painel --json > "$tmp/al5.json"
 igual 'alerta: sem problemas, a lista vem vazia' '[]' "$(j '[a for a in d["alertas"] if "Conta" in a["texto"]]' "$tmp/al5.json")"
+
+# Sem login de ponta a ponta: o limites.sh mede a conta deslogada, grava medida.<conta> e o painel alerta (em vez da cota velha).
+mkdir -p "$HOME/.claude-team" "$tmp/bin2"
+cat > "$tmp/bin2/claude" <<'STUBD'
+#!/usr/bin/env bash
+[ "$1 $2" = 'auth status' ] && { echo '{"loggedIn": false, "authMethod": "none"}'; exit 0; }
+printf 'Total cost:            $0.0000\nTotal duration (API):  0s\n'
+STUBD
+chmod +x "$tmp/bin2/claude"
+printf 'team agente=claude vagas=1 peso=1 config=~/.claude-team\n' > "$conf_ag"
+printf 'team: sessão 84%% usado | semana 30%% usado\n#cand team 84 30 1793721600 168\n' > "$m/medida.team"; touch -d '10 minutes ago' "$m/medida.team"
+PATH="$tmp/bin2:$PATH" LIMITES_SEM_API=1 bash "$raiz/skills/limites-cota/limites.sh" > /dev/null 2>&1
+if ! head -n 1 "$m/medida.team" | grep -q ': sem login (rode '; then
+    echo 'AVISO: este limites.sh ainda nao grava a saida "sem login" (frente POOL); medida.team simulada no formato do medidor'
+    printf 'team: sem login (rode CLAUDE_CONFIG_DIR=~/.claude-team claude auth login)\n' > "$m/medida.team"
+fi
+painel --json > "$tmp/sl.json"
+igual 'sem login: a cota da conta deslogada nao fica com o numero velho' 'sem_login None' "$(j '[c for c in d["pool"]["contas"] if c["nome"]=="team"][0]["cota"]["estado"]+" "+str([c for c in d["pool"]["contas"] if c["nome"]=="team"][0]["cota"]["curta"])' "$tmp/sl.json")"
+igual 'sem login: alerta de reconexao com a acao' 'CLAUDE_CONFIG_DIR=~/.claude-team claude auth login' "$(j '[a["acao"] for a in d["alertas"] if "Conta team desconectada" in a["texto"]][0]' "$tmp/sl.json")"
+rm -f "$m/medida.team"
 
 [ "$falhas" = 0 ] && echo 'TUDO OK' || { echo "$falhas falha(s)"; exit 1; }
