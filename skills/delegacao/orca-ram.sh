@@ -18,7 +18,7 @@ lista_workers() {
 : > "$tmp/workers"; cursor=""
 while :; do
     args=(); [ -z "$cursor" ] || args=(--cursor "$cursor")
-    "$orca_cmd" orchestration worker-list "${args[@]}" --json > "$tmp/pagina" 2>/dev/null || { echo 'AVISO: workers indisponíveis' >&2; break; }
+    "$orca_cmd" orchestration worker-list "${args[@]}" --json --full > "$tmp/pagina" 2>/dev/null || { echo 'AVISO: workers indisponíveis' >&2; break; }
     cat "$tmp/pagina" >> "$tmp/workers"; printf '\n' >> "$tmp/workers"
     proximo=$(RAM_ARQ="$(w "$tmp/pagina")" "$py" -I - <<'EOF'
 import json, os, sys

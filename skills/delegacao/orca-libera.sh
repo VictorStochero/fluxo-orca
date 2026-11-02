@@ -23,17 +23,17 @@ for d in "$@"; do
     motivo=$(printf '%s' "$r" | handle_de reason)
     case "$estado" in
         released|already_released|release_pending)
-            h=$(orca orchestration worker-show --dispatch "$d" --json 2>/dev/null | handle_de agentTerminalHandle)
+            h=$(orca orchestration worker-show --dispatch "$d" --json --full 2>/dev/null | handle_de agentTerminalHandle)
             [ -n "$h" ] && rm -f "$reg/$h"
             echo "$d: $estado" ;;
         retained)
-            show=$(orca orchestration worker-show --dispatch "$d" --json 2>/dev/null)
+            show=$(orca orchestration worker-show --dispatch "$d" --json --full 2>/dev/null)
             h=$(printf '%s' "$show" | handle_de agentTerminalHandle)
             run=$(printf '%s' "$show" | handle_de runId)
             outro="?"
             # Terminal reaproveitado: algum dispatch não encerrado do mesmo run ainda o usa. Ilegível → "?" (não fecha).
             if [ -n "$h" ] && [ -n "$run" ] && [ -n "$py" ]; then
-                outro=$(orca orchestration worker-list --run "$run" --json 2>/dev/null | ORCA_H="$h" ORCA_D="$d" "$py" -I -c '
+                outro=$(orca orchestration worker-list --run "$run" --json --full 2>/dev/null | ORCA_H="$h" ORCA_D="$d" "$py" -I -c '
 import json, os, sys
 try: ws = json.JSONDecoder().raw_decode(sys.stdin.read().lstrip())[0]["result"]["workers"]
 except Exception: print("?"); sys.exit()

@@ -19,7 +19,7 @@ acha_python() {
 lista_workers() {
     LISTA_OK=0; LISTA=""
     acha_python || return 0
-    LISTA=$("${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" orchestration worker-list --json 2>/dev/null | "$py" -I -c '
+    LISTA=$("${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" orchestration worker-list --json --full 2>/dev/null | "$py" -I -c '
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -44,7 +44,7 @@ morta() { # Só evidência explícita do Orca libera uma vaga; falhas de transpo
             return 1
         fi
     fi
-    resposta=$("${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" orchestration worker-show --dispatch "$1" --json 2>/dev/null)
+    resposta=$("${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" orchestration worker-show --dispatch "$1" --json --full 2>/dev/null)
     [ -n "$resposta" ] || return 1
     acha_python || return 1
     POOL_JSON="$resposta" POOL_DISPATCH="$1" "$py" -I - <<'EOF'

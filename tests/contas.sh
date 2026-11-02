@@ -149,7 +149,7 @@ igual 'aviso: com fim de turno não avisa' '' "$(bash "$lib" lista | grep -c avi
 printf 'o agente=opencode papeis=escritor
 ' > "$HOME/.claude/agentes.conf"
 igual 'papel: opencode aceito sem fim' 0 "$(rc_carrega)"
-case "$(bash "$lib" lista)" in *"aviso=sem fim de turno: coordenador cobra worker_done"*) ok 'aviso: sem fim de turno' ;; *) ruim 'aviso: sem fim de turno' ;; esac
+case "$(bash "$lib" lista)" in *"aviso=sem fim de turno: Orca avisa parada sem worker_done"*) ok 'aviso: sem fim de turno' ;; *) ruim 'aviso: sem fim de turno' ;; esac
 printf 'o agente=opencode papeis=segunda-opiniao
 ' > "$HOME/.claude/agentes.conf"
 case "$(bash "$lib" lista)" in *aviso*) ruim 'aviso: segunda-opiniao não precisa de fim' ;; *) ok 'aviso: segunda-opiniao não precisa de fim' ;; esac

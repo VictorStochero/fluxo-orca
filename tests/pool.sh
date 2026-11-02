@@ -33,6 +33,7 @@ fi
 }
 if [ "$1 $2 $3" = 'orchestration worker-list --json' ]; then
     echo list >> "$POOL_ESTADOS/chamadas"
+    [ "${4:-}" = --full ] || { echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_2","state":"completed"}]}}'; exit 0; }
     # POOL_LISTA=1: as 100 mais recentes trazem os dispatches de estado conhecido; sem ele, a lista vem vazia.
     printf '{"ok":true,"result":{"workers":['; sep=""
     if [ -n "${POOL_LISTA:-}" ]; then
@@ -48,6 +49,7 @@ if [ "$1 $2 $3" = 'orchestration worker-list --json' ]; then
 fi
 [ "$1 $2 $3 $5" = 'orchestration worker-show --dispatch --json' ] || exit 2
 echo "show $4" >> "$POOL_ESTADOS/chamadas"
+[ "${6:-}" = --full ] || { printf '{"ok":true,"result":{"dispatchId":"%s","state":"completed"}}\n' "$4"; exit 0; }
 estado=$(cat "$POOL_ESTADOS/$4" 2>/dev/null || echo pending)
 case "$estado" in
     inexistente) echo '{"ok":false,"error":{"code":"dispatch_not_found"}}'; exit 1 ;;

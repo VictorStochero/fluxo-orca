@@ -55,7 +55,10 @@ fi
 mkdir -p "$tmp/bin"
 cat > "$tmp/bin/orca" <<'E'
 #!/bin/bash
-echo '{"assigneeHandle":"term_t","status":"running"}'
+case "$*" in
+    'orchestration worker-show --dispatch ctx_abc123 --json --full') echo '{"ok":true,"result":{"dispatch":{"assigneeHandle":"term_t","status":"running"}}}' ;;
+    *) echo '{"ok":true,"result":{"dispatchId":"ctx_abc123","state":"working","terminal":"term_t"}}' ;;
+esac
 E
 chmod +x "$tmp/bin/orca"
 printf 'preâmbulo --dispatch-id ctx_abc123 fim\n' > "$tmp/transcript.txt"

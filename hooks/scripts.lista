@@ -12,7 +12,6 @@ skills/worktree-orca/wt-lib.sh
 skills/delegacao/orca-espera.sh
 skills/delegacao/orca-ram.sh
 skills/delegacao/orca-libera.sh
-skills/delegacao/orca-inicia.sh
 skills/delegacao/orca-tela.sh
 hooks/guarda-externos.sh
 hooks/fim-worker.sh
