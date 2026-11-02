@@ -1,11 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, assert, mountWorker, test } from 'orca/testing'
 import { estadoExemplo } from './fixtures'
 import * as main from './worker'
+import { acharOrca } from './worker'
 
-const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE }
+const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA }
 let casa = ''
 
 // Casa isolada com um painel.sh falso em ~/.cache; o worker lê homedir() ao ativar.
@@ -20,6 +21,8 @@ function novaCasa(coletor: string): string {
 afterEach(() => {
   process.env.HOME = casaOriginal.HOME
   process.env.USERPROFILE = casaOriginal.USERPROFILE
+  if (casaOriginal.LOCALAPPDATA === undefined) delete process.env.LOCALAPPDATA
+  else process.env.LOCALAPPDATA = casaOriginal.LOCALAPPDATA
   if (casa) rmSync(casa, { recursive: true, force: true })
 })
 
@@ -71,5 +74,68 @@ test('arquivo alheio em ~/.cache não dispara estado.mudou', async () => {
   writeFileSync(join(cache, 'outro.txt'), 'x')
   await new Promise((r) => setTimeout(r, 600))
   assert.deepEqual(worker.posts, [])
+  await worker.deactivate()
+})
+
+// Coletor falso: --config grava os argumentos recebidos (um por linha) e recusa chave.ruim como o painel.sh faz.
+const COLETOR_CONFIG = (estado: string) => `if [ "$1" = --config ]; then
+  for a in "$@"; do case "$a" in chave.ruim=*) echo "erro: chave desconhecida (chave.ruim)" >&2; exit 2 ;; esac; done
+  printf '%s\n' "$@" > "$HOME/.cache/args.txt"; exit 0
+fi
+cat <<'JSON'
+${estado}
+JSON
+`
+
+test('config.gravar passa os pares como argumentos separados e devolve o estado novo', async () => {
+  const cache = novaCasa(COLETOR_CONFIG(JSON.stringify(estadoExemplo)))
+  const worker = await mountWorker(main)
+  const valores = { 'fila.vagas': '3', 'conta.a.papeis': 'revisor,mecanico', 'pool.escolha': 'a b; rm -rf x' }
+  assert.deepEqual(await worker.request('config.gravar', { valores }), estadoExemplo)
+  const args = readFileSync(join(cache, 'args.txt'), 'utf8').trim().split('\n')
+  assert.deepEqual(args, ['--config', 'fila.vagas=3', 'conta.a.papeis=revisor,mecanico', 'pool.escolha=a b; rm -rf x'])
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
+})
+
+test('config.gravar: recusa do painel.sh vira config_recusada em português, sem o prefixo erro:', async () => {
+  novaCasa(COLETOR_CONFIG('{}'))
+  const worker = await mountWorker(main)
+  await assert.rejects(worker.request('config.gravar', { valores: { 'chave.ruim': '1' } }), (e: unknown) => {
+    const x = e as { code?: string; message?: string }
+    return x.code === 'config_recusada' && x.message === 'chave desconhecida (chave.ruim)'
+  })
+  await worker.deactivate()
+})
+
+test('config.gravar sem valores é recusado antes de rodar o coletor', async () => {
+  const cache = novaCasa(COLETOR_CONFIG('{}'))
+  const worker = await mountWorker(main)
+  await assert.rejects(worker.request('config.gravar', { valores: {} }), (e: unknown) => (e as { code?: string }).code === 'config_invalida')
+  assert.equal(existsSync(join(cache, 'args.txt')), false)
+  await worker.deactivate()
+})
+
+test('acharOrca: respeita o ORCA_CMD existente e procura o CLI nos lugares do Orca', () => {
+  const existe = (c: string) => c.endsWith('resources/bin/orca.exe') || c.endsWith('resources\\bin\\orca.exe')
+  assert.equal(acharOrca({ ORCA_CMD: 'x' }, 'win32', 'C:/Orca/Orca.exe', existe), undefined)
+  assert.equal(acharOrca({ ORCA_CLI_COMMAND: 'x' }, 'win32', 'C:/Orca/Orca.exe', existe), undefined)
+  assert.match(acharOrca({ LOCALAPPDATA: 'C:/Users/u/AppData/Local' }, 'win32', 'C:/node.exe', (c) => c.includes('Programs')) ?? '', /^C:\/Users\/u\/AppData\/Local\/Programs\/orca\/resources\/bin\/orca\.exe$/)
+  assert.equal(acharOrca({}, 'win32', 'C:/node.exe', () => false), undefined)
+})
+
+test('o coletor roda com ORCA_CMD apontando o CLI da instalação padrão', async () => {
+  if (process.platform !== 'win32') return
+  const cache = novaCasa('echo "{\\"cmd\\":\\"$ORCA_CMD\\"}"\n')
+  const bin = join(casa, 'local', 'Programs', 'orca', 'resources', 'bin')
+  mkdirSync(bin, { recursive: true })
+  writeFileSync(join(bin, 'orca.exe'), '')
+  process.env.LOCALAPPDATA = join(casa, 'local')
+  delete process.env.ORCA_CMD
+  delete process.env.ORCA_CLI_COMMAND
+  const worker = await mountWorker(main)
+  const saida = (await worker.request('estado.ler')) as unknown as { cmd: string }
+  assert.equal(saida.cmd, join(bin, 'orca.exe').replace(/\\/g, '/'))
+  assert.ok(cache)
   await worker.deactivate()
 })

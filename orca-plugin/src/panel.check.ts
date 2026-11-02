@@ -8,10 +8,9 @@ export default defineCheck({
     requests: {
       'estado.ler': () => ({
         ...estadoExemplo,
-        aviso: 'Orca indisponível: RAM e workers sem dados',
+        aviso: 'Orca indisponível',
         fila: { ...estadoExemplo.fila, travas: [] },
-        pool: { ...estadoExemplo.pool, contas: [] },
-        workers: []
+        pool: { ...estadoExemplo.pool, contas: [] }
       })
     }
   },

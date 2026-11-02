@@ -17,16 +17,6 @@ cat > "$tmp/bin/orca" <<'STUB'
 [ -n "${PAINEL_ORCA_FALHA:-}" ] && exit 1
 case "$1 $2" in
     'status --json') echo '{"ok":true,"result":{"app":{"running":true},"runtime":{"appVersion":"9.9.9"}}}' ;;
-    'orchestration run-list') echo '{"ok":true,"result":{"runs":[{"id":"run_1","objective":"Objetivo do run"}]}}' ;;
-    'orchestration worker-list')
-        # Sem --full o Orca 1.4.246 devolve só o resumo (sem dispatchStatus, projection nem resource).
-        case " $* " in *' --full '*) ;; *) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_a","workerState":"ready"}],"page":{"hasMore":false,"nextCursor":null}}}'; exit 0 ;; esac
-        # Com o handle do terminal, o Orca real restringe a lista ao run vinculado (aqui: vazia).
-        [ -n "${ORCA_TERMINAL_HANDLE:-}" ] && { echo '{"ok":true,"result":{"workers":[],"page":{"hasMore":false,"nextCursor":null},"scope":{"source":"bound"}}}'; exit 0; }
-        echo '{"ok":true,"result":{"workers":[
-      {"dispatchId":"ctx_a","taskId":"task_a","runId":"run_1","workerState":"ready","dispatchStatus":"dispatched","projection":{"provider":{"id":"codex","model":"m1"}},"resource":{"worktreeId":"repo-id::C:/x/wt-a"}},
-      {"dispatchId":"ctx_old","taskId":"task_o","runId":"run_1","workerState":"ready","dispatchStatus":"completed","resource":{"worktreeId":"repo-id::C:/x/wt-o"}}],
-      "page":{"hasMore":false,"nextCursor":null},"scope":{"source":"all"}}}' ;;
     *) exit 2 ;;
 esac
 STUB
@@ -66,18 +56,9 @@ igual 'pool: máquina' '1/4 ram_min 3' "$(j 'str(d["pool"]["maquina"]["usadas"])
 igual 'saída: JSON só ASCII (nenhum console estraga o acento)' 0 "$(LC_ALL=C grep -c -P '[^\x00-\x7F]' "$tmp/e.json")"
 igual 'saúde: Orca' 9.9.9 "$(j 'd["saude"]["orca"]["versao"]' "$tmp/e.json")"
 igual 'saúde: script novo desatualizado' True "$(j '"painel.sh" in d["saude"]["scripts_desatualizados"]' "$tmp/e.json")"
-# Workers: objetivo do run e worktree após "::"; dispatch concluído fica fora.
-igual 'workers: só os em andamento' 1 "$(j 'len(d["workers"])' "$tmp/e.json")"
-igual 'workers: objetivo' 'Objetivo do run' "$(j 'd["workers"][0]["objetivo"]' "$tmp/e.json")"
-igual 'workers: worktree' C:/x/wt-a "$(j 'd["workers"][0]["worktree"]' "$tmp/e.json")"
-igual 'workers: agente/modelo' 'codex m1' "$(j 'd["workers"][0]["agente"]+" "+d["workers"][0]["modelo"]' "$tmp/e.json")"
-# Terminal com run vinculado: o painel chama o Orca sem o handle e lista todos os runs.
-ORCA_TERMINAL_HANDLE=term_x painel --json > "$tmp/b.json"
-igual 'workers: todos os runs mesmo com run vinculado' '1 None' "$(j 'str(len(d["workers"]))+" "+str(d["aviso"])' "$tmp/b.json")"
 
 # Orca falhando não derruba o painel.
 PAINEL_ORCA_FALHA=1 painel --json > "$tmp/f.json"; igual 'Orca fora: exit 0' 0 $?
-igual 'Orca fora: workers vazio' '[]' "$(j 'd["workers"]' "$tmp/f.json")"
 igual 'Orca fora: aviso' True "$(j 'bool(d["aviso"])' "$tmp/f.json")"
 
 # Sem Python: aviso e exit 2.

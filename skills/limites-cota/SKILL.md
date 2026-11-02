@@ -6,6 +6,7 @@ description: Use antes de despachar uma onda de workers ou quando perguntarem so
 # Revisão de limite das contas
 
 ## Registro de contas
+O painel do plugin do Orca (`orca-plugin/`) edita este arquivo pelo `bash ~/.cache/painel.sh --config pool.teto=4 conta.<nome>.vagas=2 ...` (`pool.teto`, `pool.ram_min`, `pool.escolha`, `conta.<nome>.vagas|peso|papeis`): reescreve linha a linha preservando comentários e ordem, remove a linha legada `<conta>=N` ao gravar `vagas`, e só troca o arquivo depois de o `contas.sh lista` aprovar o candidato num `.tmp` (tudo ou nada). `papeis=` vazio vale e deixa a conta só como medida.
 As contas da máquina vêm de `~/.claude/agentes.conf` sobre o catálogo do plugin (`agentes-catalogo.conf`: os 45 agentes da tela do Orca, com comando, argumentos e medidor). Uma conta por linha, `nome chave=valor ...`; a ordem das linhas é a prioridade:
 
 ```

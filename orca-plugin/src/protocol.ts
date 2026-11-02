@@ -11,6 +11,7 @@ export type Trava = {
   viva: boolean
 }
 
+/** Cota da conta: 5h = janela curta, Semanal = janela longa (percentuais de 0 a 100). */
 export type Cota = {
   texto: string
   curta: number | null
@@ -19,6 +20,8 @@ export type Cota = {
   alerta: boolean
 }
 
+export type Ocupante = { dispatch: string | null; desde: string | null }
+
 export type Conta = {
   nome: string
   agente: string | null
@@ -26,16 +29,17 @@ export type Conta = {
   usadas: number
   peso: number
   papeis: string[]
+  ocupantes: Ocupante[]
   cota: Cota | null
 }
 
-export type WorkerOrca = {
-  dispatch: string | null
-  estado: string | null
-  agente: string | null
-  modelo: string | null
-  worktree: string | null
-  objetivo: string | null
+export type ItemFila = 'modo' | 'vagas' | 'vagas_projeto' | 'teto' | 'processos'
+
+/** Valor efetivo da máquina e de onde vem; `projetos` lista quem o sobrescreve no .orca/worktree.conf. */
+export type ValorFila = {
+  valor: string | number
+  origem: 'padrao' | 'ambiente' | 'fila.conf'
+  projetos: { projeto: string; valor: string | number }[]
 }
 
 /** Saída de `painel.sh --json` (só os campos que o painel usa). */
@@ -43,16 +47,26 @@ export type Estado = {
   gerado_em: string
   aviso: string | null
   saude: { plugin_versao: string | null; scripts_desatualizados: string[]; orca: { rodando: boolean; versao: string | null } }
-  fila: { modo: string; vagas: number; teto: number; travas: Trava[] }
-  pool: { teto: number; ram_min: number; maquina: { usadas: number; teto: number }; contas: Conta[] }
-  ram: { disponivel_gb: number | null; relatorio: string }
-  workers: WorkerOrca[]
+  fila: { modo: string; vagas: number; teto: number; travas: Trava[]; config: Record<ItemFila, ValorFila> }
+  pool: {
+    teto: number
+    ram_min: number
+    escolha: string
+    papeis_validos: string[]
+    maquina: { usadas: number; teto: number }
+    contas: Conta[]
+  }
 }
 
 declare module 'orca' {
   interface PluginRequests {
     /** Roda o coletor (`~/.cache/painel.sh --json`) e devolve o estado da máquina. */
     'estado.ler': { output: Estado }
+    /**
+     * Grava pelo `painel.sh --config chave=valor ...` (fila.conf e agentes.conf; tudo ou nada) e devolve o estado novo.
+     * Recusa do validador: erro `config_recusada` com a mensagem em português.
+     */
+    'config.gravar': { input: { valores: Record<string, string> }; output: Estado }
   }
   interface PluginPanelEvents {
     /** Fila ou pool mudaram em disco; o painel pede o estado de novo. */

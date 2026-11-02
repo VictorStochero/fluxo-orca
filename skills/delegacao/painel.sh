@@ -46,7 +46,6 @@ PAINEL_ENV_TETO="${FILA_TESTE_TETO:-${GS_TESTE_TETO:-}}" \
 PAINEL_ENV_PROCESSOS="${FILA_TESTE_PROCESSOS:-${GS_TESTE_PROCESSOS:-}}" \
 "$py" -X utf8 -I - "${@:2}" <<'EOF'
 import filecmp, glob, json, os, re, shutil, subprocess, sys, time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 sys.stdout.reconfigure(encoding="utf-8", newline="\n")
 sys.stderr.reconfigure(encoding="utf-8", newline="\n")
@@ -225,30 +224,8 @@ def orca_json(*args):
         return d if r.returncode == 0 and isinstance(d, dict) and d.get("ok") is not False else None
     except (OSError, ValueError, subprocess.SubprocessError): return None
 
-TERMINAIS = {"completed", "failed", "stopped", "abandoned"}
-
-def lista_workers():
-    paginas, cursor = [], None
-    for _ in range(10):
-        # --full: sem ele o worker-list do Orca 1.4.246 omite dispatchStatus, agentTerminalHandle, projection e resource.
-        d = orca_json("orchestration", "worker-list", *(["--cursor", cursor] if cursor else []), "--json", "--full")
-        if d is None: break
-        paginas.append(d)
-        p = (d.get("result") or {}).get("page") or {}
-        # Histórico vem do mais novo ao mais antigo (milhares): para na primeira página sem dispatch em andamento.
-        if not any(x.get("dispatchStatus") not in TERMINAIS for x in (d.get("result") or {}).get("workers") or []): break
-        proximo = p.get("nextCursor") if p.get("hasMore") else None
-        if not proximo or proximo == cursor: break
-        cursor = proximo
-    return paginas
-
 aviso = []
-# As chamadas ao Orca são independentes: em paralelo, cada processo no Windows custa quase um segundo.
-with ThreadPoolExecutor(3) as ex:
-    f_st = ex.submit(orca_json, "status", "--json")
-    f_runs = ex.submit(orca_json, "orchestration", "run-list", "--json")
-    f_ws = ex.submit(lista_workers)
-    st, runs, paginas = f_st.result(), f_runs.result(), f_ws.result()
+st = orca_json("status", "--json")
 
 # saúde
 raiz = le(os.path.join(cache, "fluxo-orca-raiz")).strip()
@@ -272,7 +249,7 @@ if st:
     r = st.get("result") or {}
     orca = {"rodando": bool((r.get("app") or {}).get("running")), "versao": (r.get("runtime") or {}).get("appVersion")}
 else:
-    aviso.append("Orca indisponível: workers sem dados")
+    aviso.append("Orca indisponível")
 saude = {
     "plugin_raiz": raiz or None, "plugin_versao": versao, "scripts_desatualizados": desatualizados,
     "orca": orca, "python": sys.version.split()[0],
@@ -369,23 +346,9 @@ for l in conf_linhas:  # linhas "conta=N" mudam só as vagas (contas.sh)
 teto = conf.get("teto", 0); ram_min = conf.get("ram_min", 0)
 pool = {"teto": teto, "ram_min": ram_min, "escolha": escolha, "papeis_validos": list(PAPEIS), "maquina": {"usadas": total, "teto": teto}, "contas": contas}
 
-# workers
-objetivos = {r.get("id"): r.get("objective") for r in ((runs or {}).get("result") or {}).get("runs") or []}
-workers = []
-for pagina in paginas:
-    for x in (pagina.get("result") or {}).get("workers") or []:
-        if x.get("dispatchStatus") in TERMINAIS: continue
-        prov = x.get("projection") or {}; wt = (x.get("resource") or {}).get("worktreeId") or ""
-        workers.append({
-            "dispatch": x.get("dispatchId"), "task": x.get("taskId"), "run": x.get("runId"),
-            "objetivo": objetivos.get(x.get("runId")), "estado": x.get("workerState"), "despacho": x.get("dispatchStatus"),
-            "agente": (prov.get("provider") or {}).get("id"), "modelo": (prov.get("provider") or {}).get("model"),
-            "worktree": wt.split("::", 1)[1] if "::" in wt else (wt or None),
-        })
-
-sobrescritas_dos_projetos([t["worktree"] for t in travas if t["worktree"]] + [w["worktree"] for w in workers if w["worktree"]])
+sobrescritas_dos_projetos([t["worktree"] for t in travas if t["worktree"]])
 
 estado = {"gerado_em": datetime.now().astimezone().isoformat(timespec="seconds"), "aviso": "; ".join(aviso) or None,
-          "saude": saude, "fila": fila, "pool": pool, "workers": workers}
+          "saude": saude, "fila": fila, "pool": pool}
 print(json.dumps(estado, ensure_ascii=True, indent=2))  # ASCII puro: nenhuma codificação de console ou pipe estraga o acento
 EOF
