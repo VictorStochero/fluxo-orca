@@ -130,12 +130,15 @@ libera() { # nome registrado(sim|nao) outro_ativo(sim|nao|ilegivel) fecha_espera
     printf '%s' '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_a","dispatchStatus":"completed","agentTerminalHandle":"term_t","projection":{}}'"$outro"']}}' \
         | "$py" -m json.tool > "$h/lista.json"
     [ "$3" = ilegivel ] && echo '{"ok":true,"result":' > "$h/lista.json"
+    # worker-show --full real: indentado, runId em dispatch e o handle do terminal em worker.
+    printf '%s' '{"ok":true,"result":{"dispatch":{"id":"ctx_a","runId":"run_t","status":"completed"},"worker":{"dispatchId":"ctx_a","state":"succeeded","agentTerminalHandle":"term_t"}}}' \
+        | "$py" -m json.tool > "$h/show.json"
     cat > "$h/bin/orca" <<EOF
 #!/bin/bash
 case "\$*" in
     *"terminal create"*) echo '{"ok":true,"result":{"terminal":{"handle":"term_t"}}}' ;;
     *worker-release*) echo '{"ok":true,"result":{"state":"retained","reason":"external_terminal"}}' ;;
-    *worker-show*--full*) echo '{"ok":true,"result":{"dispatch":{"runId":"run_t"},"worker":{"agentTerminalHandle":"term_t"}}}' ;;
+    *worker-show*--full*) cat "$h/show.json" ;;
     *worker-list*--full*) cat "$h/lista.json" ;;
     *worker-show*) echo '{"ok":true,"result":{"dispatchId":"ctx_a","state":"completed","terminal":"term_t"}}' ;;
     *worker-list*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_b","state":"working","terminal":"term_t"}]}}' ;;
