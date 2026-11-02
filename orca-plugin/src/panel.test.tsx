@@ -213,6 +213,36 @@ test('Remover do pool pede confirmação e só então grava conta.<nome>.remover
   assert.deepEqual(enviados, [{ 'conta.codex.remover': '1' }])
 })
 
+test('ordem: conta de origem orca (fora do agentes.conf) não entra em pool.ordem', async () => {
+  const enviados: unknown[] = []
+  const contas = estadoExemplo.pool.contas.map((c) => (c.nome === 'claude-abcdef12' ? { ...c, origem: 'orca' as const } : c))
+  view = await mount(panel, { host: hostCom(enviados, { ...estadoExemplo, pool: { ...estadoExemplo.pool, contas } }) })
+  await abrir(view, 'contas')
+  await view.select({ label: 'Conta a configurar' }, 'codex')
+  await view.press({ type: 'IconButton', label: 'Subir' })
+  assert.deepEqual(enviados, [{ 'pool.ordem': 'codex,pessoal' }])
+})
+
+test('ordem e remoção: a recusa do backend fica visível na seção da conta, e a conta continua escolhida', async () => {
+  const host = mockHost({
+    requests: {
+      'estado.ler': () => estadoExemplo,
+      'config.gravar': () => {
+        throw hostError('config_recusada', 'conta inexistente no agentes.conf: codex')
+      }
+    }
+  })
+  view = await mount(panel, { host })
+  await abrir(view, 'contas')
+  await view.select({ label: 'Conta a configurar' }, 'codex')
+  await view.press({ type: 'IconButton', label: 'Subir' })
+  assert.ok(view.find({ text: 'conta inexistente no agentes.conf: codex' }))
+  await view.press({ type: 'Button', text: 'Remover do pool' })
+  await view.press({ type: 'Button', text: 'Confirmar remoção' })
+  assert.ok(view.find({ text: 'conta inexistente no agentes.conf: codex' }))
+  assert.equal(view.valueOf({ label: 'Conta a configurar' }), 'codex')
+})
+
 test('Nova conta manual: nome, comando do CLI e diretório de config (um dos dois basta) viram adicionar=auto, com dicas e sem agente do catálogo', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })

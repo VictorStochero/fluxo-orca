@@ -71,7 +71,7 @@ export const estadoComAlertas: Estado = {
         ...estadoExemplo.pool.contas[0],
         nome: 'team',
         ativo: true,
-        cota: { texto: 'team: sem login (rode CLAUDE_CONFIG_DIR=C:/Users/x/.claude-team claude auth login)', curta: 84, longa: 30, medida_ha_min: 1400, alerta: true, estado: 'sem_login', acao: 'CLAUDE_CONFIG_DIR=C:/Users/x/.claude-team claude auth login' }
+        cota: { texto: 'team: sem login (rode CLAUDE_CONFIG_DIR=C:/Users/x/.claude-team claude auth login)', curta: null, longa: null, medida_ha_min: 1400, alerta: true, estado: 'sem_login', acao: 'CLAUDE_CONFIG_DIR=C:/Users/x/.claude-team claude auth login' }
       }
     ]
   }

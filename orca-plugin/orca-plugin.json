@@ -3,12 +3,11 @@
   "id": "fluxo-orca",
   "name": "Fluxo Orca",
   "version": "0.1.0",
-  "description": "Painel de monitoramento do fluxo-orca: fila de testes, pool de agentes, RAM e workers do Orca.",
+  "description": "Fila de testes e pool de agentes do fluxo-orca, configuráveis pelo painel.",
   "engines": {
     "orca": ">=1.4.246"
   },
   "execution": "trusted-worker",
-  "capabilities": [{ "kind": "storage:own" }],
   "pluginApi": 1,
   "main": "src/worker.ts",
   "capabilities": [

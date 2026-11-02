@@ -108,6 +108,8 @@ declare module 'orca' {
      * Recusa do validador: erro `config_recusada` com a mensagem em português.
      */
     'config.gravar': { input: { valores: Record<string, string> }; output: Estado }
+    /** Vigília de long-poll da atualização automática do plugin; só responde ao ser cancelada ou ao ligar. */
+    'auto.assistir': { output: true }
   }
   interface PluginPanelEvents {
     /** Fila ou pool mudaram em disco; o painel pede o estado de novo. */

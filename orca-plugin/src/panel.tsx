@@ -26,7 +26,6 @@ import {
   Table,
   Tabs,
   Text,
-  ui,
   update,
   type OrcaNode,
   type PanelContext,
@@ -202,7 +201,7 @@ type Coluna = { key: string; label: string; align?: 'start' | 'center' | 'end'; 
 
 /**
  * Table nativa que expande a linha: a selecionada ganha, logo abaixo, linhas de detalhe (desabilitadas) com o rótulo na
- * primeira coluna e o valor na segunda. `selectionMode="multiple"`: várias abertas, clicar de novo recolhe. Só leitura.
+ * primeira coluna e o valor na segunda. `selectionMode="single"` com seleção sempre vazia: cada clique alterna a linha, várias podem ficar abertas. Só leitura.
  */
 function TabelaExpansivel(props: {
   label: string
@@ -412,13 +411,13 @@ function SecaoPool({ e }: { e: Estado }) {
 }
 
 /** Sobe ou desce uma conta: grava a lista completa das contas na ordem nova. */
-function mover(contas: Conta[], nome: string, delta: -1 | 1): Promise<boolean> {
-  const nomes = contas.map((c) => c.nome)
+function mover(nomes: string[], nome: string, delta: -1 | 1, secao: string): Promise<boolean> {
   const i = nomes.indexOf(nome)
   const j = i + delta
   if (i < 0 || j < 0 || j >= nomes.length) return Promise.resolve(false)
-  ;[nomes[i], nomes[j]] = [nomes[j], nomes[i]]
-  return salvar('ordem', [], { 'pool.ordem': nomes.join(',') })
+  const nova = [...nomes]
+  ;[nova[i], nova[j]] = [nova[j], nova[i]]
+  return salvar(secao, [], { 'pool.ordem': nova.join(',') })
 }
 
 /** Edição da conta escolhida: vagas, peso, config, papéis, ordem, "Não utilizar" e remover. */
@@ -433,15 +432,16 @@ function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
   const papeis = (ed[chavePapeis] ?? c.papeis.join(',')).split(',').filter(Boolean)
   const alterna = (p: string, marcado: boolean) =>
     mudar(chavePapeis, e.pool.papeis_validos.filter((x) => (x === p ? marcado : papeis.includes(x))).join(','))
-  const noPool = e.pool.contas.map((x) => x.nome)
+  // Só contas do agentes.conf entram na ordem (as de origem 'orca' não estão lá).
+  const noPool = e.pool.contas.filter((x) => x.origem !== 'orca').map((x) => x.nome)
   const naoUtilizar = (ed[chaveAtivo] ?? (c.ativo ? 'sim' : 'nao')) === 'nao'
   const ocupado = read(gravando) !== null
   return (
     <Stack gap="sm">
       <Row gap="xs" align="center">
         <Text size="sm">{t.pool.ordemNaTabela}</Text>
-        <IconButton icon="collapse" label={t.pool.subir} size="xs" variant="ghost" disabled={ocupado || noPool[0] === c.nome} onPress={() => void mover(e.pool.contas, c.nome, -1)} />
-        <IconButton icon="expand" label={t.pool.descer} size="xs" variant="ghost" disabled={ocupado || noPool[noPool.length - 1] === c.nome} onPress={() => void mover(e.pool.contas, c.nome, 1)} />
+        <IconButton icon="collapse" label={t.pool.subir} size="xs" variant="ghost" disabled={ocupado || noPool[0] === c.nome} onPress={() => void mover(noPool, c.nome, -1, secao)} />
+        <IconButton icon="expand" label={t.pool.descer} size="xs" variant="ghost" disabled={ocupado || noPool[noPool.length - 1] === c.nome} onPress={() => void mover(noPool, c.nome, 1, secao)} />
       </Row>
       <ComDica texto={t.pool.dicas.vagas}>
         <Input label={t.pool.vagas} value={ed[chaveVagas] ?? String(c.vagas)} onChange={(x) => mudar(chaveVagas, x)} />
@@ -479,8 +479,7 @@ function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
               icon="delete"
               onPress={() => {
                 set(removendo, null)
-                set(contaEscolhida, null)
-                void salvar(secao, [], { [`conta.${c.nome}.remover`]: '1' })
+                void salvar(secao, [], { [`conta.${c.nome}.remover`]: '1' }).then((ok) => ok && set(contaEscolhida, null))
               }}
             >
               {t.pool.confirmar}
@@ -629,23 +628,13 @@ function SecaoConfiguracoes({ e }: { e: Estado }) {
   ] as const
   return (
     <Collapsible title={t.configuracoes.titulo} description={t.configuracoes.descricao}>
-      {ui.has('Tabs') ? (
-        <Tabs label={t.configuracoes.assuntos} defaultValue="fila">
-          {abas.map((a) => (
-            <Tab key={a.id} value={a.id} label={t.configuracoes.abas[a.id]}>
-              {a.corpo}
-            </Tab>
-          ))}
-        </Tabs>
-      ) : (
-        <Stack gap="sm">
-          {abas.map((a) => (
-            <Collapsible key={a.id} title={t.configuracoes.abas[a.id]}>
-              {a.corpo}
-            </Collapsible>
-          ))}
-        </Stack>
-      )}
+      <Tabs label={t.configuracoes.assuntos} defaultValue="fila">
+        {abas.map((a) => (
+          <Tab key={a.id} value={a.id} label={t.configuracoes.abas[a.id]}>
+            {a.corpo}
+          </Tab>
+        ))}
+      </Tabs>
     </Collapsible>
   )
 }
