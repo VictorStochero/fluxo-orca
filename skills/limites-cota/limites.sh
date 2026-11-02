@@ -56,7 +56,8 @@ mede() {
     claude) CONTA_CONFIG=$(conta_campo "$c" config) bash "$aqui/medidores/claude.sh" "$c" > "$tmp/m.$i" 2>&1 ;;
     orca:*) bash "$aqui/medidores/orca.sh" "$c" "${med#orca:}" > "$tmp/m.$i" 2>&1 ;;
   esac
-  if [ "$cache_min" -gt 0 ] && legivel "$tmp/m.$i" "$c"; then
+  # A falha do medidor também vai ao cache (o painel lê o "sem login"); a reutilização exige legivel, então a conta é remedida.
+  if [ "$cache_min" -gt 0 ] && { legivel "$tmp/m.$i" "$c" || grep -qE ': (sem login|ilegível)' "$tmp/m.$i"; }; then
     mkdir -p "$cache_dir" && cat "$tmp/m.$i" > "$arq.$$" && mv "$arq.$$" "$arq"
   fi
 }

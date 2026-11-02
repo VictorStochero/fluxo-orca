@@ -80,6 +80,14 @@ igual 'pessoal deslogada: sem pasta de config' 'pessoal: sem login (rode claude 
 saida=$(MED_SEM_SEMANA=1 CONTA_CONFIG="$cfg_t" bash "$med/claude.sh" team)
 igual 'team logada com /usage ilegível continua ilegível' 'team: ilegível' "$saida"
 
+# limites.sh grava a falha "sem login" no cache que o painel lê; a medida boa antiga não sobrevive e a conta fica fora da escolha.
+mkdir -p "$HOME/.cache/agentes"
+printf 'team: sessão 10%% usado\n#cand team 10 6 1793721600 168\n' > "$HOME/.cache/agentes/medida.team"; touch -d '10 minutes ago' "$HOME/.cache/agentes/medida.team"
+printf 'team agente=claude vagas=1 config=%s\n' "$cfg_t" > "$HOME/.claude/agentes.conf"
+MED_DESLOGADO=1 LIMITES_USAGE_URL=$(url "$tmp/inexistente.json") bash "$raiz/skills/limites-cota/limites.sh" > "$tmp/l.out" 2>&1
+comeca 'limites: medida.team guarda o sem login' 'team: sem login' "$(cat "$HOME/.cache/agentes/medida.team")"
+igual 'limites: conta sem login fora da escolha' 0 "$(grep -c '^#cand' "$HOME/.cache/agentes/medida.team")"
+
 # Orca: rateLimits do `orca account list --json`, uma leitura por execução.
 agora_ms=$(( $(date +%s) * 1000 ))
 as23=$(( $(date -d '23:00' +%s) * 1000 ))
