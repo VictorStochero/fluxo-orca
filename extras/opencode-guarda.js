@@ -1,4 +1,4 @@
-// Trava de comando remoto, bulk replace e teste fora da fila para workers do opencode (plugin global).
+// Trava de comando remoto e bulk replace para workers do opencode (plugin global).
 // Delega ao guarda-externos.sh; https://opencode.ai/docs/plugins/ (tool.execute.before: lançar erro bloqueia a chamada).
 import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"

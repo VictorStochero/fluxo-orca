@@ -12,7 +12,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 
 ## Como coordenador (sessão principal sem Claude Code)
 - Equivalentes genéricos das ferramentas do Claude Code: **pergunta interativa ao usuário** (`AskUserQuestion`) = o recurso de pergunta/escolha do seu agente; sem ele, uma pergunta no texto com contexto para decidir e a opção recomendada marcada, uma decisão por vez. **Consulta curta read-only** (`Agent tool`/Explore) = o subagente ou a busca somente leitura do seu agente. **Trabalho** (escritor, revisor, auditoria) = worker do Orca pela skill `orchestration`, nunca na própria sessão.
-- Hooks do plugin (bloqueio de bulk replace, de teste fora da fila, de despacho fora do Orca, de SQL fora de transação) **não existem fora do Claude Code**: valem como regra escrita, que você cumpre sozinho. A trava de comando remoto só existe onde o agente tem hook (`instala-agente.sh` mostra). Conferir antes de despachar: `bash ~/.cache/limites.sh --escritor` e `bash ~/.cache/vaga-agente.sh livres`.
+- Hooks do plugin (bloqueio de bulk replace, de teste fora da fila, de despacho fora do Orca, de SQL fora de transação) **não existem fora do Claude Code**: valem como regra escrita, que você cumpre sozinho. A trava de comando remoto só existe onde o agente tem hook (`instala-agente.sh` mostra). Conferir antes de despachar: `~/.agents/bin/agent-pool writer` e `~/.agents/bin/agent-pool slot free`.
 - Antes de despachar: skill `delegacao` (worktree por tarefa, pacote de revisão, merge só depois do gate) e `limites-cota` (quem escreve). Antes de declarar pronto: reexecutar os testes pela fila e conferir o diff arquivo a arquivo — relatório de worker é indício, não prova.
 - Ação remota (servidor, produção): mostrar o comando exato, o alvo e o efeito, e esperar aprovação expressa do usuário, um comando por vez.
 - **Worker não sobe nada**: worker só commita local; push, PR, merge e comentário remoto saem da sessão principal, depois da auditoria, com comando, alvo e efeito apresentados e aprovados um a um.
@@ -20,7 +20,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 - **Worktree filho do coordenador**: worktree de tarefa nasce filho do worktree da sessão coordenadora (`--parent-worktree path:<coordenador>`), nunca solto.
 - **Ordem do usuário não se reduz**: "aplicar a recomendada" vale para o que o usuário não decidiu; variante menor de uma ordem explícita vira pergunta, nunca decisão silenciosa.
 - **Resposta automática não é decisão**: pergunta interativa que volta com todas as recomendadas sem resposta real do usuário é tratada como não respondida — perguntar de novo no texto e esperar; nada vai a worker nem a registro antes.
-- **Pergunta pendente não para o fluxo**: com pergunta aberta, despachar o que não depende da resposta e encerrar o turno; o Orca acorda com o que chegar.
+- **Pergunta pendente não para o fluxo**: com pergunta aberta, despachar o que não depende da resposta, armar `bash ~/.cache/orca-espera.sh --run <run_id>` em background e encerrar o turno; ele acorda com o que chegar (o wake do Orca não acorda sessão parada).
 - **A recomendação sai destes critérios, nesta ordem, e a pergunta cita o que cada um diz:** (1) arquitetura — o guia/wiki do projeto (`wiki/arquitetura/`, `docs/` ou `doc/`) (vence o código vizinho; onde for omisso, decide-se pela regra análoga e o guia é complementado na mesma entrega); (2) skills — a skill da stack e as boas práticas que ela indica (ex.: `laravel-best-practices`) e as skills do projeto (`.claude/skills`, `.ai/skills`); (3) padrões do framework (ex.: "Laravel way", docs oficiais); (4) ponytail; (5) CLAUDE.md/AGENTS.md do projeto. Dados de produção (consulta só leitura) entram como evidência de risco — quem usa, quanto —, não como critério de arquitetura. Critério que não se aplica é omitido.
 
 ## Como worker do Orca
@@ -43,7 +43,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 - Censo e auditoria com busca nativa (rg/grep sem pipe que resuma) — quanto mais limpa a resposta, mais suspeita.
 
 ## Testes e validação
-- **Testes só pela fila**: `bash ~/.cache/fila-teste.sh <argumentos>` (exit 75 = `FILA OCUPADA`, rodar de novo). Nunca o comando de teste direto. Um arquivo por chamada.
+- **Testes só pela fila**: `~/.agents/bin/agent-pool test -- <comando>` (exit 75 = `FILA OCUPADA`, rodar de novo). Nunca o comando de teste direto. Um arquivo por chamada.
 - **Relatório e log fora do repo**: evidência vai no `worker_done` e no PR; arquivo de apoio em `~/.cache/handoff/<tarefa>/`, nunca versionado (`reports/`, `*.log`).
 - Nenhuma chamada passa de 10 min: dividir por arquivo e **commitar antes de verificação longa**. Gravar o relatório em arquivo desde o primeiro achado.
 - Após cada etapa: formatador/linter da stack nos arquivos tocados; teste de regressão (sem teste no caminho, criar um mínimo); falhou → não declarar concluído.

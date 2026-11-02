@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Vigia de saúde: sai na primeira novidade; mensagens chegam pelo wake do Orca.
-# Uso: bash ~/.cache/orca-espera.sh [--run <run_id>] [--max-min 25]
+# Vigia: sai na primeira mensagem não lida ou novidade de saúde; o wake do Orca não acorda sessão parada.
+# Uso: bash ~/.cache/orca-espera.sh [--run <run_id>] [--max-min 5]
 for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break; done
 [ -n "$py" ] || { echo "orca-espera: precisa de python." >&2; exit 2; }
-run=(); max=25
+run=(); max=5
 while [ $# -gt 0 ]; do
     case "$1" in --run) run=(--run "$2"); shift 2 ;; --max-min) max=$2; shift 2 ;; *) echo "argumento desconhecido: $1" >&2; exit 2 ;; esac
 done
@@ -16,42 +16,38 @@ fim=$(( $(date +%s) + max * 60 ))
 cota_min=${ORCA_ESPERA_COTA_MIN:-20}
 [[ "$cota_min" =~ ^[0-9]+$ ]] || { echo "ORCA_ESPERA_COTA_MIN deve ser inteiro (0 desliga)." >&2; exit 2; }
 avisadas="$dir/.cota-avisada.${run[1]:-geral}"; consulta="$avisadas.consulta"
-contas_lib="$(dirname "$0")/../limites-cota/contas.sh"
-[ -f "$contas_lib" ] || contas_lib="$(dirname "$0")/contas.sh"
-source "$contas_lib" 2>/dev/null && contas_carrega 2>/dev/null || RAM_MIN_GB=0
-ram_avisada="$dir/.ram-avisada.${run[1]:-geral}"
-memoria() {
-    [ "$RAM_MIN_GB" = 0 ] && return 1
-    local rc
-    bash "$(dirname "$0")/orca-ram.sh" --portao "$RAM_MIN_GB" 2>/dev/null; rc=$?
-    if [ "$rc" = 75 ]; then
-        [ "$(cat "$ram_avisada" 2>/dev/null)" = "$RAM_MIN_GB" ] && return 1
-        printf '%s\n' "$RAM_MIN_GB" > "$ram_avisada"
-        echo "!! memória abaixo de $RAM_MIN_GB GB: rode bash ~/.cache/orca-ram.sh"
-        return 0
-    fi
-    [ "$rc" = 0 ] && rm -f "$ram_avisada"
-    return 1
-}
+pool="$HOME/.agents/bin/agent-pool"; [ -x "$pool" ] || pool=$(command -v agent-pool)
 
-# Fornecedor que passou de 80% em alguma janela: avisa antes de estourar, uma vez até cair abaixo e subir de novo.
-# O intervalo vale entre rearmes (mtime de $consulta): o limites.sh leva 30–60 s e não pode rodar a cada rearme.
+# Conta que passou de 80% em alguma janela: avisa antes de estourar, uma vez até cair abaixo e subir de novo.
+# O intervalo vale entre rearmes (mtime de $consulta): a medição não deve rodar a cada rearme.
+# A RAM não é vigiada aqui: o agent-pool recusa a vaga (slot take, exit 75) quando falta memória.
 cota() {
     [ "$cota_min" = 0 ] && return 1
+    [ -n "$pool" ] || return 1
     [ -e "$consulta" ] && [ $(( $(date +%s) - $(date -r "$consulta" +%s) )) -lt $(( cota_min * 60 )) ] && return 1
     touch "$consulta"
-    local linhas novas rc
-    linhas=$(timeout 120 bash "${ORCA_LIMITES:-$HOME/.cache/limites.sh}" --alerta 2>/dev/null); rc=$?
+    local json linhas novas
     # Falha ou timeout: sem aviso e sem esquecer o que já foi avisado.
-    [ $rc = 0 ] || [ $rc = 3 ] || return 1
+    json=$(timeout 120 "$pool" status --json 2>/dev/null) || return 1
+    linhas=$(printf '%s' "$json" | "$py" -I -c '
+import json, sys
+try: contas = json.load(sys.stdin)["pool"]["contas"]
+except (ValueError, KeyError, TypeError): sys.exit(1)
+for c in contas:
+    m = c.get("medida") or {}
+    if c.get("inativa") or m.get("estado") != "ok": continue
+    for janela, v in (("5h", m.get("curta")), ("semana", m.get("longa"))):
+        if isinstance(v, (int, float)) and v >= 80: print("%s %s %d%%" % (c["conta"], janela, round(v)))
+') || return 1
     novas=$(printf '%s\n' "$linhas" | while IFS= read -r l; do
+        l=${l%$'\r'}
         [ -n "$l" ] || continue
         grep -qxF "$(printf '%s' "$l" | awk '{print $1, $2}')" "$avisadas" 2>/dev/null || printf '%s\n' "$l"
     done)
-    printf '%s\n' "$linhas" | awk 'NF {print $1, $2}' > "$avisadas"
+    printf '%s\n' "$linhas" | tr -d '\r' | awk 'NF {print $1, $2}' > "$avisadas"
     [ -n "$novas" ] || return 1
     printf '%s\n' "$novas" | sed 's/^/!! cota acima de 80%: /'
-    echo "   próximas etapas: bash ~/.cache/limites.sh --escritor (fornecedor acima do teto fica fora da vez)"
+    echo "   próximas etapas: ~/.agents/bin/agent-pool writer --reserve <tag> (escolhe a conta com mais folga)"
 }
 
 # Confere somente sinais de saúde que o Orca não notifica por mensagem.
@@ -144,18 +140,28 @@ for w in ws:
         except (ValueError, KeyError, TypeError, IndexError): pass
     if tela and anterior.get("limite") != tela:
         alerta = True
-        print("!! %s bateu limite de cota: %s\n   redistribuir a etapa (limites.sh --escritor) ou esperar o reset" % (w["dispatchId"], tela[:200]))
+        print("!! %s bateu limite de cota: %s\n   redistribuir a etapa (~/.agents/bin/agent-pool writer --reserve <tag>) ou esperar o reset" % (w["dispatchId"], tela[:200]))
     estado["limite"] = tela
     grava(estado_arq, estado)
 sys.exit(0 if alerta else 1)
 EOF
 }
 
+# --peek lista sem marcar como lida: o coordenador lê com o check normal ao acordar.
+mensagens() {
+    orca orchestration check "${run[@]}" --peek --json 2>/dev/null | "$py" -I -c '
+import json, sys
+try: ms = json.load(sys.stdin)["result"].get("messages") or []
+except Exception: sys.exit(1)
+for m in ms: print("!! mensagem", m.get("type"), m.get("id"), (m.get("subject") or "")[:80])
+sys.exit(0 if ms else 1)'
+}
+
 while [ "$(date +%s)" -lt "$fim" ]; do
-    memoria && exit 0
     restante=$(( fim - $(date +%s) )); espera=60
     [ "$restante" -lt "$espera" ] && espera=$restante
     [ "$espera" -le 0 ] && break
+    mensagens && { echo "Ler com: orca orchestration check ${run[*]}"; exit 0; }
     confere && exit 0
     cota && exit 0
     sleep "$espera"

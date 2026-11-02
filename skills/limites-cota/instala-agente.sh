@@ -9,10 +9,11 @@ agente=${1:-}; APLICAR=0
 if [ -z "$agente" ] || [ $# -gt 2 ] || { [ $# = 2 ] && [ $APLICAR = 0 ]; }; then
     echo 'uso: instala-agente.sh <agente> [--aplicar]' >&2; exit 2
 fi
-. "$aqui/contas.sh"
 . "$RAIZ/hooks/lib-instala.sh"
-_contas_define a "$agente" || { echo "instala-agente: agente fora do catálogo ($agente)" >&2; exit 2; }
-pre=$(conta_campo a pre); fim=$(conta_campo a fim)
+catalogo=${INSTALA_CATALOGO:-$aqui/agentes-catalogo.conf}
+linha=$(awk -F'|' -v a="$agente" '$1 == a {print; exit}' "$catalogo" 2>/dev/null | tr -d '\r')
+[ -n "$linha" ] || { echo "instala-agente: agente fora do catálogo ($agente)" >&2; exit 2; }
+IFS='|' read -r _ _ _ _ _ pre fim regras skills _ <<< "$linha"
 cache="$HOME/.cache"
 DRY=--dry; [ $APLICAR = 1 ] && DRY=""
 INI='<!-- fluxo-orca:inicio -->'; FIM='<!-- fluxo-orca:fim -->'
@@ -52,9 +53,9 @@ indice_skills() { # agente sem diretório de skills: o arquivo de regras aponta 
 
 instala_regras() {
     local f bloco atual novo
-    f=$(exp "$(conta_campo a regras)")
+    f=$(exp "$regras")
     if [ "$f" = - ]; then echo "  [manual]       sem arquivo global de regras conhecido: coloque extras/AGENTS.global.md onde o $agente lê instruções"; return; fi
-    bloco=$(printf '%s\n' "$INI"; cat "$RAIZ/extras/AGENTS.global.md"; [ "$(conta_campo a skills)" = - ] && indice_skills; printf '%s' "$FIM")
+    bloco=$(printf '%s\n' "$INI"; cat "$RAIZ/extras/AGENTS.global.md"; [ "$skills" = - ] && indice_skills; printf '%s' "$FIM")
     atual=$(cat "$f" 2>/dev/null)
     case "$atual" in
         *"$INI"*) novo=${atual%%"$INI"*}$bloco${atual#*"$FIM"} ;;
@@ -68,7 +69,7 @@ instala_regras() {
 
 instala_skills() {
     local dest d igual=1
-    dest=$(exp "$(conta_campo a skills)"); [ "$dest" = - ] && dest="$HOME/.agents/skills"
+    dest=$(exp "$skills"); [ "$dest" = - ] && dest="$HOME/.agents/skills"
     for d in "$RAIZ"/skills/*/; do
         diff -rq "$d" "$dest/$(basename "$d")" >/dev/null 2>&1 || igual=0
     done
@@ -94,7 +95,6 @@ toml_hook() { # arquivo evento matcher comando timeout descrição
 
 instala_trava() {
     local cmd arq
-    TRAVA_OK=1
     case "$agente" in
         codex)
             arq="$HOME/.codex/hooks.json"; cmd=$(comando_hook guarda-externos-codex guarda-externos.sh codex)
@@ -125,7 +125,7 @@ instala_trava() {
                 passo novo "plugin de trava em $arq"
                 [ $APLICAR = 1 ] && { mkdir -p "$(dirname "$arq")"; cp "$RAIZ/extras/opencode-guarda.js" "$arq"; }
             fi ;;
-        *) TRAVA_OK=0; echo "  [manual]       $agente tem pre=sim no catálogo, mas o instalador não conhece o formato do hook dele" ;;
+        *) echo "  [manual]       $agente tem pre=sim no catálogo, mas o instalador não conhece o formato do hook dele" ;;
     esac
 }
 
@@ -148,7 +148,7 @@ instala_fim() {
     esac
 }
 
-echo "instala-agente: $agente (pre=$pre fim=$fim regras=$(conta_campo a regras) skills=$(conta_campo a skills))"
+echo "instala-agente: $agente (pre=$pre fim=$fim regras=$regras skills=$skills)"
 if [ "$agente" = claude ]; then echo '  Claude Code usa o próprio plugin (hooks, skills e regras); nada a instalar.'; exit 0; fi
 echo "  [scripts]      guarda-externos.sh, fim-worker.sh e demais em $cache"
 [ $APLICAR = 1 ] && copia_scripts "$RAIZ" "$cache"
@@ -156,10 +156,9 @@ instala_regras
 instala_skills
 if [ "$pre" = sim ]; then
     instala_trava
-    [ $APLICAR = 1 ] && [ "$TRAVA_OK" = 1 ] && date +%F > "$cache/trava-$agente.ok"
     [ "$fim" = sim ] && instala_fim
 else
-    echo "  [restrito]     $agente sem hook de comando: fica só em segunda-opiniao (papel de trabalho é recusado pelo contas.sh)"
+    echo "  [restrito]     $agente sem hook de comando: fica só em segunda-opiniao (sem trava de comando remoto, não recebe trabalho)"
 fi
 [ $APLICAR = 1 ] || echo 'simulação: nada foi gravado; rode de novo com --aplicar.'
 exit 0

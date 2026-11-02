@@ -1,0 +1,13 @@
+# Scripts que o fluxo-orca 2.x instalava em ~/.cache e que o agent-pool substitui. O instalador apaga só estes nomes, nunca outro arquivo.
+fila-teste.sh
+gs-teste.sh
+e-teste.sh
+limites.sh
+contas.sh
+agentes-catalogo.conf
+vaga-agente.sh
+orca-ram.sh
+painel.sh
+codex-cota.sh
+medidores/claude.sh
+medidores/orca.sh

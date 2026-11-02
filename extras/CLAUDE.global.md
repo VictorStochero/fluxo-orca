@@ -31,7 +31,7 @@ Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele n�
 - **Worker do Orca** (prompt com preâmbulo de Task/Dispatch IDs) não abre pergunta local: usa o `ask` do preâmbulo, com o mesmo contexto e a recomendada; a sessão principal leva a decisão ao usuário por `AskUserQuestion` e devolve a resposta.
 - **Ordem do usuário não se reduz**: "aplicar a recomendada" vale para o que o usuário não decidiu; variante menor de uma ordem explícita vira pergunta, nunca decisão silenciosa.
 - **Resposta automática não é decisão**: `AskUserQuestion` que volta com todas as recomendadas sem resposta real do usuário é tratada como não respondida — perguntar de novo no texto e esperar; nada vai a worker nem a registro antes.
-- **Pergunta pendente não para o fluxo**: com pergunta aberta, despachar o que não depende da resposta e encerrar o turno; o Orca acorda com o que chegar.
+- **Pergunta pendente não para o fluxo**: com pergunta aberta, despachar o que não depende da resposta, armar `bash ~/.cache/orca-espera.sh --run <run_id>` em background e encerrar o turno; ele acorda com o que chegar (o wake do Orca não acorda sessão parada).
 - **A recomendação sai destes critérios, nesta ordem, e a pergunta cita o que cada um diz:** (1) arquitetura — o guia/wiki do projeto (`wiki/arquitetura/`, `docs/` ou `doc/`) (vence o código vizinho; onde for omisso, decide-se pela regra análoga e o guia é complementado na mesma entrega); (2) skills — a skill da stack e as boas práticas que ela indica (ex.: `laravel-best-practices`) e as skills do projeto (`.claude/skills`, `.ai/skills`); (3) padrões do framework (ex.: "Laravel way", docs oficiais); (4) ponytail; (5) CLAUDE.md/AGENTS.md do projeto. Dados de produção (consulta só leitura) entram como evidência de risco — quem usa, quanto —, não como critério de arquitetura. Critério que não se aplica é omitido.
 
 ## Produção e ações remotas
@@ -52,7 +52,7 @@ Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele n�
 
 ## Validação (após cada etapa significativa)
 1. Formatador e linter da stack nos arquivos tocados (skill da stack).
-2. Teste de regressão pela fila (`bash ~/.cache/fila-teste.sh ...`, imposta por hook); sem teste no caminho, criar um mínimo.
+2. Teste de regressão pela fila (`~/.agents/bin/agent-pool test -- <comando>`, imposta pelo hook do agent-pool); sem teste no caminho, criar um mínimo.
 3. Checagem de tipos/estática nos arquivos modificados, se houver config, e os extras da skill da stack.
 4. Mudança de UI: navegador com perfil real, nunca administrador.
 
