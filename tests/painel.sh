@@ -195,4 +195,20 @@ cfg conta.a.remover=2; igual 'remover: valor diferente de 1, exit 2' 2 $?
 cfg conta.a.remover=1 conta.a.vagas=3 conta.nova.comando=codex; igual 'remover: edição da conta removida é descartada' 0 $?
 igual 'remover: só a nova sobra, com o comando' '# minhas contas|teto=4|nova agente=codex vagas=2 peso=1 config=~/.codex-nova papeis=revisor comando=codex' "$(junta '|' < "$conf_ag")"
 
+# pool.ordem: só as linhas de conta mudam de lugar; comentário colado e linhas globais ficam.
+printf '# minhas contas\nteto=4\n# principal\na agente=claude vagas=2 peso=5\nescolha=ordem\nb agente=codex vagas=1\n# extra\nc agente=claude vagas=1 config=~/.claude-c\nram_min=2\n' > "$conf_ag"
+cfg pool.ordem=c,a,b; igual 'ordem: exit 0' 0 $?
+igual 'ordem: contas trocadas, comentário viaja, globais no lugar' '# minhas contas|teto=4|# extra|c agente=claude vagas=1 config=~/.claude-c|escolha=ordem|# principal|a agente=claude vagas=2 peso=5|b agente=codex vagas=1|ram_min=2' "$(junta '|' < "$conf_ag")"
+igual 'ordem: contas.sh lista na ordem nova' 'c a b' "$(CONTAS_CONF="$conf_ag" bash "$raiz/skills/limites-cota/contas.sh" lista | cut -d' ' -f1 | tr '\n' ' ' | sed 's/ $//')"
+cp "$conf_ag" "$tmp/ag.bak"
+cfg pool.ordem=c,a,zz; igual 'ordem: desconhecida, exit 2' 2 $?
+grep -q 'inexistente' "$tmp/c.err" && ok 'ordem: mensagem de conta inexistente' || ruim 'ordem: sem mensagem'
+cfg pool.ordem=c,a,a; igual 'ordem: repetida, exit 2' 2 $?
+cfg pool.ordem=c,a; igual 'ordem: incompleta, exit 2' 2 $?
+grep -q 'todas as contas' "$tmp/c.err" && ok 'ordem: mensagem de lista incompleta' || ruim 'ordem: sem mensagem'
+cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'ordem: recusas não gravam nada' || ruim 'ordem: arquivo mudou'
+cfg pool.ordem=a,b,c pool.teto=5 conta.b.vagas=2; igual 'ordem: combinada com outras chaves' 0 $?
+igual 'ordem: combinada, linhas' 'a agente=claude vagas=2 peso=5|b agente=codex vagas=2|c agente=claude vagas=1 config=~/.claude-c' "$(grep -E '^(a|b|c) ' "$conf_ag" | junta '|')"
+igual 'ordem: combinada, teto gravado' 1 "$(grep -c '^teto=5$' "$conf_ag")"
+
 [ "$falhas" = 0 ] && echo 'TUDO OK' || { echo "$falhas falha(s)"; exit 1; }
