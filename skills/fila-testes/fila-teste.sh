@@ -10,7 +10,7 @@
 #   JS (package.json): pnpm | yarn | bun | npm -> script "test"
 #   Rust (Cargo.toml): cargo test; Go (go.mod): go test (sem argumentos, rode ./...)
 # Laravel: --parallel vira --processes=8 e, no fim, apaga os <banco>_test_N do MySQL/MariaDB do host.
-# Fila: Laravel no host = uma por porta de banco (3306 usa gs-teste.lockN, outras gs-teste-<porta>.lockN);
+# Fila padrão (banco): Laravel no host = uma por porta de banco (3306 usa gs-teste.lockN, outras gs-teste-<porta>.lockN);
 # container (executor ddev/sail/docker/podman) = gs-teste-ctr.lockN; qualquer outro executor Laravel é host; Python/JS = gs-teste-geral.lockN. FILA_TESTE_VAGAS e FILA_TESTE_PROCESSOS sobrescrevem 2 e 8.
 # Precedência das configurações: variável de ambiente < ~/.claude/fila.conf (FILA_TESTE_FILA|VAGAS|VAGAS_PROJETO|TETO|PROCESSOS) < .orca/worktree.conf.
 # Teto global: além da vaga da fila, no máximo FILA_TESTE_TETO (3) runs ao mesmo tempo na máquina (gs-teste-teto.lockN).
@@ -33,7 +33,7 @@ if [ -f "$HOME/.claude/fila.conf" ]; then
         if [[ "$linha" =~ ^[[:space:]]*(FILA_TESTE_[A-Z_]+)=([^[:space:]]*)[[:space:]]*$ ]]; then
             chave=${BASH_REMATCH[1]}; valor=${BASH_REMATCH[2]}
             case "$chave" in
-                FILA_TESTE_FILA) [[ "$valor" =~ ^(global|recurso|projeto)$ ]] && valido=1 ;;
+                FILA_TESTE_FILA) [[ "$valor" =~ ^(global|banco|recurso|projeto)$ ]] && valido=1 ;;
                 FILA_TESTE_VAGAS | FILA_TESTE_VAGAS_PROJETO | FILA_TESTE_TETO | FILA_TESTE_PROCESSOS) [[ "$valor" =~ ^[1-9][0-9]*$ ]] && valido=1 ;;
             esac
         fi
@@ -50,11 +50,12 @@ FILA_TESTE_RUNNER=${FILA_TESTE_RUNNER:-${GS_TESTE_RUNNER:-}}
 VAGAS=${FILA_TESTE_VAGAS:-${GS_TESTE_VAGAS:-2}}
 TETO=${FILA_TESTE_TETO:-${GS_TESTE_TETO:-3}}
 PROCESSOS=${FILA_TESTE_PROCESSOS:-${GS_TESTE_PROCESSOS:-8}}
-modo=${FILA_TESTE_FILA:-${GS_TESTE_FILA:-recurso}}
+modo=${FILA_TESTE_FILA:-${GS_TESTE_FILA:-banco}}
 case "$modo" in
-    global | recurso) modo=global ;; # recurso é o nome antigo de global
+    banco | recurso) modo=banco ;;
+    global) ;;
     projeto) VAGAS=${FILA_TESTE_VAGAS_PROJETO:-${GS_TESTE_VAGAS_PROJETO:-1}} ;;
-    *) echo 'FILA_TESTE_FILA deve ser global (ou recurso) ou projeto.' >&2; exit 2 ;;
+    *) echo 'FILA_TESTE_FILA deve ser global, banco (ou recurso) ou projeto.' >&2; exit 2 ;;
 esac
 
 stack=outro
@@ -122,14 +123,21 @@ if [ "$modo" = projeto ]; then
     nome=$(basename "${principal:-$(pwd)}")
     nome=$(printf '%s' "$nome" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C tr -c 'a-z0-9_-' '_')
     trava=$HOME/.cache/gs-teste-proj-$nome.lock
+    recurso="projeto $nome"
+elif [ "$modo" = global ]; then
+    trava=$HOME/.cache/gs-teste-global.lock
+    recurso=global
 elif [ $stack != laravel ]; then
     trava=$HOME/.cache/gs-teste-geral.lock
+    recurso=geral
 elif case "${executor##*/}" in ddev|sail|docker|podman) true ;; *) false ;; esac; then
     trava=$HOME/.cache/gs-teste-ctr.lock
-elif [ "$porta" = 3306 ]; then
-    trava=$HOME/.cache/gs-teste.lock
+    recurso="container $executor"
 else
-    trava=$HOME/.cache/gs-teste-$porta.lock
+    host=$(env_testing DB_HOST)
+    recurso="mysql ${host:-127.0.0.1}:$porta"
+    if [ "$porta" = 3306 ]; then trava=$HOME/.cache/gs-teste.lock
+    else trava=$HOME/.cache/gs-teste-$porta.lock; fi
 fi
 # Remove trava morta sem apagar a que outro processo acabou de recriar: renomeia (atômico), confere o pid e devolve se mudou.
 # ponytail: entre o rename e a devolução, um terceiro pode criar a trava; janela de milissegundos, aceitável para uma fila de testes.
@@ -157,6 +165,16 @@ remove_morta() { # trava pid_esperado
     if [ "$(cat "$tmp/pid" 2>/dev/null)" = "$2" ]; then mata_filho "$tmp/filho"; rm -rf "$tmp"; else [ -e "$1" ] || mv "$tmp" "$1" 2>/dev/null; rm -rf "$tmp"; fi
 }
 limite=$((SECONDS + 300))
+espera=$HOME/.cache/fila-espera/$$
+registra_espera() { # base da trava; mantém o início durante toda a espera desta vaga
+    [ -d "$espera" ] && return
+    mkdir -p "$espera"
+    printf '%s\n' "$recurso" > "$espera/recurso"
+    printf '%s\n' "${1##*/}" > "$espera/fila"
+    date +%s%3N > "$espera/inicio_ts"
+    pwd > "$espera/worktree"
+    printf '%s\n' "$runner ${args[*]}" > "$espera/comando"
+}
 # Pega uma vaga em <base>1..<n> e põe o caminho em $L. checa_dono=1: espera se este mesmo dono já ocupa vaga da fila.
 pega_vaga() { # base vagas checa_dono
     local base=$1 n=$2 checa=$3 i v d p dono idade mesmo avisou=0 ocupantes
@@ -188,14 +206,20 @@ pega_vaga() { # base vagas checa_dono
             [ -d "$v" ] && ocupantes="$ocupantes $(cat "$v/dono" 2>/dev/null)"
         done
         if [ $SECONDS -ge $limite ]; then echo "FILA OCUPADA — ${base##*/}:$ocupantes — rode de novo"; exit 75; fi
+        registra_espera "$base"
         if [ "$avisou" = 0 ]; then echo "Aguardando fila ${base##*/}:$ocupantes" >&2; avisou=1; fi
         sleep 5
     done
+    rm -rf "$espera"
     echo $$ > "$L/pid"; echo "$eu desde $(date +%T): $runner ${args[*]}" > "$L/dono"
+    date +%s%3N > "$L/inicio"
+    [ "$checa" = 1 ] && printf '%s\n' "$recurso" > "$L/recurso"
 }
 # Ordem fixa: vaga da fila, depois a do teto global (sem deadlock). Os dois saem no trap.
 F=""; T=""
-trap 'mata_filho "$F/filho"; rm -rf "$F" "$T"' EXIT INT TERM
+trap 'mata_filho "$F/filho"; rm -rf "$F" "$T" "$espera"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 pega_vaga "$trava" "$VAGAS" 1; F=$L
 pega_vaga "$HOME/.cache/gs-teste-teto.lock" "$TETO" 0; T=$L
 # shellcheck disable=SC2086 # runner é uma linha de comando com argumentos
