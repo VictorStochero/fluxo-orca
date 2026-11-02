@@ -8,6 +8,11 @@ import type { Estado } from './protocol'
 
 const TIMEOUT_MS = 60_000
 const DEBOUNCE_MS = 300
+const CICLO_MS = 60_000
+// O painel renova a vigília antes do teto de 120 s do plugin.request; a graça cobre o intervalo entre uma e outra.
+const RENOVA_MS = 100_000
+const GRACA_MS = 3_000
+const FRESCO_MS = 2_000
 const BASH_WINDOWS = 'C:\\Program Files\\Git\\bin\\bash.exe'
 
 function falha(code: string, message: string): Error {
@@ -95,8 +100,77 @@ async function gravar(cache: string, valores: Record<string, string>): Promise<E
   return lerEstado(cache)
 }
 
+// Uma coleta por vez: quem pede enquanto outra roda (ciclo ou painel) recebe a mesma, e o resultado recente serve ao painel logo após o aviso.
+let emVoo: Promise<Estado> | undefined
+let recente: { estado: Estado; em: number } | undefined
+
+function lerCompartilhado(cache: string): Promise<Estado> {
+  if (recente && Date.now() - recente.em < FRESCO_MS) return Promise.resolve(recente.estado)
+  emVoo ??= lerEstado(cache)
+    .then((estado) => {
+      recente = { estado, em: Date.now() }
+      return estado
+    })
+    .finally(() => {
+      emVoo = undefined
+    })
+  return emVoo
+}
+
+type OpcoesCiclo = { coletar: () => Promise<unknown>; avisar: () => void; erro: (mensagem: string) => void; periodoMs?: number; gracaMs?: number; renovaMs?: number }
+
+/** Coleta a cada `periodoMs` só enquanto há painel vigiando; se a coleta anterior não terminou, pula o ciclo. */
+export function criarCiclo(o: OpcoesCiclo) {
+  const { periodoMs = CICLO_MS, gracaMs = GRACA_MS, renovaMs = RENOVA_MS } = o
+  let vigias = 0
+  let relogio: ReturnType<typeof setInterval> | undefined
+  let graca: ReturnType<typeof setTimeout> | undefined
+  let rodando = false
+
+  const ciclo = async () => {
+    if (rodando) return
+    rodando = true
+    try {
+      await o.coletar()
+      o.avisar()
+    } catch (e) {
+      o.erro(`ciclo de atualização: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      rodando = false
+    }
+  }
+  const parar = () => {
+    clearInterval(relogio)
+    clearTimeout(graca)
+    relogio = graca = undefined
+  }
+  return {
+    ativo: () => relogio !== undefined,
+    parar,
+    /** Resolve quando o painel fecha (`signal`) ou a vigília vence; o painel renova em seguida. */
+    vigiar(signal: AbortSignal): Promise<true> {
+      if (signal.aborted) return Promise.resolve(true)
+      clearTimeout(graca)
+      graca = undefined
+      vigias++
+      relogio ??= setInterval(() => void ciclo(), periodoMs)
+      return new Promise((resolve) => {
+        const fim = () => {
+          clearTimeout(vence)
+          signal.removeEventListener('abort', fim)
+          if (--vigias === 0) graca = setTimeout(parar, gracaMs)
+          resolve(true)
+        }
+        const vence = setTimeout(fim, renovaMs)
+        signal.addEventListener('abort', fim, { once: true })
+      })
+    }
+  }
+}
+
 const observadores: FSWatcher[] = []
 let adiado: ReturnType<typeof setTimeout> | undefined
+let vigia: ReturnType<typeof criarCiclo> | undefined
 
 export default function activate(orca: OrcaWorkerApi): void {
   const cache = join(homedir(), '.cache')
@@ -105,12 +179,17 @@ export default function activate(orca: OrcaWorkerApi): void {
     `ORCA_CMD=${e.ORCA_CMD ?? '-'} ORCA_CLI_COMMAND=${e.ORCA_CLI_COMMAND ?? '-'} execPath=${process.execPath} candidato=${acharOrca(e, process.platform, process.execPath) ?? '-'}`
   )
 
-  orca.panels.handle('estado.ler', () => lerEstado(cache))
+  orca.panels.handle('estado.ler', () => lerCompartilhado(cache))
   orca.panels.handle('config.gravar', ({ valores }) => gravar(cache, valores))
 
+  const avisar = () => orca.panels.post('estado.mudou', { em: Date.now() })
+  vigia = criarCiclo({ coletar: () => lerCompartilhado(cache), avisar, erro: orca.log })
+  orca.panels.handle('auto.assistir', (_entrada, { signal }) => vigia!.vigiar(signal))
+
   const mudou = () => {
+    recente = undefined // arquivo mudou: o resultado guardado já não vale
     clearTimeout(adiado)
-    adiado = setTimeout(() => orca.panels.post('estado.mudou', { em: Date.now() }), DEBOUNCE_MS)
+    adiado = setTimeout(avisar, DEBOUNCE_MS)
   }
   // Travas da fila (gs-teste*.lock*) ficam direto em ~/.cache; as do pool e as medidas, em ~/.cache/agentes.
   const observa = (pasta: string, filtro: (nome: string) => boolean, recursivo: boolean) => {
@@ -127,5 +206,8 @@ export default function activate(orca: OrcaWorkerApi): void {
 
 export function deactivate(): void {
   clearTimeout(adiado)
+  vigia?.parar()
+  vigia = undefined
+  recente = emVoo = undefined
   for (const o of observadores.splice(0)) o.close()
 }

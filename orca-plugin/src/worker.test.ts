@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { mock } from 'node:test'
 import { join } from 'node:path'
 import { afterEach, assert, mountWorker, test } from 'orca/testing'
 import { estadoExemplo } from './fixtures'
 import * as main from './worker'
-import { acharOrca, ambienteDoColetor } from './worker'
+import { acharOrca, ambienteDoColetor, criarCiclo } from './worker'
 
 const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA, APPDATA: process.env.APPDATA, ORCA_CMD: process.env.ORCA_CMD, ORCA_CLI_COMMAND: process.env.ORCA_CLI_COMMAND }
 let casa = ''
@@ -160,4 +161,122 @@ test('ambienteDoColetor completa APPDATA e LOCALAPPDATA no Windows e não mexe n
   const com = ambienteDoColetor({ APPDATA: 'X', LOCALAPPDATA: 'Y' }, 'win32', 'C:/u')
   assert.deepEqual([com.APPDATA, com.LOCALAPPDATA, com.ORCA_CMD], ['X', 'Y', undefined])
   assert.equal(ambienteDoColetor({}, 'linux', '/home/u').APPDATA, undefined)
+})
+
+// Ciclo de 60 s com relógio falso; `coletar` é um contador, `abrir` devolve o AbortController do painel.
+async function comRelogio(corpo: (r: { avancar: (ms: number) => Promise<void> }) => Promise<void>): Promise<void> {
+  mock.timers.enable({ apis: ['setInterval', 'setTimeout'] })
+  try {
+    await corpo({
+      avancar: async (ms) => {
+        mock.timers.tick(ms)
+        for (let i = 0; i < 5; i++) await Promise.resolve() // deixa as continuações da coleta rodarem
+      }
+    })
+  } finally {
+    mock.timers.reset()
+  }
+}
+
+test('ciclo: com painel aberto coleta e avisa a cada 60 s', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    let avisos = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => void avisos++, erro: () => {}, renovaMs: 1_000_000 })
+    const painel = new AbortController()
+    void c.vigiar(painel.signal)
+    await avancar(59_999)
+    assert.equal(coletas, 0)
+    await avancar(1)
+    assert.deepEqual([coletas, avisos], [1, 1])
+    await avancar(60_000)
+    assert.deepEqual([coletas, avisos], [2, 2])
+    painel.abort()
+    c.parar()
+  })
+})
+
+test('ciclo: sem painel não coleta', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => {}, erro: () => {} })
+    await avancar(300_000)
+    assert.equal(coletas, 0)
+    assert.equal(c.ativo(), false)
+  })
+})
+
+test('ciclo: coleta lenta não empilha e o ciclo seguinte volta ao normal', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    let avisos = 0
+    let termina: () => void = () => {}
+    const c = criarCiclo({
+      coletar: () => {
+        coletas++
+        return coletas === 1 ? new Promise<void>((r) => (termina = r)) : Promise.resolve()
+      },
+      avisar: () => void avisos++,
+      erro: () => {},
+      renovaMs: 1_000_000
+    })
+    const painel = new AbortController()
+    void c.vigiar(painel.signal)
+    await avancar(60_000)
+    await avancar(60_000) // a primeira ainda roda: pula
+    await avancar(60_000)
+    assert.deepEqual([coletas, avisos], [1, 0])
+    termina()
+    await avancar(0)
+    assert.equal(avisos, 1)
+    await avancar(60_000)
+    assert.deepEqual([coletas, avisos], [2, 2])
+    painel.abort()
+    c.parar()
+  })
+})
+
+test('ciclo: fechar o último painel para o ciclo; um painel restante o mantém', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => {}, erro: () => {}, gracaMs: 3_000, renovaMs: 1_000_000 })
+    const a = new AbortController()
+    const b = new AbortController()
+    void c.vigiar(a.signal)
+    void c.vigiar(b.signal)
+    a.abort()
+    await avancar(60_000)
+    assert.equal(coletas, 1) // b segue aberto
+    b.abort()
+    await avancar(3_000)
+    assert.equal(c.ativo(), false)
+    await avancar(300_000)
+    assert.equal(coletas, 1)
+  })
+})
+
+test('ciclo: a renovação da vigília não derruba o ciclo (graça cobre o intervalo)', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => {}, erro: () => {}, renovaMs: 100_000, gracaMs: 3_000 })
+    const painel = new AbortController()
+    void c.vigiar(painel.signal)
+    await avancar(100_000) // vence; o painel renova logo
+    void c.vigiar(painel.signal)
+    assert.equal(c.ativo(), true)
+    await avancar(60_000)
+    assert.equal(coletas, 2)
+    painel.abort()
+    c.parar()
+  })
+})
+
+test('estado.ler seguido devolve a coleta recente sem rodar o coletor de novo', async () => {
+  const cache = novaCasa(`echo x >> "$HOME/.cache/n.txt"; echo '{}'
+`)
+  const worker = await mountWorker(main)
+  await worker.request('estado.ler')
+  await worker.request('estado.ler')
+  assert.equal(readFileSync(join(cache, 'n.txt'), 'utf8').trim().split('\n').length, 1)
+  await worker.deactivate()
 })
