@@ -122,21 +122,25 @@ function rodarOrca(args: string[]): Promise<string> {
   })
 }
 
-/** Alguma medida de cota (`agentes/medida.<conta>`) com mais de 5 min. */
-export function medidaVelha(pasta: string, agora = Date.now()): boolean {
+/** Alguma medida de cota (`agentes/medida.<conta>`) com mais de 5 min; com `nomes`, só as dessas contas (o limites.sh não renova as demais). */
+export function medidaVelha(pasta: string, nomes?: readonly string[], agora = Date.now()): boolean {
   try {
-    return readdirSync(pasta).some((n) => n.startsWith('medida.') && agora - statSync(join(pasta, n)).mtimeMs > MEDIDA_VELHA_MS)
+    return readdirSync(pasta).some(
+      (n) => n.startsWith('medida.') && (!nomes || nomes.includes(n.slice(7))) && agora - statSync(join(pasta, n)).mtimeMs > MEDIDA_VELHA_MS
+    )
   } catch {
     return false
   }
 }
 
 let medindo: Promise<void> | undefined
+// Contas medidas do último estado coletado; sem coleta ainda, vale qualquer medida da pasta.
+let contasMedidas: string[] | undefined
 
 /** Renova as medidas manuais pelo limites.sh (que respeita o próprio cache de 5 min); nunca em paralelo e nunca rejeita: falha ou timeout deixam o cache como está. */
 export function medirSeVelha(cache: string, log: (mensagem: string) => void, timeoutMs = MEDICAO_TIMEOUT_MS): Promise<void> {
   if (medindo) return medindo
-  if (!medidaVelha(join(cache, 'agentes'))) return Promise.resolve()
+  if (!medidaVelha(join(cache, 'agentes'), contasMedidas)) return Promise.resolve()
   medindo = rodarColetor(cache, [], 'medicao_falhou', 'limites.sh', timeoutMs)
     .then(() => undefined)
     .catch((e) => log(`medição de cota: ${e instanceof Error ? e.message : String(e)}`))
@@ -161,25 +165,34 @@ async function gravar(cache: string, valores: Record<string, string>): Promise<E
     throw falha('config_invalida', 'nada para gravar')
   }
   // Argumentos em array, nunca string de shell; o painel.sh valida chave e valor antes de gravar.
+  geracao++
   await rodarColetor(cache, ['--config', ...pares.map(([k, v]) => `${k}=${v}`)], 'config_recusada')
+  geracao++ // coleta iniciada durante a gravação leu o arquivo antigo
   return lerEstado(cache)
 }
 
 // Uma coleta por vez: quem pede enquanto outra roda (ciclo ou painel) recebe a mesma, e o resultado recente serve ao painel logo após o aviso.
-let emVoo: Promise<Estado> | undefined
+// `geracao` sobe a cada mudança em disco ou gravação: coleta de geração antiga nem vira "recente" nem é reaproveitada.
+let geracao = 0
+let emVoo: { g: number; p: Promise<Estado> } | undefined
 let recente: { estado: Estado; em: number } | undefined
 
 function lerCompartilhado(cache: string): Promise<Estado> {
   if (recente && Date.now() - recente.em < FRESCO_MS) return Promise.resolve(recente.estado)
-  emVoo ??= lerEstado(cache)
-    .then((estado) => {
-      recente = { estado, em: Date.now() }
-      return estado
-    })
-    .finally(() => {
-      emVoo = undefined
-    })
-  return emVoo
+  if (emVoo?.g !== geracao) {
+    const g = geracao
+    const p: Promise<Estado> = lerEstado(cache)
+      .then((estado) => {
+        contasMedidas = estado.pool?.contas?.filter((c) => c.origem !== 'orca').map((c) => c.nome) // JSON do coletor não é validado
+        if (g === geracao) recente = { estado, em: Date.now() }
+        return estado
+      })
+      .finally(() => {
+        if (emVoo?.p === p) emVoo = undefined
+      })
+    emVoo = { g, p }
+  }
+  return emVoo.p
 }
 
 /** Segundos guardados -> ms: ausente ou não numérico usa 60 s; número fora da faixa cai no limite. */
@@ -288,6 +301,7 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   const mudou = () => {
     recente = undefined // arquivo mudou: o resultado guardado já não vale
+    geracao++
     clearTimeout(adiado)
     adiado = setTimeout(avisar, DEBOUNCE_MS)
   }
@@ -309,6 +323,6 @@ export function deactivate(): void {
   vigia?.parar()
   for (const i of inscricoes.splice(0)) i.dispose()
   vigia = undefined
-  recente = emVoo = medindo = undefined
+  recente = emVoo = medindo = contasMedidas = undefined
   for (const o of observadores.splice(0)) o.close()
 }

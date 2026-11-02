@@ -332,6 +332,42 @@ test('medição: timeout ou falha não rejeitam nem travam, e chamadas simultân
   assert.equal(medidas(quebrada), 1)
 })
 
+test('medição: medida velha de conta fora do pool não dispara a medição', async () => {
+  const estado = { ...estadoExemplo, pool: { ...estadoExemplo.pool, contas: [{ ...estadoExemplo.pool.contas[0], nome: 'a', origem: 'manual' as const }, { ...estadoExemplo.pool.contas[0], nome: 'detectada', origem: 'orca' as const }] } }
+  const cache = comLimites('', null)
+  writeFileSync(join(cache, 'painel.sh'), `echo '${JSON.stringify(estado)}'\n`)
+  const velha = (nome: string) => {
+    const f = join(cache, 'agentes', `medida.${nome}`)
+    writeFileSync(f, `${nome}: 1%`)
+    const t = new Date(Date.now() - 10 * 60_000)
+    utimesSync(f, t, t)
+  }
+  const worker = await mountWorker(main)
+  await worker.request('estado.ler')
+  velha('removida')
+  velha('detectada')
+  await medirSeVelha(cache, () => {})
+  assert.equal(medidas(cache), 0)
+  velha('a')
+  await medirSeVelha(cache, () => {})
+  assert.equal(medidas(cache), 1)
+  await worker.deactivate()
+})
+
+test('estado.ler depois de uma mudança em disco durante a coleta roda o coletor de novo', async () => {
+  const cache = novaCasa(`echo x >> "$HOME/.cache/n.txt"; sleep 1; echo '{}'
+`)
+  const worker = await mountWorker(main)
+  const primeira = worker.request('estado.ler')
+  await ate(() => existsSync(join(cache, 'n.txt')))
+  writeFileSync(join(cache, 'gs-teste-9.lock1'), '')
+  await new Promise((r) => setTimeout(r, 500)) // o observador de arquivos entrega o evento
+  await primeira
+  await worker.request('estado.ler')
+  assert.equal(readFileSync(join(cache, 'n.txt'), 'utf8').trim().split('\n').length, 2)
+  await worker.deactivate()
+})
+
 test('intervalo: ausente ou inválido usa 60 s; fora da faixa cai no limite', () => {
   for (const v of [null, undefined, 'abc', NaN, {}]) assert.equal(intervaloMs(v), 60_000)
   assert.equal(intervaloMs(90), 90_000)
