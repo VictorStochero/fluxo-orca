@@ -493,7 +493,7 @@ grep -qx 'b 0/1 inativa' "$tmp/saida" && grep -qx 'a 1/1' "$tmp/saida" && ok 'at
 printf 'teto=1\na agente=claude vagas=1\nb agente=claude vagas=1 ativo=nao\n' > "$HOME/.claude/agentes.conf"
 mkdir -p "$HOME/.cache/agentes/b.lock1"; echo ctx_i2 > "$HOME/.cache/agentes/b.lock1/dispatch"
 confere_rc 75 'ativo: worker vivo da inativa conta no teto' pool pega a ctx_i3
-pool livres > "$tmp/livres"; grep -qx 'maquina 1/1' "$tmp/livres" && ok 'ativo: teto conta a trava da inativa' || ruim 'ativo: teto não contou a inativa'
+pool livres > "$tmp/livres"; grep -qx 'maquina 0/1' "$tmp/livres" && ok 'ativo: teto conta a trava da inativa' || ruim 'ativo: teto não contou a inativa'
 rm -rf "$HOME/.cache/agentes/b.lock1"
 
 # Teto também conta contas ilimitadas e vagas fora do registro atual.
