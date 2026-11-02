@@ -55,7 +55,18 @@ linha=$(printf '%s\n' "$usage" | awk -v r="$(printf '%-7s' "$conta")" '
     /^Current session:/ { sub(/ used.*resets /, " usado, zera "); sub(/ used$/, " usado"); sub(/^Current session: /, ""); s=$0 }
     /^Current week \(all models\):/ { sub(/ used.*resets /, " usado, zera "); sub(/ used$/, " usado"); sub(/^Current week \(all models\): /, ""); w=$0 }
     END { if (w == "") exit 1
-          printf "%s: sessão %s | semana %s\n", r, s, w }') || { echo "$conta: ilegível"; exit 0; }
+          printf "%s: sessão %s | semana %s\n", r, s, w }') || {
+    # Deslogada (token revogado, refresh vencido) o /usage só traz o resumo de custo; sem #cand a conta sai da escolha e do cache.
+    if (for v in $(compgen -e | grep '^ORCA_'); do unset "$v"; done
+        if [ -n "${CONTA_CONFIG:-}" ]; then export CLAUDE_CONFIG_DIR="$(w "$CONTA_CONFIG")"; else unset CLAUDE_CONFIG_DIR; fi
+        claude auth status 2>/dev/null) | grep -q '"loggedIn": *false'; then
+        pre=; [ -z "${CONTA_CONFIG:-}" ] || pre="CLAUDE_CONFIG_DIR=${CONTA_CONFIG/#$HOME/\~} "
+        echo "$conta: sem login (rode ${pre}claude auth login)"
+    else
+        echo "$conta: ilegível"
+    fi
+    exit 0
+}
 printf '%s\n' "$linha"
 
 # pct() isola o trecho casado e reextrai os dígitos colados ao %: índices de multibyte (ê, ã) variam entre awk UTF-8 e byte-orientado.

@@ -14,7 +14,9 @@ comeca() { case "$3" in "$2"*) ok "$1" ;; *) ruim "$1: esperado começar com [$2
 
 cat > "$tmp/bin/claude" <<'EOF'
 #!/usr/bin/env bash
+[ "$1 $2" = 'auth status' ] && { [ -n "${MED_DESLOGADO:-}" ] && echo '{"loggedIn": false, "authMethod": "none"}' || echo '{"loggedIn": true}'; exit 0; }
 case " $* " in *' --strict-mcp-config '*) ;; *) exit 2 ;; esac
+[ -n "${MED_DESLOGADO:-}" ] && { printf 'Total cost:            $0.0000\nTotal duration (API):  0s\n'; exit 0; }
 [ -n "${MED_MARCA:-}" ] && : > "$MED_MARCA"
 [ -n "${MED_SEM_SEMANA:-}" ] && { echo 'Current session: 12% used'; exit 0; }
 uso_c=30; uso_l=40; [ -n "$CLAUDE_CONFIG_DIR" ] && { uso_c=10; uso_l=6; }
@@ -66,6 +68,17 @@ rm "$cfg/.credentials.json"; api
 [ -e "$tmp/marca" ] && ok 'api: sem credencial cai no claude' || ruim 'api: sem credencial não caiu'
 igual 'api: fallback também sem token na saída' 0 "$(cat "$tmp/api.out" "$tmp/api.err" | grep -c "$tok")"
 unset LIMITES_USAGE_URL
+
+# Team deslogada: credencial com expiresAt 0 e refresh vencido; a API recusa (aqui, URL que falha) e o /usage só traz o custo.
+cfg_t="$HOME/.claude-team"; mkdir -p "$cfg_t"
+printf '{"claudeAiOauth":{"accessToken":"%s","refreshToken":"ref-%s","expiresAt":0,"refreshTokenExpiresAt":1000,"subscriptionType":"team"}}' "$tok" "$tok" > "$cfg_t/.credentials.json"
+LIMITES_USAGE_URL=$(url "$tmp/inexistente.json") MED_DESLOGADO=1 CONTA_CONFIG="$cfg_t" bash "$med/claude.sh" team > "$tmp/t.out" 2>&1
+igual 'team deslogada: sem login e sem #cand' 'team: sem login (rode CLAUDE_CONFIG_DIR=~/.claude-team claude auth login)' "$(cat "$tmp/t.out")"
+igual 'team deslogada: token fora da saída' 0 "$(grep -c "$tok" "$tmp/t.out")"
+MED_DESLOGADO=1 bash "$med/claude.sh" pessoal > "$tmp/t.out"
+igual 'pessoal deslogada: sem pasta de config' 'pessoal: sem login (rode claude auth login)' "$(cat "$tmp/t.out")"
+saida=$(MED_SEM_SEMANA=1 CONTA_CONFIG="$cfg_t" bash "$med/claude.sh" team)
+igual 'team logada com /usage ilegível continua ilegível' 'team: ilegível' "$saida"
 
 # Orca: rateLimits do `orca account list --json`, uma leitura por execução.
 agora_ms=$(( $(date +%s) * 1000 ))
