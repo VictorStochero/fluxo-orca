@@ -171,7 +171,7 @@ registra_espera() { # base da trava; mantém o início durante toda a espera des
     mkdir -p "$espera"
     printf '%s\n' "$recurso" > "$espera/recurso"
     printf '%s\n' "${1##*/}" > "$espera/fila"
-    date +%s%3N > "$espera/inicio_ts"
+    echo "$(date +%s)000" > "$espera/inicio_ts"
     pwd > "$espera/worktree"
     printf '%s\n' "$runner ${args[*]}" > "$espera/comando"
 }
@@ -212,7 +212,7 @@ pega_vaga() { # base vagas checa_dono
     done
     rm -rf "$espera"
     echo $$ > "$L/pid"; echo "$eu desde $(date +%T): $runner ${args[*]}" > "$L/dono"
-    date +%s%3N > "$L/inicio"
+    echo "$(date +%s)000" > "$L/inicio"
     [ "$checa" = 1 ] && printf '%s\n' "$recurso" > "$L/recurso"
 }
 # Ordem fixa: vaga da fila, depois a do teto global (sem deadlock). Os dois saem no trap.

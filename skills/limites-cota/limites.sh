@@ -56,7 +56,8 @@ mede() {
     claude) CONTA_CONFIG=$(conta_campo "$c" config) bash "$aqui/medidores/claude.sh" "$c" > "$tmp/m.$i" 2>&1 ;;
     orca:*) bash "$aqui/medidores/orca.sh" "$c" "${med#orca:}" > "$tmp/m.$i" 2>&1 ;;
   esac
-  if [ "$cache_min" -gt 0 ] && legivel "$tmp/m.$i" "$c"; then
+  # A falha do medidor também vai ao cache (o painel lê o "sem login"); a reutilização exige legivel, então a conta é remedida.
+  if [ "$cache_min" -gt 0 ] && { legivel "$tmp/m.$i" "$c" || grep -qE ': (sem login|ilegível)' "$tmp/m.$i"; }; then
     mkdir -p "$cache_dir" && cat "$tmp/m.$i" > "$arq.$$" && mv "$arq.$$" "$arq"
   fi
 }
@@ -226,7 +227,6 @@ if [ "$n" -gt 0 ]; then
     i=-1
     for ((j = 0; j < n; j++)); do
       if bash "$aqui/vaga-agente.sh" pega "${eleg_c[$j]}" "$RESERVA" 2>/dev/null; then
-        # Conta ilimitada só cria vaga com teto>0: sem trava, não há o que trocar depois do start.
         i=$j; grep -qxF "$RESERVA" "$HOME/.cache/agentes/${eleg_c[$j]}".lock*/dispatch 2>/dev/null && sufixo=" reserva $RESERVA"
         break
       fi

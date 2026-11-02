@@ -503,6 +503,8 @@ for l in conf_linhas:
     m = re.match(r"^\s*escolha\s*=\s*(ritmo|ordem)\s*$", l)
     if m: escolha = m.group(1)
 agora = time.time(); contas = []; total = 0
+# Fonte da regra: contas.sh:39 (papéis padrão por agente).
+def papeis_padrao(agente): return ["escritor", "revisor", "verificador", "mecanico"] if agente in ("claude", "codex", "antigravity") else []
 # contas.sh leva segundos no Windows: com agentes.conf lê-se direto (padrões do contas.sh); sem ele, a saída do contas.sh lista.
 conta_linhas = [l for l in conf_linhas if re.match(r"^\s*[^\s#=]+\s+\S+=", l)]
 if not conta_linhas:
@@ -513,7 +515,7 @@ for l in conta_linhas:
     if not partes: continue
     nome, c = partes[0], dict(p.split("=", 1) for p in partes[1:] if "=" in p)
     c.setdefault("agente", nome)
-    if "papeis" not in c: c["papeis"] = "escritor,revisor,verificador,mecanico" if c["agente"] in ("claude", "codex", "antigravity") else ""
+    if "papeis" not in c: c["papeis"] = ",".join(papeis_padrao(c["agente"]))
     c.setdefault("vagas", "1")
     ocup = []
     for d in sorted(glob.glob(os.path.join(cache, "agentes", glob.escape(nome) + ".lock[0-9]*"))):
@@ -598,8 +600,6 @@ for chave, id_orca in instalados:
                        "origem": "orca", "rotulo": "agente instalado (orca agent launch --agent %s)" % id_orca, "config": None, "detectada": True, "ativo": True})
 # Conta ou agente detectado que ainda nao esta no agentes.conf entra sozinho, com os padroes do catalogo (vagas 1, peso 1 e os papeis padrao do contas.sh).
 # Idempotente: nunca regrava linha existente, nem a de ativo=nao, nem recria a removida pelo usuario. Sem conta no agentes.conf nao cria (o registro padrao valeria).
-def papeis_padrao(agente): return ["escritor", "revisor", "verificador", "mecanico"] if agente in ("claude", "codex", "antigravity") else []
-
 def marca_adicionada(c):
     c["origem"] = "manual"; c["vagas"] = 1; c["peso"] = 1; c["papeis"] = [] if c["nome"] in so_medida else papeis_padrao(c["agente"])
 

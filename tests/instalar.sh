@@ -8,6 +8,7 @@ mkdir -p "$HOME"
 falhas=0
 ok() { echo "ok   $1"; }
 ruim() { echo "FALHA $1"; falhas=$((falhas + 1)); }
+comeca() { case "$3" in "$2"*) ok "$1" ;; *) ruim "$1: esperado começar com [$2], veio [$3]" ;; esac; }
 igual() { if [ "$2" = "$3" ]; then ok "$1"; else ruim "$1: esperado [$2], veio [$3]"; fi; }
 contem() { case "$3" in *"$2"*) ok "$1" ;; *) ruim "$1: faltou [$2] em [$3]" ;; esac; }
 existe() { if [ -e "$2" ]; then ok "$1"; else ruim "$1: falta $2"; fi; }
@@ -60,7 +61,9 @@ novo=$(falso_plugin 2.13.0); velho=$(falso_plugin 2.12.1); antigo=$(falso_plugin
 c="$tmp/vcache"; s="$tmp/vskills"
 copia_scripts "$novo" "$c"; copia_skills "$novo" "$s"
 igual 'versão: instalação grava o marcador' 2.13.0 "$(cat "$c/fluxo-orca.versao")"
-copia_scripts "$velho" "$c"; copia_skills "$velho" "$s"
+copia_scripts "$velho" "$c" 2> "$tmp/av.err"; copia_skills "$velho" "$s" 2>> "$tmp/av.err"
+comeca 'versão: instalação mais velha avisa' 'fluxo-orca: ' "$(head -1 "$tmp/av.err")"
+igual 'versão: aviso nos dois destinos' 2 "$(grep -c 'mais nova que 2.12.1' "$tmp/av.err")"
 igual 'versão: 2.12.1 não rebaixa o script' 2.13.0 "$(cat "$c/x.sh")"
 igual 'versão: 2.12.1 não rebaixa o medidor' 2.13.0 "$(cat "$c/medidores/m.sh")"
 igual 'versão: 2.12.1 não rebaixa a skill' 2.13.0 "$(cat "$s/s/SKILL.md")"

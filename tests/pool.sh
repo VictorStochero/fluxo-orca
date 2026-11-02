@@ -155,7 +155,10 @@ grep -qx 'team 0/1' "$tmp/saida" && ok 'trava sem dono ocupa vaga' || ruim 'trav
 rmdir "$HOME/.cache/agentes/team.lock1"
 confere_rc 0 'pessoal ilimitado: primeira reserva' pool pega pessoal ctx_p1
 confere_rc 0 'pessoal ilimitado: segunda reserva' pool pega pessoal ctx_p2
-compgen -G "$HOME/.cache/agentes/pessoal.lock*" >/dev/null && ruim 'pessoal criou trava' || ok 'pessoal não cria trava'
+pool livres > "$tmp/livres"; grep -qx 'pessoal 0/0 ocupadas=2' "$tmp/livres" && ok 'ilimitada: livres conta 2 ocupadas' || { ruim 'ilimitada: contagem 2'; cat "$tmp/livres"; }
+pool solta ctx_p1; pool livres > "$tmp/livres"
+grep -qx 'pessoal 0/0 ocupadas=1' "$tmp/livres" && ok 'ilimitada: soltar uma deixa 1' || ruim 'ilimitada: contagem 1'
+pool solta ctx_p2
 for conta in codex agy; do
     confere_rc 0 "primeira vaga: $conta" pool pega "$conta" ctx_a
     confere_rc 75 "limite de uma vaga: $conta" pool pega "$conta" ctx_b
@@ -421,12 +424,13 @@ grep -qx 'escritor: nenhum (pool cheio)' "$tmp/saida" && ok 'reserva informa poo
 pool solta ctx_b0; pool solta ctx_b1; pool solta ctx_b2
 rm "$HOME/.claude/agentes.conf"
 
-# Conta ilimitada reserva trivialmente, sem criar trava.
+# Conta ilimitada reserva e registra a trava.
 export POOL_TEAM_SEMANA_USO=90 POOL_CODEX_SEMANA=90
 confere_rc 0 'reserva na conta ilimitada' seletor_reserva r6
-grep -qx 'escritor: pessoal (ritmo 0.7 · 70% livre, zera em 168h)' "$tmp/saida" \
-    && ok 'conta ilimitada sem sufixo de reserva (nada a trocar)' || { ruim 'reserva ilimitada falhou'; cat "$tmp/saida"; }
-compgen -G "$HOME/.cache/agentes/pessoal.lock*" >/dev/null && ruim 'pessoal ilimitado criou trava' || ok 'reserva ilimitada não cria trava'
+grep -qx 'escritor: pessoal (ritmo 0.7 · 70% livre, zera em 168h) reserva res-r6' "$tmp/saida" \
+    && ok 'conta ilimitada reservada' || { ruim 'reserva ilimitada falhou'; cat "$tmp/saida"; }
+compgen -G "$HOME/.cache/agentes/pessoal.lock*" >/dev/null && ok 'reserva ilimitada registra a trava' || ruim 'reserva ilimitada sem trava'
+pool solta res-r6
 unset POOL_TEAM_SEMANA_USO POOL_CODEX_SEMANA
 
 pool solta ctx_s1 2>/dev/null
@@ -492,9 +496,9 @@ confere_rc 0 'ativo: livres' pool livres
 grep -qx 'b 0/1 inativa' "$tmp/saida" && grep -qx 'a 1/1' "$tmp/saida" && ok 'ativo: livres marca a inativa' || { ruim 'ativo: livres sem marca'; cat "$tmp/saida"; }
 printf 'teto=1\na agente=claude vagas=1\nb agente=claude vagas=1 ativo=nao\n' > "$HOME/.claude/agentes.conf"
 mkdir -p "$HOME/.cache/agentes/b.lock1"; echo ctx_i2 > "$HOME/.cache/agentes/b.lock1/dispatch"
-confere_rc 0 'ativo: inativa fora do teto' pool pega a ctx_i3
-pool livres > "$tmp/livres"; grep -qx 'maquina 0/1' "$tmp/livres" && ok 'ativo: teto conta só a ativa' || ruim 'ativo: teto contou a inativa'
-pool solta ctx_i3; rm -rf "$HOME/.cache/agentes/b.lock1"
+confere_rc 75 'ativo: worker vivo da inativa conta no teto' pool pega a ctx_i3
+pool livres > "$tmp/livres"; grep -qx 'maquina 0/1' "$tmp/livres" && ok 'ativo: teto conta a trava da inativa' || ruim 'ativo: teto não contou a inativa'
+rm -rf "$HOME/.cache/agentes/b.lock1"
 
 # Teto também conta contas ilimitadas e vagas fora do registro atual.
 printf 'teto=2\na agente=claude vagas=1\nb agente=claude vagas=1\nc agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
