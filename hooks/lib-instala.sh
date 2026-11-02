@@ -12,16 +12,17 @@ grava_versao() { local v; v=$(versao_do_plugin "$1"); [ -z "$v" ] || printf '%s\
 copia_scripts() { # raiz-do-plugin destino
     local s
     versao_permite "$1" "$2/fluxo-orca.versao" || return 0
-    mkdir -p "$2/medidores"
+    mkdir -p "$2"
     while IFS= read -r s || [ -n "$s" ]; do
         case "$s" in '' | '#'*) continue ;; esac
         cmp -s "$1/$s" "$2/$(basename "$s")" || cp "$1/$s" "$2/"
     done < "$1/hooks/scripts.lista"
-    # O limites.sh chama os medidores por $(dirname)/medidores/.
-    for s in "$1"/skills/limites-cota/medidores/*.sh; do
-        cmp -s "$s" "$2/medidores/$(basename "$s")" || cp "$s" "$2/medidores/"
-    done
-    rm -f "$2/codex-cota.sh"
+    # Só os nomes da lista: o agent-pool substitui esses scripts, e nada além deles é tocado.
+    while IFS= read -r s || [ -n "$s" ]; do
+        case "$s" in '' | '#'*) continue ;; esac
+        rm -f "$2/${s%$'\r'}"
+    done < "$1/hooks/scripts.removidos"
+    rmdir "$2/medidores" 2>/dev/null
     grava_atalho_raiz "$1" "$2"
     grava_versao "$1" "$2/fluxo-orca.versao"
 }

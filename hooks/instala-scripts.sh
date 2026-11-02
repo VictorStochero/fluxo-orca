@@ -1,10 +1,19 @@
 #!/bin/bash
-# SessionStart: mantém em ~/.cache as cópias dos scripts que skills, agentes e workers chamam por caminho fixo.
+# SessionStart: mantém em ~/.cache as cópias dos scripts que skills, agentes e workers chamam por caminho fixo
+# e avisa, ao abrir a sessão, quando o agent-pool (fila de testes e pool de agentes) não está instalado.
 . "$CLAUDE_PLUGIN_ROOT/hooks/lib-instala.sh"
+entrada=""; [ -t 0 ] || entrada=$(cat)
 copia_scripts "$CLAUDE_PLUGIN_ROOT" "$HOME/.cache"
 mkdir -p "$HOME/.claude/agents"
 cmp -s "$CLAUDE_PLUGIN_ROOT/extras/somente-leitura.json" "$HOME/.claude/agents/somente-leitura.json" \
     || cp "$CLAUDE_PLUGIN_ROOT/extras/somente-leitura.json" "$HOME/.claude/agents/"
+
+# Uma vez por sessão: resume/compact/clear refazem o SessionStart, mas a sessão já foi avisada na abertura.
+case "$entrada" in *'"source"'*) origem=$(printf '%s' "$entrada" | grep -o '"source"[[:space:]]*:[[:space:]]*"[a-z]*"' | head -1 | cut -d'"' -f4) ;; *) origem=startup ;; esac
+if [ "$origem" = startup ] && [ ! -e "$HOME/.agents/bin/agent-pool" ] && [ ! -e "$HOME/.agents/bin/agent-pool.cmd" ]; then
+    aviso='fluxo-orca: o agent-pool não está instalado (falta ~/.agents/bin/agent-pool). Teste pela fila, pool de agentes e vagas dependem dele: instale o plugin agent-pool no Orca e aprove o acesso; ele importa o agentes.conf e o fila.conf.'
+    printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$aviso" "$aviso"
+fi
 
 # Agentes externos (Codex, agy): sem eles, nada abaixo.
 command -v codex >/dev/null 2>&1 || command -v agy >/dev/null 2>&1 || exit 0

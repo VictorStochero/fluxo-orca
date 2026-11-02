@@ -83,7 +83,7 @@ for atividade in done waiting blocked; do
     rm -rf "$h"
 done
 
-# Limite de cota: estourado na tela do worker e perto de estourar pelo limites.sh --alerta.
+# Limite de cota: estourado na tela do worker e perto de estourar pelo agent-pool status --json.
 cena working
 echo '{"ok":true,"result":{"terminal":{"tail":["Error: 403 You'"'"'ve reached your 5-hour usage limit.","> "]}}}' > "$h/tela.json"
 out=$(roda)
@@ -101,25 +101,54 @@ out=$(roda)
 if ! printf '%s' "$out" | grep -q 'bateu limite'; then echo "ok   429 de teste e RateLimiter não são limite"
 else echo "FALHA falso positivo de limite"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -f "$h/tela.json"
-printf '#!/bin/bash\necho "codex: 5h 92%% (zera 04:38) · semana 10%%"; exit 3\n' > "$h/limites.sh"
-out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
-if printf '%s' "$out" | grep -q '^!! cota acima de 80%: codex: 5h 92%'; then echo "ok   cota acima de 80% avisa antes de estourar"
+# agent-pool falso no PATH: status --json devolve $h/status.json; sai com o código de $h/rc.
+cat > "$h/bin/agent-pool" <<EOF2
+#!/bin/bash
+echo "\$*" >> "$h/pool.log"
+[ "\$1 \$2" = "status --json" ] || exit 2
+[ -f "$h/rc" ] && exit \$(cat "$h/rc")
+cat "$h/status.json"
+EOF2
+chmod +x "$h/bin/agent-pool"
+medida() { # conta curta longa [inativa]
+    printf '{"fila":{"modo":"banco","testes":[]},"pool":{"escolha":"ritmo","teto":0,"contas":[{"conta":"%s","total":1,"livres":1,"inativa":%s,"medida":{"conta":"%s","estado":"ok","curta":%s,"longa":%s}}]}}' "$1" "${4:-false}" "$1" "$2" "$3" > "$h/status.json"
+}
+medida codex 92 10
+out=$(ORCA_ESPERA_COTA_MIN=1 roda)
+if printf '%s' "$out" | grep -q '^!! cota acima de 80%: codex 5h 92%$' && printf '%s' "$out" | grep -q 'agent-pool writer --reserve'; then echo "ok   cota acima de 80% avisa antes de estourar (agent-pool status --json)"
 else echo "FALHA aviso de cota"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
-out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=1 roda)
-if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   mesmo fornecedor não avisa de novo"
+out=$(ORCA_ESPERA_COTA_MIN=1 roda)
+if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   mesma conta não avisa de novo"
 else echo "FALHA aviso de cota repetido"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 c=$(ls "$h"/.cache/orca-saude/.cota-avisada.*.consulta 2>/dev/null | head -1)
 [ -n "$c" ] && ok_int=1 || ok_int=0
-printf '#!/bin/bash\necho conta; exit 1\n' > "$h/limites.sh"
-out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
-if [ "$ok_int" = 1 ] && ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   intervalo da consulta vale entre rearmes"
+rm -f "$h/pool.log"
+out=$(ORCA_ESPERA_COTA_MIN=10 roda)
+if [ "$ok_int" = 1 ] && [ ! -e "$h/pool.log" ]; then echo "ok   intervalo da consulta vale entre rearmes (sem chamar o agent-pool)"
 else echo "FALHA intervalo entre rearmes"; falhas=$((falhas + 1)); fi
-touch -d '20 minutes ago' "$c" 2>/dev/null
-out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
-printf '#!/bin/bash\necho "codex: 5h 92%% (zera 04:38) · semana 10%%"; exit 3\n' > "$h/limites.sh"; touch -d '20 minutes ago' "$c"
-out=$(ORCA_LIMITES="$h/limites.sh" ORCA_ESPERA_COTA_MIN=10 roda)
-if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   falha do limites.sh não apaga o que já foi avisado"
+# Falha do agent-pool: não avisa e não apaga o que já foi avisado.
+echo 1 > "$h/rc"; touch -d '20 minutes ago' "$c"
+out=$(ORCA_ESPERA_COTA_MIN=10 roda)
+rm -f "$h/rc"; touch -d '20 minutes ago' "$c"
+out=$(ORCA_ESPERA_COTA_MIN=10 roda)
+if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   falha do agent-pool não apaga o que já foi avisado"
 else echo "FALHA falha apagou deduplicação"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+# Conta inativa não avisa; a janela semanal conta e a 5h baixa não.
+rm -f "$h/.cache/orca-saude/.cota-avisada"*
+medida claude-b 95 95 true
+out=$(ORCA_ESPERA_COTA_MIN=1 roda)
+if ! printf '%s' "$out" | grep -q 'cota acima'; then echo "ok   conta inativa não avisa"
+else echo "FALHA conta inativa avisou"; falhas=$((falhas + 1)); fi
+rm -f "$h/.cache/orca-saude/.cota-avisada"*
+medida pessoal 50 85
+out=$(ORCA_ESPERA_COTA_MIN=1 roda)
+if printf '%s' "$out" | grep -q '^!! cota acima de 80%: pessoal semana 85%$' && ! printf '%s' "$out" | grep -q 'pessoal 5h'; then echo "ok   janela semanal avisa, 5h baixa não"
+else echo "FALHA janela semanal"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+# Sem agent-pool instalado o vigia segue, sem aviso de cota.
+rm -f "$h/bin/agent-pool" "$h/.cache/orca-saude/.cota-avisada"*
+out=$(ORCA_ESPERA_COTA_MIN=1 roda)
+if ! printf '%s' "$out" | grep -q 'cota acima' && printf '%s' "$out" | grep -q '^Sem novidade'; then echo "ok   sem agent-pool o vigia não quebra"
+else echo "FALHA sem agent-pool"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 
 # orca-libera: só fecha terminal criado pelo --cria e que nenhum dispatch ativo do run usa.
@@ -145,11 +174,15 @@ case "\$*" in
     *"terminal close"*) echo fechou >> "$h/fechou"; echo '{"ok":true}' ;;
 esac
 EOF
-    chmod +x "$h/bin/orca"
+    printf '#!/bin/bash
+echo "$*" >> "%s/pool.log"
+' "$h" > "$h/bin/agent-pool"
+    chmod +x "$h/bin/orca" "$h/bin/agent-pool"
     [ "$2" = sim ] && HOME="$h" PATH="$h/bin:$PATH" bash "$raiz/skills/delegacao/orca-libera.sh" --cria --worktree x >/dev/null
     saida=$(HOME="$h" PATH="$h/bin:$PATH" bash "$raiz/skills/delegacao/orca-libera.sh" ctx_a 2>&1)
     fechou=nao; [ -s "$h/fechou" ] && fechou=sim
     if [ "$fechou" = "$4" ]; then echo "ok   $1"; else echo "FALHA $1 (fechou=$fechou): $saida"; falhas=$((falhas + 1)); fi
+    if grep -qx 'slot release ctx_a' "$h/pool.log" 2>/dev/null; then echo "ok   $1: solta a vaga (agent-pool slot release)"; else echo "FALHA $1: vaga não solta"; falhas=$((falhas + 1)); fi
     rm -rf "$h"
 }
 libera "libera fecha terminal criado e ocioso" sim nao sim

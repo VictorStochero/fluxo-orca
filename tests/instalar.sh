@@ -26,7 +26,7 @@ igual 'codex: simulação não grava' '' "$(cd "$HOME" && find . -type f)"
 
 # Aplicação: scripts, regras, skills, trava e fim.
 bash "$raiz/instalar.sh" --agente codex --aplicar >/dev/null
-existe 'codex: fila de testes em ~/.cache' "$HOME/.cache/fila-teste.sh"
+existe 'codex: scripts em ~/.cache' "$HOME/.cache/orca-libera.sh"
 existe 'codex: guarda em ~/.cache' "$HOME/.cache/guarda-externos.sh"
 existe 'codex: regras' "$HOME/.codex/AGENTS.md"
 existe 'codex: skills' "$HOME/.agents/skills/delegacao/SKILL.md"
@@ -40,7 +40,7 @@ case "$saida" in *"[instalado]"* | *"[instalaria]"*) ruim "codex: segunda execu�
 
 # Agente sem diretório de skills: o índice vai no arquivo de regras, apontando para as cópias.
 printf '%s\n' '# teste' 'semskills|||||nao|nao|~/.semskills/REGRAS.md|-|-|' > "$tmp/catalogo.conf"
-CONTAS_CATALOGO="$tmp/catalogo.conf" bash "$raiz/skills/limites-cota/instala-agente.sh" semskills --aplicar >/dev/null
+INSTALA_CATALOGO="$tmp/catalogo.conf" bash "$raiz/skills/limites-cota/instala-agente.sh" semskills --aplicar >/dev/null
 regras=$(cat "$HOME/.semskills/REGRAS.md")
 contem 'sem skills: índice nas regras' '~/.agents/skills/delegacao/SKILL.md' "$regras"
 contem 'sem skills: regras do coordenador' 'Como coordenador' "$regras"
@@ -49,10 +49,10 @@ existe 'sem skills: cópias para o índice apontar' "$HOME/.agents/skills/delega
 # Versão: sessão antiga (resume/compact) não rebaixa scripts nem skills já instalados por versão mais nova.
 falso_plugin() { # versao: raiz com um script, um medidor e uma skill cujo conteúdo é a versão
     local r="$tmp/plugin-$1"
-    mkdir -p "$r/.claude-plugin" "$r/hooks" "$r/skills/limites-cota/medidores" "$r/skills/s"
+    mkdir -p "$r/.claude-plugin" "$r/hooks" "$r/skills/s"
     printf '{\n  "name": "x",\n  "version": "%s"\n}\n' "$1" > "$r/.claude-plugin/plugin.json"
-    echo x.sh > "$r/hooks/scripts.lista"
-    echo "$1" > "$r/x.sh"; echo "$1" > "$r/skills/limites-cota/medidores/m.sh"; echo "$1" > "$r/skills/s/SKILL.md"
+    echo x.sh > "$r/hooks/scripts.lista"; echo velho.sh > "$r/hooks/scripts.removidos"
+    echo "$1" > "$r/x.sh"; echo "$1" > "$r/skills/s/SKILL.md"
     echo "$r"
 }
 . "$raiz/hooks/lib-instala.sh"
@@ -62,7 +62,6 @@ copia_scripts "$novo" "$c"; copia_skills "$novo" "$s"
 igual 'versão: instalação grava o marcador' 2.13.0 "$(cat "$c/fluxo-orca.versao")"
 copia_scripts "$velho" "$c"; copia_skills "$velho" "$s"
 igual 'versão: 2.12.1 não rebaixa o script' 2.13.0 "$(cat "$c/x.sh")"
-igual 'versão: 2.12.1 não rebaixa o medidor' 2.13.0 "$(cat "$c/medidores/m.sh")"
 igual 'versão: 2.12.1 não rebaixa a skill' 2.13.0 "$(cat "$s/s/SKILL.md")"
 igual 'versão: marcador intacto' 2.13.0 "$(cat "$c/fluxo-orca.versao")"
 echo editado > "$c/x.sh"; echo editado > "$s/s/SKILL.md"
@@ -76,5 +75,33 @@ igual 'versão: sem marcador copia' 2.12.1 "$(cat "$tmp/c2/x.sh")"
 igual 'versão: sem marcador grava o marcador' 2.12.1 "$(cat "$tmp/c2/fluxo-orca.versao")"
 copia_scripts "$novo" "$tmp/c2"
 igual 'versão: mais nova atualiza' 2.13.0 "$(cat "$tmp/c2/x.sh")"
+
+
+# 3.0: sem fila e pool próprios. Hook de teste fora, scripts removidos sem sobra no código, instalador só apaga o que é dele.
+[ ! -e "$raiz/hooks/fila-testes.sh" ] && ok 'hook fila-testes.sh removido' || ruim 'hook fila-testes.sh ainda existe'
+case "$(cat "$raiz/hooks/hooks.json")" in *fila-testes*) ruim 'hooks.json ainda chama fila-testes.sh' ;; *) ok 'hooks.json sem fila-testes.sh' ;; esac
+sobra=$(grep -rlE 'fila-teste\.sh|gs-teste\.sh|e-teste\.sh|limites\.sh|contas\.sh|vaga-agente\.sh|painel\.sh|orca-ram\.sh' "$raiz/hooks" "$raiz/skills" "$raiz/instalar.sh" --include='*.sh' --include='*.json' --include='*.lista' 2>/dev/null)
+igual 'nenhum script ou hook cita script removido' '' "$sobra"
+
+h="$tmp/h3"; mkdir -p "$h/.cache/medidores" "$h/.agents"
+for f in fila-teste.sh limites.sh contas.sh vaga-agente.sh orca-ram.sh painel.sh medidores/claude.sh; do echo velho > "$h/.cache/$f"; done
+echo meu > "$h/.cache/meu-script.sh"; echo meu > "$h/.cache/medidores/meu.sh"
+saida=$(echo '{"source":"startup"}' | HOME="$h" CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh"); rc=$?
+igual 'instala-scripts: sai 0 sem agent-pool' 0 $rc
+contem 'sem agent-pool: avisa em português' 'o agent-pool não está instalado' "$saida"
+contem 'sem agent-pool: diz o que fazer' 'instale o plugin agent-pool no Orca' "$saida"
+contem 'sem agent-pool: aviso no systemMessage' '{"systemMessage":"fluxo-orca:' "$saida"
+apagou=""; for f in fila-teste.sh limites.sh contas.sh vaga-agente.sh orca-ram.sh painel.sh medidores/claude.sh; do [ -e "$h/.cache/$f" ] && apagou="$apagou $f"; done
+igual 'instalador apaga os scripts da lista dos removidos' '' "$apagou"
+existe 'instalador preserva arquivo que não é dele' "$h/.cache/meu-script.sh"
+existe 'instalador preserva arquivo alheio em medidores/' "$h/.cache/medidores/meu.sh"
+igual 'resume: sem aviso repetido' '' "$(echo '{"source":"resume"}' | HOME="$h" CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh")"
+igual 'compact: sem aviso repetido' '' "$(echo '{"source":"compact"}' | HOME="$h" CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh")"
+mkdir -p "$h/.agents/bin"; echo '#!/bin/sh' > "$h/.agents/bin/agent-pool"
+igual 'com agent-pool: sem aviso' '' "$(echo '{"source":"startup"}' | HOME="$h" CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh")"
+rm "$h/.agents/bin/agent-pool"; echo '@echo off' > "$h/.agents/bin/agent-pool.cmd"
+igual 'com agent-pool.cmd: sem aviso' '' "$(echo '{"source":"startup"}' | HOME="$h" CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh")"
+rm "$h/.agents/bin/agent-pool.cmd"
+contem 'sem entrada (stdin vazio): avisa' 'não está instalado' "$(HOME="$h" CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh" < /dev/null)"
 
 [ "$falhas" = 0 ] && echo "tudo ok" || { echo "$falhas falha(s)"; exit 1; }
