@@ -17,7 +17,8 @@ cat > "$tmp/bin/orca" <<'STUB'
 [ -n "${PAINEL_ORCA_FALHA:-}" ] && exit 1
 case "$1 $2" in
     'status --json') echo '{"ok":true,"result":{"app":{"running":true},"runtime":{"appVersion":"9.9.9"}}}' ;;
-    'account list') oc='[]'; [ -n "${PAINEL_TESTE_OPENCODE:-}" ] && oc='[{"id":"oc1","label":"Conta OC"}]'; echo '{"ok":true,"result":{"claude":{"accounts":[{"id":"abcdef1234567890","email":"gerenciada@x.com"}],"activeAccountId":null},"codex":{"accounts":[],"activeAccountId":null,"systemDefault":{"hasAuth":true,"authKind":"oauth","email":"cx@x.com"}},"opencode":{"accounts":'"$oc"',"activeAccountId":null},"devin":{"accounts":[{"id":"d1","label":"Devin A"}],"activeAccountId":null},"rateLimits":{"claude":{"status":"unavailable","session":null,"weekly":null},"codex":{"status":"ok","session":{"usedPercent":95,"resetDescription":"14:48"},"weekly":{"usedPercent":50,"resetDescription":"qua., 10:01"},"updatedAt":0}}}}' ;;
+    'account list') cx='{"status":"ok","session":{"usedPercent":95,"resetDescription":"14:48"},"weekly":{"usedPercent":50,"resetDescription":"qua., 10:01"},"updatedAt":0}'; [ -n "${PAINEL_TESTE_CODEX_ERRO:-}" ] && cx='{"status":"error","error":"token expirado","session":null,"weekly":null}'
+        oc='[]'; [ -n "${PAINEL_TESTE_OPENCODE:-}" ] && oc='[{"id":"oc1","label":"Conta OC"}]'; echo '{"ok":true,"result":{"claude":{"accounts":[{"id":"abcdef1234567890","email":"gerenciada@x.com"}],"activeAccountId":null},"codex":{"accounts":[],"activeAccountId":null,"systemDefault":{"hasAuth":true,"authKind":"oauth","email":"cx@x.com"}},"opencode":{"accounts":'"$oc"',"activeAccountId":null},"devin":{"accounts":[{"id":"d1","label":"Devin A"}],"activeAccountId":null},"rateLimits":{"claude":{"status":"unavailable","session":null,"weekly":null},"codex":'"$cx"'}}}' ;;
     *) exit 2 ;;
 esac
 STUB
@@ -323,5 +324,44 @@ echo 1793600000000 > "$HOME/.cache/gs-teste-3307.lock2/inicio"; echo 17936500000
 echo $$ > "$HOME/.cache/gs-teste-3307.lock2/pid"; mkdir -p "$HOME/.cache/fila-espera/$$x" 2>/dev/null
 painel --json > "$tmp/t.json"
 igual 'testes: dois em execucao saem do mais antigo para o mais novo' '1793600000000 1793640000000' "$(j '" ".join(str(t["desde_ts"]) for t in d["fila"]["testes"] if t["estado"]=="execucao")' "$tmp/t.json")"
+
+# Alertas: estado da cota por conta (medidas falsas de cada tipo) e a lista de alertas no topo.
+rm -rf "$HOME/.cache/gs-teste"*.lock* "$HOME/.cache/fila-espera"
+printf 'a agente=claude vagas=2\nb agente=codex vagas=1\nsl agente=claude vagas=1 config=/x/team\nil agente=claude vagas=1\nan agente=claude vagas=1\nsm agente=claude vagas=1\ninat agente=claude vagas=1 ativo=nao\n' > "$HOME/.claude/agentes.conf"
+touch "$HOME/.cache/agentes/medida.a"
+m="$HOME/.cache/agentes"
+printf 'sl: sem login (rode CLAUDE_CONFIG_DIR=/x/team claude auth login)\n' > "$m/medida.sl"
+printf 'il: ilegível\n' > "$m/medida.il"
+printf 'an: sessão 10%% usado | semana 5%% usado\n#cand an 10 5 1793721600 168\n' > "$m/medida.an"; touch -d '2 hours ago' "$m/medida.an"
+printf 'inat: sem login (rode claude auth login)\n' > "$m/medida.inat"
+painel --json > "$tmp/al.json"
+est() { j '[c for c in d["pool"]["contas"] if c["nome"]=="'"$1"'"][0]["cota"]["estado"]' "$tmp/al.json"; }
+igual 'alerta: medida recente é ok' ok "$(est a)"
+igual 'alerta: "sem login" vira sem_login' sem_login "$(est sl)"
+igual 'alerta: ação é o comando entre parênteses' 'CLAUDE_CONFIG_DIR=/x/team claude auth login' "$(j '[c for c in d["pool"]["contas"] if c["nome"]=="sl"][0]["cota"]["acao"]' "$tmp/al.json")"
+igual 'alerta: ilegível antigo vira erro' erro "$(est il)"
+igual 'alerta: medida de mais de 30 min é antiga' antiga "$(est an)"
+igual 'alerta: sem arquivo é sem_medida' sem_medida "$(est sm)"
+igual 'alerta: cota nativa do Orca é ok' ok "$(est b)"
+igual 'alerta: conta com cota sem medida ainda traz as chaves' 'None None' "$(j 'str([c for c in d["pool"]["contas"] if c["nome"]=="sm"][0]["cota"]["curta"])+" "+str([c for c in d["pool"]["contas"] if c["nome"]=="sm"][0]["cota"]["medida_ha_min"])' "$tmp/al.json")"
+igual 'alerta: sem_login e erro viram alertas de nível erro, a inativa não' 'erro erro 2' "$(j 'd["alertas"][0]["nivel"]+" "+d["alertas"][1]["nivel"]+" "+str(len([a for a in d["alertas"] if "inat" in a["texto"]]) + 2)' "$tmp/al.json")"
+igual 'alerta: texto claro e ação no alerta de sem_login' 'Conta sl desconectada: reconecte para voltar a medir a cota|CLAUDE_CONFIG_DIR=/x/team claude auth login' "$(j '[a["texto"]+"|"+a["acao"] for a in d["alertas"] if "sl " in a["texto"]][0]' "$tmp/al.json")"
+igual 'alerta: antiga e sem_medida não geram alerta' 0 "$(j 'len([a for a in d["alertas"] if "Conta an " in a["texto"] or "Conta sm " in a["texto"]])' "$tmp/al.json")"
+igual 'alerta: alerta sem ação não traz a chave' False "$(j '"acao" in [a for a in d["alertas"] if "il " in a["texto"]][0]' "$tmp/al.json")"
+# Erro do Orca na conta detectada sem medida: a codex (b) sem medida.
+PAINEL_TESTE_CODEX_ERRO=1 painel --json > "$tmp/al2.json"
+igual 'alerta: erro do Orca vira erro com a mensagem do Orca' 'erro token expirado' "$(j '[c for c in d["pool"]["contas"] if c["nome"]=="b"][0]["cota"]["estado"]+" "+[c for c in d["pool"]["contas"] if c["nome"]=="b"][0]["cota"]["texto"]' "$tmp/al2.json")"
+igual 'alerta: o erro do Orca entra em alertas' 1 "$(j 'len([a for a in d["alertas"] if "token expirado" in a["texto"]])' "$tmp/al2.json")"
+igual 'alerta: claude com medida recente ignora o status "unavailable" do Orca' ok "$(j '[c for c in d["pool"]["contas"] if c["nome"]=="a"][0]["cota"]["estado"]' "$tmp/al2.json")"
+# Orca fora do ar; testes parados; scripts desatualizados.
+PAINEL_ORCA_FALHA=1 painel --json > "$tmp/al3.json"
+igual 'alerta: Orca fora do ar' 1 "$(j 'len([a for a in d["alertas"] if a["nivel"]=="erro" and "Orca indisponível" in a["texto"]])' "$tmp/al3.json")"
+mkdir -p "$HOME/.cache/gs-teste-3308.lock1"; echo 99999999 > "$HOME/.cache/gs-teste-3308.lock1/pid"; echo 'C:/Herd/proj-x [] desde 20:00:00: pest' > "$HOME/.cache/gs-teste-3308.lock1/dono"
+painel --json > "$tmp/al4.json"
+igual 'alerta: teste parado na fila vira aviso' 'aviso' "$(j '[a["nivel"] for a in d["alertas"] if "parado" in a["texto"]][0]' "$tmp/al4.json")"
+rm -rf "$HOME/.cache/gs-teste-3308.lock1"
+rm -f "$m/medida.sl" "$m/medida.il" "$m/medida.an" "$m/medida.inat"
+painel --json > "$tmp/al5.json"
+igual 'alerta: sem problemas, a lista vem vazia' '[]' "$(j '[a for a in d["alertas"] if "Conta" in a["texto"]]' "$tmp/al5.json")"
 
 [ "$falhas" = 0 ] && echo 'TUDO OK' || { echo "$falhas falha(s)"; exit 1; }

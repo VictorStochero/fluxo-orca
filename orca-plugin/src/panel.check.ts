@@ -1,6 +1,6 @@
 // `orca plugin check` desenha o painel uma vez por cenário.
 import { defineCheck, hostError } from 'orca/testing'
-import { estadoExemplo } from './fixtures'
+import { estadoComAlertas, estadoExemplo } from './fixtures'
 
 // A vigília (auto.assistir) é um long-poll que nunca responde: o check esperaria para sempre; ele só confere o desenho.
 const semVigia = {
@@ -11,6 +11,8 @@ const semVigia = {
 
 export default defineCheck({
   carregado: { requests: { ...semVigia, 'estado.ler': () => estadoExemplo } },
+  // Bloco Atenção: conta sem login, erro do Orca, Orca fora do ar e teste parado.
+  comAlertas: { requests: { ...semVigia, 'estado.ler': () => estadoComAlertas } },
   // Conta inativa ("não utilizada") na tabela do Pool.
   contaInativa: {
     requests: {

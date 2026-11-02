@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Callout,
   Code,
   Collapsible,
   EmptyState,
@@ -32,7 +33,7 @@ import {
   type TableCell,
   type TableRow
 } from 'orca'
-import type { Conta, Estado, ItemFila, Requisitos, TesteFila, ValorFila } from './protocol'
+import type { Alerta, Conta, Estado, ItemFila, Requisitos, TesteFila, ValorFila } from './protocol'
 import { manterAtualizando } from './atualizacao'
 import { t } from './textos'
 
@@ -340,6 +341,24 @@ function SecaoFila({ e }: { e: Estado }) {
 }
 
 const percentual = (v: number | null) => t.pool.percentual(v, (v ?? 0) > 80)
+/** Conta ativa que precisa de ação: o valor da cota (se houver) é velho e não aparece. */
+const comProblema = (c: Conta) => c.ativo && (c.cota?.estado === 'sem_login' || c.cota?.estado === 'erro')
+
+function Atencao({ alertas }: { alertas: Alerta[] }) {
+  if (alertas.length === 0) return null
+  return (
+    <Callout tone={alertas.some((a) => a.nivel === 'erro') ? 'danger' : 'warning'} title={t.atencao}>
+      <Stack gap="xs">
+        {alertas.map((a, i) => (
+          <Stack key={`${i}-${a.texto}`} gap="xs">
+            <Text>{a.texto}</Text>
+            {a.acao ? <Code block>{a.acao}</Code> : null}
+          </Stack>
+        ))}
+      </Stack>
+    </Callout>
+  )
+}
 
 function SecaoPool({ e }: { e: Estado }) {
   const { pool } = e
@@ -348,18 +367,20 @@ function SecaoPool({ e }: { e: Estado }) {
     cells: {
       conta: c.ativo ? c.nome : `${c.nome} (${t.pool.naoUtilizada})`,
       vagas: t.pool.vagasDaConta(c.usadas, c.vagas),
-      h5: percentual(c.cota?.curta ?? null),
-      semanal: percentual(c.cota?.longa ?? null)
+      h5: comProblema(c) ? `⚠ ${t.pool.semLeitura}` : percentual(c.cota?.curta ?? null),
+      semanal: comProblema(c) ? `⚠ ${t.pool.semLeitura}` : percentual(c.cota?.longa ?? null)
     },
     detalhes: [
+      ...(comProblema(c) && c.cota ? ([[t.pool.problema, c.cota.texto]] as [string, string][]) : []),
+      ...(comProblema(c) && c.cota?.acao ? ([[t.pool.acao, c.cota.acao]] as [string, string][]) : []),
       ...(c.ativo ? [] : ([[t.pool.situacao, t.pool.naoUtilizadaDetalhe]] as [string, string][])),
       ...(c.rotulo ? ([[t.pool.rotulo, c.rotulo]] as [string, string][]) : []),
       [t.pool.agente, c.agente ?? '-'],
       [t.pool.peso, c.peso],
       [t.pool.papeis, c.papeis.join(', ') || '-'],
-      [t.pool.janelas, c.cota ? c.cota.texto : t.pool.semMedida],
-      [t.pool.medidaHa, c.cota ? t.pool.minutos(c.cota.medida_ha_min) : '-'],
-      ...(c.cota && c.cota.fonte !== 'orca' && c.cota.medida_ha_min > 30 ? ([[t.pool.aviso, t.pool.medidaAntiga(c.cota.medida_ha_min)]] as [string, string][]) : []),
+      [t.pool.janelas, c.cota && c.cota.estado !== 'sem_medida' ? c.cota.texto : t.pool.semMedida],
+      [t.pool.medidaHa, c.cota?.medida_ha_min != null ? t.pool.minutos(c.cota.medida_ha_min) : '-'],
+      ...(c.cota?.estado === 'antiga' && c.cota.medida_ha_min != null ? ([[t.pool.aviso, t.pool.medidaAntiga(c.cota.medida_ha_min)]] as [string, string][]) : []),
       [t.pool.vagasEmUso, c.ocupantes.map((o) => o.dispatch ?? '?').join(', ') || t.pool.nenhuma]
     ]
   }))
@@ -696,10 +717,8 @@ export default function Painel() {
             {t.atualizadoEm} <RelativeTime at={Date.parse(e.gerado_em)} />
             {` · ${t.dicaLinha}`}
           </Text>
+          <Atencao alertas={e.alertas} />
           {e.aviso ? <Text tone="warning">{e.aviso}</Text> : null}
-          {e.saude.scripts_desatualizados.length > 0 ? (
-            <Text tone="warning">{`${t.scriptsDesatualizados}: ${e.saude.scripts_desatualizados.join(', ')}`}</Text>
-          ) : null}
           <Text size="xs" muted>
             {`${t.plugin} ${e.saude.plugin_versao ?? '?'} · ${t.orca} ${e.saude.orca.rodando ? (e.saude.orca.versao ?? t.orcaRodando) : t.orcaForaDoAr}`}
           </Text>

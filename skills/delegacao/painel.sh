@@ -479,9 +479,13 @@ for l in conta_linhas:
         for x in linhas:
             m = re.match(r"^#cand (\S+) (\d+) (\d+)\b", x)
             if m and m.group(1) == nome: curta, longa = int(m.group(2)), int(m.group(3)); break
-        cota = {"texto": linhas[0] if linhas else "", "curta": curta, "longa": longa,
-                "medida_ha_min": int((agora - os.path.getmtime(arq)) // 60),
-                "alerta": (curta or 0) > 80 or (longa or 0) > 80}
+        texto = linhas[0] if linhas else ""
+        ha = int((agora - os.path.getmtime(arq)) // 60)
+        # Formato do medidor: "<conta>: sem login (rode <comando>)"; "ilegível" é o formato antigo de falha.
+        m = re.search(r"sem login \(rode (.+)\)\s*$", texto)
+        estado, acao = ("sem_login", m.group(1)) if m else ("erro", None) if "ilegível" in texto else ("antiga", None) if ha > 30 else ("ok", None)
+        cota = {"texto": texto, "curta": curta, "longa": longa, "medida_ha_min": ha,
+                "alerta": (curta or 0) > 80 or (longa or 0) > 80, "estado": estado, "acao": acao}
     contas.append({"nome": nome, "agente": c.get("agente"), "vagas": inteiro(c.get("vagas"), 0), "usadas": len(ocup),
                    "peso": inteiro(c.get("peso"), 1), "papeis": [p for p in c.get("papeis", "").split(",") if p],
                    "ocupantes": ocup, "cota": cota, "origem": "manual", "rotulo": None, "config": c.get("config"), "detectada": False, "ativo": c.get("ativo") != "nao"})
@@ -499,10 +503,11 @@ def cota_orca(prov):
     if curta is None and longa is None: return None
     texto = " · ".join(x for x in ("5h %s%% (zera %s)" % (curta, sess.get("resetDescription") or "?") if sess else "", "semana %s%% (zera %s)" % (longa, sem.get("resetDescription") or "?") if sem else "") if x)
     return {"texto": texto, "curta": curta, "longa": longa, "medida_ha_min": max(0, int((agora * 1000 - (r.get("updatedAt") or agora * 1000)) // 60000)),
-            "alerta": (curta or 0) > 80 or (longa or 0) > 80, "fonte": "orca"}
+            "alerta": (curta or 0) > 80 or (longa or 0) > 80, "fonte": "orca", "estado": "ok", "acao": None}
 
 def slug(x): return re.sub(r"[^a-z0-9-]+", "-", x.lower()).strip("-")[:32] or "conta"
 
+erros_orca = {}  # conta -> mensagem do Orca quando a leitura nativa da cota falha
 for prov in ("claude", "codex", "opencode", "devin"):
     d = res_contas.get(prov) or {}
     sd = d.get("systemDefault") or {}
@@ -512,6 +517,9 @@ for prov in ("claude", "codex", "opencode", "devin"):
         # O padrão do sistema é a conta manual do mesmo agente sem config; a gerenciada, a de mesmo nome.
         dono = next((c for c in contas if c["origem"] == "manual" and ((c["agente"] == prov and not c["config"]) if padrao else c["nome"] == nome)), None)
         nativa = cota_orca(prov) if padrao else None
+        rl = (res_contas.get("rateLimits") or {}).get(prov) or {}
+        if padrao and rl.get("status") not in (None, "ok"):
+            erros_orca[dono["nome"] if dono else nome] = rl.get("error") or "o Orca não leu a cota (%s)" % rl.get("status")
         if dono:
             dono["detectada"] = True; dono["origem"] = "ambos"; dono["rotulo"] = rotulo
             if nativa: dono["cota"] = nativa
@@ -557,12 +565,35 @@ if os.path.isfile(CONF_AGENTES):
                     aplica_config([("conta.%s.adicionar" % c["nome"], c["agente"])])
                     marca_adicionada(c)
                 except Erro as e: aviso.append("n\u00e3o consegui adicionar %s ao pool: %s" % (c["nome"], e))
+# Estado da cota por conta: sem medida nem leitura vira objeto sem números, com estado; o erro do Orca só vale sem medida própria.
+for c in contas:
+    if c["cota"] is None:
+        erro = erros_orca.get(c["nome"])
+        c["cota"] = {"texto": erro or "", "curta": None, "longa": None, "medida_ha_min": None, "alerta": False,
+                     "estado": "erro" if erro else "sem_medida", "acao": None}
+alertas = []
+for c in contas:
+    k = c["cota"]
+    if not c["ativo"] or k["estado"] not in ("sem_login", "erro"): continue
+    if k["estado"] == "sem_login":
+        alertas.append({"nivel": "erro", "texto": "Conta %s desconectada: reconecte para voltar a medir a cota" % c["nome"], "acao": k["acao"]})
+    else:
+        alertas.append({"nivel": "erro", "texto": "Conta %s com problema na leitura da cota: %s" % (c["nome"], k["texto"] or "medida ilegível"), "acao": k["acao"]})
+if not orca["rodando"]:
+    alertas.append({"nivel": "erro", "texto": "Orca indisponível: abra o Orca para o painel e os workers funcionarem", "acao": None})
+if desatualizados:
+    alertas.append({"nivel": "aviso", "texto": "Scripts desatualizados em ~/.cache: %s" % ", ".join(desatualizados), "acao": None})
+presos = [t for t in testes if t["estado"] == "parado"]
+if presos:
+    alertas.append({"nivel": "aviso", "texto": "%d teste(s) parado(s) na fila ocupando vaga: %s" % (len(presos), ", ".join(str(t["projeto"] or t["pid"]) for t in presos)), "acao": None})
+for al in alertas:
+    if not al["acao"]: del al["acao"]
 teto = conf.get("teto", 0); ram_min = conf.get("ram_min", 0)
 pool = {"teto": teto, "ram_min": ram_min, "escolha": escolha, "papeis_validos": list(PAPEIS), "catalogo": catalogo, "maquina": {"usadas": total, "teto": teto}, "contas": contas}
 
 sobrescritas_dos_projetos([t["worktree"] for t in travas if t["worktree"]])
 
 estado = {"gerado_em": datetime.now().astimezone().isoformat(timespec="seconds"), "aviso": "; ".join(aviso) or None,
-          "saude": saude, "fila": fila, "pool": pool}
+          "alertas": alertas, "saude": saude, "fila": fila, "pool": pool}
 print(json.dumps(estado, ensure_ascii=True, indent=2))  # ASCII puro: nenhuma codificação de console ou pipe estraga o acento
 EOF

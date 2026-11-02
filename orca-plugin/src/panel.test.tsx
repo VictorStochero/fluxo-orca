@@ -1,5 +1,5 @@
 import { afterEach, assert, hostError, mockHost, mount, test, type TestPanel } from 'orca/testing'
-import { estadoExemplo } from './fixtures'
+import { estadoComAlertas, estadoExemplo } from './fixtures'
 import type { Estado, Requisitos } from './protocol'
 import * as panel from './panel'
 
@@ -383,4 +383,25 @@ test('requisitos ok: o painel normal; worker sem o handler (unknown_method): tam
   })
   assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
   assert.equal(view.find({ type: 'Table', label: 'Requisitos do painel' }), null)
+})
+
+test('alertas: sem alertas o bloco Atenção não aparece', async () => {
+  view = await mount(panel, { host: hostCom() })
+  assert.equal(view.find({ text: /Atenção/ }), null)
+})
+
+test('alertas: o bloco Atenção lista um item por problema e o comando num Code; a conta com problema mostra ⚠ — e repete problema e ação', async () => {
+  view = await mount(panel, { host: hostCom([], estadoComAlertas) })
+  assert.ok(view.find({ type: 'Callout', text: /Atenção/ }))
+  for (const trecho of [/Conta team desconectada: reconecte para voltar a medir a cota/, /Conta codex com problema na leitura da cota: token expirado/, /Orca indisponível/, /parado\(s\) na fila/]) {
+    assert.ok(view.find({ type: 'Callout', text: trecho }), String(trecho))
+  }
+  assert.ok(view.find({ type: 'Code', text: /claude auth login/ }))
+  assert.equal(view.findAll({ type: 'Code' }).length, 1)
+  assert.ok(view.find({ type: 'Table', label: 'Contas do pool', text: /⚠ —/ }))
+  assert.equal(view.find({ type: 'Table', label: 'Contas do pool', text: /84%/ }), null) // o valor velho da conta sem login não aparece
+  await view.selectRows(POOL, ['team'])
+  assert.ok(view.find({ type: 'Table', label: 'Contas do pool', text: /Problema.*sem login/ }))
+  assert.ok(view.find({ type: 'Table', label: 'Contas do pool', text: /Para resolver.*claude auth login/ }))
+  assert.deepEqual(view.errors, [])
 })

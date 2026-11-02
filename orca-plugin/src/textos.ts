@@ -97,6 +97,7 @@ export const t = {
     sobrescrito: (projetos: string) => `sobrescrito pelo projeto (${projetos})`
   },
 
+  atencao: 'Atenção',
   pool: {
     titulo: 'Pool de agentes',
     resumo: (usadas: number, teto: number, ramMin: number, escolha: string) =>
@@ -121,6 +122,9 @@ export const t = {
     semMedida: 'sem medida',
     aviso: 'Aviso',
     medidaHa: 'Medida há',
+    semLeitura: '—',
+    problema: 'Problema',
+    acao: 'Para resolver',
     medidaAntiga: (min: number) => `Medida antiga: há ${min} min. A cota desta conta vem do medidor local; rode o medidor de novo (limites.sh) antes de confiar nela.`,
     minutos: (n: number) => `${n} min`,
     vagasEmUso: 'Vagas em uso',
