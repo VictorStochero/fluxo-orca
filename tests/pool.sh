@@ -466,6 +466,36 @@ printf 'escolha=ordem\nteam agente=claude config=~/.claude-team\npessoal agente=
 confere_rc 0 'peso: ordem ignora o peso' seletor
 grep -q '^escritor: team ' "$tmp/saida" && ok 'ordem preservada' || ruim 'peso mudou ordem'
 
+# Conta inativa (ativo=nao): fora do escritor e da segunda opinião, mas medida e listada.
+printf 'escolha=ordem\nteam agente=claude config=~/.claude-team ativo=nao\npessoal agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'ativo: escritor pula a inativa' seletor
+grep -q '^escritor: pessoal ' "$tmp/saida" && ok 'ativo: escolhe a seguinte' || { ruim 'ativo: escritor escolheu a inativa'; cat "$tmp/saida"; }
+confere_rc 0 'ativo: saída normal mede e marca a inativa' bash "$tmp/seletor/limites.sh"
+grep -q 'Current week\|% usado\|%' "$tmp/saida" && grep -qx 'team: não utilizada (ativo=nao)' "$tmp/saida" \
+    && ok 'ativo: inativa medida e marcada' || { ruim 'ativo: marca ausente'; cat "$tmp/saida"; }
+printf 'escolha=ordem\nteam agente=claude config=~/.claude-team ativo=sim\npessoal agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'ativo: ativa volta a ser escolhida' seletor
+grep -q '^escritor: team ' "$tmp/saida" && ok 'ativo: team volta' || ruim 'ativo: team não voltou'
+printf 'team agente=claude config=~/.claude-team ativo=nao\n' > "$HOME/.claude/agentes.conf"
+confere_rc 0 'ativo: única conta inativa' seletor
+grep -q '^escritor: nenhum' "$tmp/saida" && ok 'ativo: sem escritor' || ruim 'ativo: única inativa escolhida'
+printf 'codex agente=codex vagas=1\nagy agente=antigravity vagas=1 papeis=segunda-opiniao ativo=nao\n' > "$HOME/.claude/agentes.conf"
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=30 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=50 POOL_CODEX_SEMANA=38 confere_rc 0 'ativo: segunda pula a inativa' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: codex ' "$tmp/saida" && ok 'ativo: segunda cai para a ativa' || { ruim 'ativo: segunda escolheu a inativa'; cat "$tmp/saida"; }
+printf 'codex agente=codex vagas=1\nagy agente=antigravity vagas=1 papeis=segunda-opiniao\n' > "$HOME/.claude/agentes.conf"
+POOL_AGY_ALTO=1 POOL_AGY_ARGON=30 POOL_AGY_GEMINI=0 POOL_AGY_MISTO=50 POOL_CODEX_SEMANA=38 confere_rc 0 'ativo: segunda com agy ativa' bash "$tmp/seletor/limites.sh" --segunda --familia claude
+grep -q '^segunda: agy ' "$tmp/saida" && ok 'ativo: segunda volta ao agy' || ruim 'ativo: agy ativa não voltou'
+printf 'a agente=claude vagas=1\nb agente=claude vagas=1 ativo=nao\n' > "$HOME/.claude/agentes.conf"
+confere_rc 2 'ativo: pega recusa a inativa' pool pega b ctx_i1
+grep -q 'conta inativa' "$tmp/saida" && [ ! -d "$HOME/.cache/agentes/b.lock1" ] && ok 'ativo: recusa sem vaga' || ruim 'ativo: pega sem mensagem ou com vaga'
+confere_rc 0 'ativo: livres' pool livres
+grep -qx 'b 0/1 inativa' "$tmp/saida" && grep -qx 'a 1/1' "$tmp/saida" && ok 'ativo: livres marca a inativa' || { ruim 'ativo: livres sem marca'; cat "$tmp/saida"; }
+printf 'teto=1\na agente=claude vagas=1\nb agente=claude vagas=1 ativo=nao\n' > "$HOME/.claude/agentes.conf"
+mkdir -p "$HOME/.cache/agentes/b.lock1"; echo ctx_i2 > "$HOME/.cache/agentes/b.lock1/dispatch"
+confere_rc 0 'ativo: inativa fora do teto' pool pega a ctx_i3
+pool livres > "$tmp/livres"; grep -qx 'maquina 0/1' "$tmp/livres" && ok 'ativo: teto conta só a ativa' || ruim 'ativo: teto contou a inativa'
+pool solta ctx_i3; rm -rf "$HOME/.cache/agentes/b.lock1"
+
 # Teto também conta contas ilimitadas e vagas fora do registro atual.
 printf 'teto=2\na agente=claude vagas=1\nb agente=claude vagas=1\nc agente=claude vagas=0\n' > "$HOME/.claude/agentes.conf"
 confere_rc 0 'teto: primeira conta' pool pega a ctx_t1

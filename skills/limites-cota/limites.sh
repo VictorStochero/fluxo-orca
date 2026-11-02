@@ -107,7 +107,10 @@ alerta() {
 }
 [ "$ALERTA" = 1 ] && { alerta 1; exit $?; }
 if [ $SOLO = 0 ] && [ "$SEGUNDA" = 0 ]; then
-  while read -r i _; do humanas "$tmp/m.$i"; done < "$tmp/medidas"
+  while read -r i c _; do
+    humanas "$tmp/m.$i"
+    conta_ativa "$c" || echo "$c: não utilizada (ativo=nao)"
+  done < "$tmp/medidas"
 fi
 
 bash "$aqui/vaga-agente.sh" livres > "$tmp/pool"
@@ -118,6 +121,7 @@ if [ "$SEGUNDA" = 1 ]; then
   teto_segunda=${LIMITES_SEGUNDA_TETO:-$CONTAS_SEGUNDA_TETO}
   [[ "$teto_segunda" =~ ^[0-9]+$ ]] || { echo 'LIMITES_SEGUNDA_TETO deve ser inteiro.' >&2; exit 2; }
   for c in $CONTAS; do
+    conta_ativa "$c" || continue
     agente=$(conta_campo "$c" agente)
     if ! conta_tem_papel "$c" segunda-opiniao; then
       [ "$agente" = codex ] && [ "$FAMILIA" != gpt ] && conta_no_pool "$c" || continue
@@ -175,6 +179,7 @@ agora=$(date +%s)
 : > "$tmp/cand"
 for c in $CONTAS; do
   conta_tem_papel "$c" escritor || continue
+  conta_ativa "$c" || continue
   instalada "$c" || continue
   if [ "$(conta_campo "$c" medidor)" = - ]; then echo "$c s" >> "$tmp/cand"; continue; fi
   i=$(awk -v c="$c" '$2 == c { print $1 }' "$tmp/medidas")
