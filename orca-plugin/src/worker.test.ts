@@ -161,3 +161,11 @@ test('ambienteDoColetor completa APPDATA e LOCALAPPDATA no Windows e não mexe n
   assert.deepEqual([com.APPDATA, com.LOCALAPPDATA, com.ORCA_CMD], ['X', 'Y', undefined])
   assert.equal(ambienteDoColetor({}, 'linux', '/home/u').APPDATA, undefined)
 })
+
+test('ambienteDoColetor completa o PATH com o do sistema, sem repetir entradas e respeitando Path/PATH', () => {
+  const env = ambienteDoColetor({ Path: 'C:/a;C:/B' }, 'win32', 'C:/u', undefined, 'c:/b;C:/Program Files/nodejs;;C:/c')
+  assert.equal(env.Path, 'C:/a;C:/B;C:/Program Files/nodejs;C:/c')
+  assert.equal(env.PATH, undefined)
+  assert.equal(ambienteDoColetor({ PATH: '/bin' }, 'linux', '/h', undefined, '/bin:/opt/x').PATH, '/bin:/opt/x')
+  assert.equal(ambienteDoColetor({ PATH: '/bin' }, 'linux', '/h').PATH, '/bin')
+})

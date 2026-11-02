@@ -44,8 +44,16 @@ export function acharOrca(
  * Ambiente do coletor. O processo do worker chega sem APPDATA/LOCALAPPDATA (o CLI do Orca responde
  * `runtime_unavailable: APPDATA is not set`), então completa o que falta a partir da pasta do usuário e aponta o CLI.
  */
-export function ambienteDoColetor(env: NodeJS.ProcessEnv, plataforma: string, casa: string, orca?: string): NodeJS.ProcessEnv {
+export function ambienteDoColetor(env: NodeJS.ProcessEnv, plataforma: string, casa: string, orca?: string, caminhoExtra = ''): NodeJS.ProcessEnv {
   const novo: NodeJS.ProcessEnv = { ...env }
+  if (caminhoExtra) {
+    // O PATH do worker chega sem as pastas do usuário (onde ficam os CLIs dos agentes): completa sem repetir entradas.
+    const chave = Object.keys(novo).find((k) => k.toLowerCase() === 'path') ?? 'PATH'
+    const sep = plataforma === 'win32' ? ';' : ':'
+    const atual = (novo[chave] ?? '').split(sep).filter(Boolean)
+    const vistos = new Set(atual.map((x) => x.toLowerCase()))
+    novo[chave] = [...atual, ...caminhoExtra.split(sep).filter((x) => x && !vistos.has(x.toLowerCase()))].join(sep)
+  }
   if (plataforma === 'win32') {
     novo.APPDATA ??= join(casa, 'AppData', 'Roaming')
     novo.LOCALAPPDATA ??= join(casa, 'AppData', 'Local')
@@ -54,10 +62,26 @@ export function ambienteDoColetor(env: NodeJS.ProcessEnv, plataforma: string, ca
   return novo
 }
 
-function rodarColetor(cache: string, args: string[], recusa: string): Promise<string> {
+let caminhoDoSistema: Promise<string> | undefined
+
+/** PATH de Machine e User lido do sistema (Windows): o do processo do Orca não traz, por exemplo, a pasta do npm global. */
+function lerCaminhoDoSistema(): Promise<string> {
+  if (process.platform !== 'win32') return Promise.resolve('')
+  caminhoDoSistema ??= new Promise((resolve) =>
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"],
+      { timeout: 10_000, windowsHide: true, encoding: 'utf8' },
+      (erro, saida) => resolve(erro ? '' : saida.trim())
+    )
+  )
+  return caminhoDoSistema
+}
+
+async function rodarColetor(cache: string, args: string[], recusa: string): Promise<string> {
   const bash = process.platform === 'win32' ? BASH_WINDOWS : 'bash'
   const orca = acharOrca(process.env, process.platform, process.execPath)
-  const env = ambienteDoColetor(process.env, process.platform, homedir(), orca)
+  const env = ambienteDoColetor(process.env, process.platform, homedir(), orca, await lerCaminhoDoSistema())
   return new Promise((resolve, reject) => {
     execFile(
       bash,
