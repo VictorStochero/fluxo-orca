@@ -27,7 +27,7 @@ export default defineCheck({
       'estado.ler': () => ({
         ...estadoExemplo,
         aviso: 'Orca indisponível',
-        fila: { ...estadoExemplo.fila, travas: [] },
+        fila: { ...estadoExemplo.fila, testes: [] },
         pool: { ...estadoExemplo.pool, contas: [] }
       })
     }

@@ -32,7 +32,7 @@ import {
   type TableCell,
   type TableRow
 } from 'orca'
-import type { Conta, Estado, ItemFila, Requisitos, ValorFila } from './protocol'
+import type { Conta, Estado, ItemFila, Requisitos, TesteFila, ValorFila } from './protocol'
 import { manterAtualizando } from './atualizacao'
 import { t } from './textos'
 
@@ -248,7 +248,7 @@ function CampoModo({ e }: { e: Estado }) {
       <Text weight="medium" size="sm">
         {t.fila.campos.modo}
       </Text>
-      {(['global', 'projeto'] as const).map((m) => (
+      {(['global', 'banco', 'projeto'] as const).map((m) => (
         <Row key={m} gap="xs" align="center">
           {/* Um RadioGroup de uma opção por linha (RadioOption não tem ícone): o valor marcado é o do estado, então só uma fica selecionada. */}
           <RadioGroup
@@ -281,51 +281,54 @@ function CampoFila({ item, e }: { item: Exclude<ItemFila, 'modo'>; e: Estado }) 
   )
 }
 
+/** Rótulo da coluna Fila: depende do modo; o detalhe do recurso fica na linha expandida. */
+function rotuloFila(modo: Estado['fila']['modo'], x: TesteFila): string {
+  if (modo === 'global') return t.fila.filaGlobal
+  const r = x.recurso ?? ''
+  if (modo === 'projeto') return t.fila.filaProjeto(r.replace(/^projeto\s+/, '') || x.projeto || '-')
+  if (r.startsWith('mysql ')) return t.fila.filaBanco(r.slice(6))
+  if (r.startsWith('container')) return t.fila.filaContainer
+  return r === 'geral' ? t.fila.filaGeral : r || '-'
+}
+
 function SecaoFila({ e }: { e: Estado }) {
   const { fila } = e
-  // A trava "teto" repete o teste que já está na trava da fila: uma linha por teste (pid, quando houver).
-  const vistos = new Set<number>()
-  const testes = fila.travas.filter((tr) => {
-    if (tr.fila === 'teto') return false
-    if (tr.pid === null) return true
-    return !vistos.has(tr.pid) && !!vistos.add(tr.pid)
-  })
-  const linhas: Linha[] = testes.map((tr) => {
-    // desde_ts pode vir em segundos ou milissegundos.
-    const inicio = tr.desde_ts ? (tr.desde_ts < 1e12 ? tr.desde_ts * 1000 : tr.desde_ts) : null
-    return {
-      key: `${tr.fila}.${tr.vaga}`,
-      cells: {
-        projeto: (tr.worktree ?? '-').split(/[\\/]/).filter(Boolean).pop() ?? '-',
-        fila: fila.modo === 'projeto' ? t.fila.filaProjeto(tr.fila) : t.fila.filaGlobal,
-        ha: inicio ? { type: 'relative', at: inicio, format: 'duration' } : (tr.desde ?? '-'),
-        situacao: tr.viva ? t.fila.rodando : t.fila.parado
-      },
-      detalhes: [
-        [t.fila.disputa, /^\d+$/.test(tr.fila) ? t.fila.disputaBanco(tr.fila) : tr.fila],
-        [t.fila.comando, tr.comando ?? '-'],
-        [t.fila.pid, tr.pid ?? '-'],
-        [t.fila.inicio, tr.desde ?? '-']
-      ]
-    }
-  })
+  const testes = fila.testes
+  const execucao = testes.filter((x) => x.estado === 'execucao').length
+  const aguardando = testes.filter((x) => x.estado === 'aguardando').length
+  const linhas: Linha[] = testes.map((x, i) => ({
+    key: x.pid === null ? `i${i}` : `p${x.pid}`,
+    cells: {
+      projeto: x.projeto ?? '-',
+      fila: rotuloFila(fila.modo, x),
+      estado: t.fila.estados[x.estado] ?? x.estado,
+      ha: x.desde_ts ? { type: 'relative', at: x.desde_ts, format: 'duration' } : '-'
+    },
+    detalhes: [
+      ...(x.estado === 'parado' ? ([[t.fila.situacao, t.fila.dicaParado]] as [string, string][]) : []),
+      [t.fila.ondeRoda, x.recurso ?? '-'],
+      [t.fila.comando, x.comando ?? '-'],
+      [t.fila.pid, x.pid ?? '-'],
+      [t.fila.worktree, x.worktree ?? '-']
+    ]
+  }))
   return (
-    <Card title={t.fila.titulo} description={t.fila.resumo(testes.length, fila.teto, t.fila.modos[fila.modo] ?? fila.modo)}>
+    <Card title={t.fila.titulo} description={t.fila.resumo(execucao, aguardando, fila.teto, t.fila.modos[fila.modo] ?? fila.modo)}>
       <ComDica texto={t.fila.explica}>
         <Text muted size="xs">
           {t.fila.comoFunciona}
         </Text>
       </ComDica>
       {testes.length === 0 ? (
-        <Text muted>{t.fila.semTravas}</Text>
+        <Text muted>{t.fila.semTestes}</Text>
       ) : (
         <TabelaExpansivel
           label={t.fila.tabela}
           colunas={[
             { key: 'projeto', label: t.fila.colProjeto, width: 'md' },
             { key: 'fila', label: t.fila.colFila, width: 'md' },
-            { key: 'ha', label: t.fila.colHa, width: 'xs' },
-            { key: 'situacao', label: t.fila.colSituacao, width: 'lg' }
+            { key: 'estado', label: t.fila.colEstado, width: 'md' },
+            { key: 'ha', label: t.fila.colHa, width: 'xs' }
           ]}
           linhas={linhas}
           abertas={read(abertasTrava)}

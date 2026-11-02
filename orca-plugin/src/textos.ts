@@ -51,26 +51,30 @@ export const t = {
   },
 
   fila: {
-    titulo: 'Testes rodando agora',
+    titulo: 'Testes na fila',
     explica: 'Os testes esperam a vez numa fila para a máquina não sobrecarregar: cada fila libera um número de vagas e o teto limita o total de testes ao mesmo tempo.',
-    modos: { global: 'Global', projeto: 'Por projeto' } as Record<string, string>,
-    resumo: (rodando: number, teto: number, modo: string) => `${rodando} de ${teto} testes ao mesmo tempo na máquina · Modo ${modo}`,
+    modos: { global: 'Global', banco: 'Por banco', projeto: 'Por projeto' } as Record<string, string>,
+    resumo: (execucao: number, aguardando: number, teto: number, modo: string) =>
+      `${execucao} em execução · ${aguardando} aguardando · teto ${teto} · Modo ${modo}`,
     comoFunciona: 'Como funciona a fila',
-    semTravas: 'Nenhum teste rodando',
-    tabela: 'Testes rodando',
+    semTestes: 'Nenhum teste na fila',
+    tabela: 'Testes na fila',
     colProjeto: 'Projeto',
     colFila: 'Fila',
+    colEstado: 'Estado',
     colHa: 'Há',
-    colSituacao: 'Situação',
     filaGlobal: 'Global',
     filaProjeto: (nome: string) => `Projeto ${nome}`,
-    rodando: 'Rodando',
-    parado: '⚠ Parado: o processo terminou e deixou a vaga presa',
-    disputa: 'Disputa',
-    disputaBanco: (porta: string) => `banco ${porta}`,
+    filaBanco: (endereco: string) => `Banco ${endereco}`,
+    filaContainer: 'Container',
+    filaGeral: 'Geral',
+    estados: { execucao: 'Em execução', aguardando: 'Aguardando vaga', parado: '⚠ Parado' } as Record<string, string>,
+    dicaParado: 'O processo terminou e deixou a vaga presa.',
+    ondeRoda: 'Onde roda',
     comando: 'Comando',
     pid: 'PID',
-    inicio: 'Início',
+    worktree: 'Worktree',
+    situacao: 'Situação',
     configurar: 'Configurar a fila',
     configurarDescricao: 'vale só para testes iniciados depois',
     campos: {
@@ -81,8 +85,9 @@ export const t = {
       processos: 'Processos (--parallel)'
     },
     dicas: {
-      global:
-        'Uma fila por recurso, compartilhada por todos os projetos da máquina: testes Laravel que usam o mesmo banco (mesma porta) esperam uns pelos outros; container e Python/JS têm filas próprias. Use quando os projetos dividem o banco de testes.',
+      global: 'Uma fila única para a máquina inteira: todos os testes, de qualquer projeto, esperam a mesma vez.',
+      banco:
+        'Uma fila por banco (endereço:porta), compartilhada entre projetos: testes que usam o mesmo banco esperam uns pelos outros; container e Python/JS têm filas próprias. Use quando os projetos dividem o banco de testes.',
       projeto:
         'Cada projeto tem a própria fila (vagas por projeto), independente dos outros; só o teto da máquina limita o total. Use quando cada projeto tem banco de testes próprio.',
       vagas: 'Testes ao mesmo tempo em cada fila.',
