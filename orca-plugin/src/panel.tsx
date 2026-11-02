@@ -6,6 +6,7 @@ import {
   Card,
   Checkbox,
   Code,
+  Collapsible,
   EmptyState,
   Heading,
   IconButton,
@@ -20,8 +21,11 @@ import {
   Spinner,
   Stack,
   storage,
+  Tab,
   Table,
+  Tabs,
   Text,
+  ui,
   update,
   type OrcaNode,
   type PanelContext,
@@ -483,7 +487,9 @@ function NovaConta({ e }: { e: Estado }) {
 function ConfigFila({ e }: { e: Estado }) {
   return (
     <Stack gap="sm">
-      <Heading level={3}>{t.configuracoes.fila}</Heading>
+      <Text muted size="xs">
+        {t.configuracoes.linhas.fila}
+      </Text>
       <Text muted size="xs">
         {t.fila.configurarDescricao}
       </Text>
@@ -500,11 +506,11 @@ function ConfigFila({ e }: { e: Estado }) {
 function ConfigPool({ e }: { e: Estado }) {
   const { pool } = e
   const ed = read(edicoes)
-  const escolhida = read(contaEscolhida)
-  const conta = pool.contas.find((c) => c.nome === escolhida) ?? pool.contas[0]
   return (
     <Stack gap="sm">
-      <Heading level={3}>{t.configuracoes.pool}</Heading>
+      <Text muted size="xs">
+        {t.configuracoes.linhas.pool}
+      </Text>
       <ComDica texto={t.pool.dicas.teto}>
         <Input label={t.pool.teto} value={ed['pool.teto'] ?? String(pool.teto)} onChange={(x) => mudar('pool.teto', x)} />
       </ComDica>
@@ -521,9 +527,21 @@ function ConfigPool({ e }: { e: Estado }) {
       </ComDica>
       <Mensagem secao="pool" />
       <Salvar secao="pool" chaves={['pool.teto', 'pool.ram_min', 'pool.escolha']} />
+    </Stack>
+  )
+}
+
+function ConfigContas({ e }: { e: Estado }) {
+  const { pool } = e
+  const escolhida = read(contaEscolhida)
+  const conta = pool.contas.find((c) => c.nome === escolhida) ?? pool.contas[0]
+  return (
+    <Stack gap="sm">
+      <Text muted size="xs">
+        {t.configuracoes.linhas.contas}
+      </Text>
       {conta ? (
         <Stack gap="sm">
-          <Text weight="medium">{t.pool.contasTitulo}</Text>
           <Select
             label={t.pool.escolherConta}
             value={conta.nome}
@@ -544,7 +562,9 @@ function ConfigPool({ e }: { e: Estado }) {
 function ConfigPainel() {
   return (
     <Stack gap="sm">
-      <Heading level={3}>{t.configuracoes.painel}</Heading>
+      <Text muted size="xs">
+        {t.configuracoes.linhas.painel}
+      </Text>
       <ComDica texto={t.painel.dica}>
         <Input label={t.painel.intervalo} value={read(edicoes)['painel.intervalo'] ?? String(read(intervalo))} onChange={(x) => mudar('painel.intervalo', x)} />
       </ComDica>
@@ -557,12 +577,32 @@ function ConfigPainel() {
 }
 
 function SecaoConfiguracoes({ e }: { e: Estado }) {
+  const abas = [
+    { id: 'fila', corpo: <ConfigFila e={e} /> },
+    { id: 'pool', corpo: <ConfigPool e={e} /> },
+    { id: 'contas', corpo: <ConfigContas e={e} /> },
+    { id: 'painel', corpo: <ConfigPainel /> }
+  ] as const
   return (
-    <Card title={t.configuracoes.titulo}>
-      <ConfigFila e={e} />
-      <ConfigPool e={e} />
-      <ConfigPainel />
-    </Card>
+    <Collapsible title={t.configuracoes.titulo} description={t.configuracoes.descricao}>
+      {ui.has('Tabs') ? (
+        <Tabs label={t.configuracoes.assuntos} defaultValue="fila">
+          {abas.map((a) => (
+            <Tab key={a.id} value={a.id} label={t.configuracoes.abas[a.id]}>
+              {a.corpo}
+            </Tab>
+          ))}
+        </Tabs>
+      ) : (
+        <Stack gap="sm">
+          {abas.map((a) => (
+            <Collapsible key={a.id} title={t.configuracoes.abas[a.id]}>
+              {a.corpo}
+            </Collapsible>
+          ))}
+        </Stack>
+      )}
+    </Collapsible>
   )
 }
 

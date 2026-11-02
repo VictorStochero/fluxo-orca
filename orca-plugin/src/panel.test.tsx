@@ -7,6 +7,12 @@ let view: TestPanel | undefined
 afterEach(() => view?.unmount())
 
 const POOL = { label: 'Contas do pool' }
+
+/** Configurações começa recolhida e é dividida em abas: abre e escolhe o assunto. */
+async function abrir(v: TestPanel, aba?: string) {
+  await v.toggle({ label: 'Configurações' })
+  if (aba) await v.select({ label: 'Assuntos das configurações' }, aba)
+}
 const FILA = { label: 'Travas da fila' }
 
 function hostCom(gravados: unknown[] = [], estado: Estado = estadoExemplo) {
@@ -36,9 +42,9 @@ test('tabelas nativas recolhidas: Fila · Vaga · Viva e Conta · Vagas · 5h ·
   assert.deepEqual(view.refusals, [])
 })
 
-test('só componentes do catálogo 1 e as tabelas: sem Grid, Collapsible, Callout, Skeleton, Tabs nem Toolbar', async () => {
+test('sem os componentes de layout que quebraram o desenho: Grid, Callout, Skeleton e Toolbar', async () => {
   view = await mount(panel, { host: hostCom() })
-  for (const tipo of ['Grid', 'Collapsible', 'Callout', 'Skeleton', 'Tabs', 'Toolbar']) assert.equal(view.findAll({ type: tipo }).length, 0, tipo)
+  for (const tipo of ['Grid', 'Callout', 'Skeleton', 'Toolbar']) assert.equal(view.findAll({ type: tipo }).length, 0, tipo)
 })
 
 test('fila: clicar abre os detalhes na própria tabela, várias ficam abertas e o segundo clique recolhe', async () => {
@@ -71,15 +77,24 @@ test('medida antiga: a conta manual com medida de mais de 30 min ganha aviso no 
   assert.equal(view.find({ type: 'Table', text: /Medida antiga/ }), null)
 })
 
-test('Configurações fica no fim, com Fila, Pool e Painel', async () => {
+test('Configurações: seção recolhida no fim, com abas Fila · Pool · Contas · Painel e a linha do que cada uma muda', async () => {
   view = await mount(panel, { host: hostCom() })
-  const titulos = view.findAll({ type: 'Heading' }).map((h) => h.text)
-  assert.deepEqual(titulos.slice(-3), ['Fila', 'Pool', 'Painel'])
-  assert.ok(view.find({ type: 'Select', label: 'Conta a configurar' }))
+  assert.ok(view.find({ type: 'Collapsible', label: 'Configurações', text: /Fila, pool, contas e painel/ }))
+  assert.equal(view.find({ label: 'Modo da fila: Global' }), null) // recolhida: nada de formulário à mostra
+  await abrir(view)
+  assert.ok(view.find({ type: 'Tabs', label: 'Assuntos das configurações' }))
+  assert.ok(view.find({ text: /^Como os testes esperam a vez — ~\/\.claude\/fila\.conf/ }))
+  await view.select({ label: 'Assuntos das configurações' }, 'pool')
+  assert.ok(view.find({ text: /^Limites da máquina e como o escritor é escolhido — ~\/\.claude\/agentes\.conf/ }))
+  await view.select({ label: 'Assuntos das configurações' }, 'contas')
+  assert.ok(view.find({ text: /^Vagas, peso, papéis e ordem de cada conta — ~\/\.claude\/agentes\.conf/ }))
+  await view.select({ label: 'Assuntos das configurações' }, 'painel')
+  assert.ok(view.find({ text: /^Este painel — guardado no Orca/ }))
 })
 
 test('Configurações > Pool: escolher a conta na lista mostra o formulário dela e as dicas de cada campo e papel', async () => {
   view = await mount(panel, { host: hostCom() })
+  await abrir(view, 'contas')
   assert.equal(view.valueOf({ label: 'Conta a configurar' }), 'pessoal') // a primeira
   for (const trecho of [/^Quantos agentes desta conta/, /^Prioridade na escolha do escritor/, /^Pasta de configuração do agente/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
@@ -87,15 +102,17 @@ test('Configurações > Pool: escolher a conta na lista mostra o formulário del
   for (const trecho of [/^Implementa a tarefa/, /^Gate de merge só leitura/, /^Contraprova só leitura/, /^Tarefas mecânicas/, /^Revisão adversarial/, /^Coordena os workers/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
+  assert.ok(view.find({ type: 'Button', text: 'Remover do pool' }))
+  await view.select({ label: 'Assuntos das configurações' }, 'pool')
   for (const trecho of [/^Máximo de agentes trabalhando/, /^Memória livre mínima/, /^Ritmo: escolhe o escritor.*de cima para baixo/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
-  assert.ok(view.find({ type: 'Button', text: 'Remover do pool' }))
 })
 
 test('conta detectada fora do pool: escolhida na lista, traz Adicionar ao pool e nenhum formulário', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
+  await abrir(view, 'contas')
   await view.select({ label: 'Conta a configurar' }, 'claude-abcdef12')
   assert.equal(view.find({ label: 'Peso da conta' }), null)
   await view.press({ type: 'Button', text: 'Adicionar ao pool' })
@@ -116,8 +133,9 @@ test('editar a conta escolhida manda só o que mudou e mostra o estado novo', as
     }
   })
   view = await mount(panel, { host })
+  await abrir(view, 'contas')
   await view.type({ label: 'Vagas da conta' }, '3', { replace: true })
-  await view.press(view.findAll({ type: 'Button', text: 'Salvar' })[2]) // 0 fila, 1 pool, 2 conta
+  await view.press({ type: 'Button', text: 'Salvar' }) // aba Contas: só o Salvar da conta aberta
   assert.deepEqual(enviados, [{ 'conta.pessoal.vagas': '3' }])
   assert.deepEqual(view.refusals, [])
 })
@@ -125,6 +143,7 @@ test('editar a conta escolhida manda só o que mudou e mostra o estado novo', as
 test('setas ↑/↓ da conta escolhida: gravam pool.ordem com a lista completa; a primeira não sobe e a última não desce', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
+  await abrir(view, 'contas')
   assert.equal(view.find({ type: 'IconButton', label: 'Subir' })?.disabled, true) // pessoal é a primeira
   assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, false)
   await view.select({ label: 'Conta a configurar' }, 'codex')
@@ -136,6 +155,7 @@ test('setas ↑/↓ da conta escolhida: gravam pool.ordem com a lista completa; 
 test('Remover do pool pede confirmação e só então grava conta.<nome>.remover=1', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
+  await abrir(view, 'contas')
   await view.select({ label: 'Conta a configurar' }, 'codex')
   await view.press({ type: 'Button', text: 'Remover do pool' })
   assert.deepEqual(enviados, [])
@@ -150,6 +170,7 @@ test('Remover do pool pede confirmação e só então grava conta.<nome>.remover
 test('Nova conta manual: nome, agente do catálogo e config viram um único pedido, com dicas', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
+  await abrir(view, 'contas')
   for (const trecho of [/^Agente do catálogo \(agentes-catalogo/, /^Comando que o lançador/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
@@ -165,6 +186,7 @@ test('Nova conta manual: nome, agente do catálogo e config viram um único pedi
 test('modo da fila: cada opção é um rádio com o ícone de dica ao lado, sem linhas repetidas', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
+  await abrir(view)
   const grupos = view.findAll({ role: 'radiogroup' })
   assert.deepEqual(grupos.map((g) => g.label), ['Modo da fila: Global', 'Modo da fila: Por projeto'])
   assert.equal(view.findAll({ type: 'IconButton', label: /^Uma fila por recurso|^Cada projeto tem a própria fila/ }).length, 2)
@@ -177,8 +199,9 @@ test('modo da fila: cada opção é um rádio com o ícone de dica ao lado, sem 
 
 test('a fila mostra só o valor em uso e avisa quando um projeto o sobrescreve', async () => {
   view = await mount(panel, { host: hostCom() })
+  await abrir(view)
   assert.ok(view.find({ text: /sobrescrito pelo projeto \(meu-projeto: 1\)/ }))
-  assert.equal(view.find({ text: /origem|variável de ambiente|fila\.conf/ }), null)
+  assert.equal(view.find({ text: /origem|variável de ambiente/ }), null)
 })
 
 test('recusa do validador aparece em português e não limpa a edição', async () => {
@@ -191,6 +214,7 @@ test('recusa do validador aparece em português e não limpa a edição', async 
     }
   })
   view = await mount(panel, { host })
+  await abrir(view)
   await view.type({ label: 'Vagas' }, '0', { replace: true })
   await view.press(view.findAll({ type: 'Button', text: 'Salvar' })[0])
   assert.ok(view.find({ text: 'valor inválido para fila.vagas: 0' }))
@@ -229,6 +253,7 @@ test('o post estado.mudou lê o estado de novo', async () => {
 test('Configurações > Painel: intervalo de atualização (15 a 3600 s) grava no storage do painel', async () => {
   const host = mockHost({ capabilities: ['storage:own'], storage: { 'atualizacao.intervalo_s': 90 }, requests: { 'estado.ler': () => estadoExemplo } })
   view = await mount(panel, { host })
+  await abrir(view, 'painel')
   assert.equal(view.valueOf({ label: 'Atualizar a cada (segundos)' }), '90')
   assert.ok(view.find({ type: 'IconButton', label: /^Coleta local feita pelo próprio painel, sem IA e sem gastar tokens/ }))
   for (const ruim of ['5', '3601', 'abc', '']) {

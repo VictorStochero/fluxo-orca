@@ -390,7 +390,8 @@ for prov in ("claude", "codex", "opencode", "devin"):
             contas.append({"nome": nome, "agente": prov, "vagas": 0, "usadas": 0, "peso": 1, "papeis": [], "ocupantes": [], "cota": nativa,
                            "origem": "orca", "rotulo": rotulo, "config": None, "detectada": True})
 catalogo = []; instalados = []
-arq_catalogo = os.environ.get("CONTAS_CATALOGO") or os.path.join(os.path.dirname(E["PAINEL_CONTAS"]), "agentes-catalogo.conf")
+# Instalado em ~/.cache o catálogo fica ao lado do script; no repo, em skills/limites-cota.
+arq_catalogo = os.environ.get("CONTAS_CATALOGO") or next((c for c in (os.path.join(cache, "agentes-catalogo.conf"), os.path.join(os.path.dirname(E["PAINEL_CONTAS"]), "agentes-catalogo.conf")) if os.path.isfile(c)), "")
 for l in le(arq_catalogo).split("\n"):
     if l.strip() and not l.startswith("#") and "|" in l:
         campos = l.split("|")

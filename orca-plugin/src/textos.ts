@@ -31,7 +31,18 @@ export const t = {
     copiavel: 'Rode no terminal:'
   },
   dicaLinha: 'Clique numa linha para ver os detalhes.',
-  configuracoes: { titulo: 'Configurações', fila: 'Fila', pool: 'Pool', painel: 'Painel' },
+  configuracoes: {
+    titulo: 'Configurações',
+    descricao: 'Fila, pool, contas e painel',
+    assuntos: 'Assuntos das configurações',
+    abas: { fila: 'Fila', pool: 'Pool', contas: 'Contas', painel: 'Painel' },
+    linhas: {
+      fila: 'Como os testes esperam a vez — ~/.claude/fila.conf',
+      pool: 'Limites da máquina e como o escritor é escolhido — ~/.claude/agentes.conf',
+      contas: 'Vagas, peso, papéis e ordem de cada conta — ~/.claude/agentes.conf',
+      painel: 'Este painel — guardado no Orca'
+    }
+  },
   painel: {
     intervalo: 'Atualizar a cada (segundos)',
     dica: 'Coleta local feita pelo próprio painel, sem IA e sem gastar tokens; valores baixos só aumentam o uso de CPU.',
