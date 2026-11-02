@@ -94,6 +94,7 @@ def confere(chave, v):
     elif chave == "pool.teto": ok = inteiro_; faixa = FAIXAS[chave]
     elif chave == "pool.ram_min": ok = re.fullmatch(r"[0-9]+(\.[0-9]+)?", v) is not None; faixa = FAIXAS[chave]
     elif chave == "pool.escolha": ok = v in ("ritmo", "ordem")
+    elif chave == "pool.ordem": ok = re.fullmatch(r"[a-z0-9_-]{1,32}(,[a-z0-9_-]{1,32})*", v) is not None
     else:
         m = re.fullmatch(r"conta\.([a-z0-9_-]{1,32})\.(vagas|peso|papeis|config|comando|adicionar|remover)", chave)
         if not m: raise Erro("chave desconhecida (%s)" % chave)
@@ -148,7 +149,7 @@ def edita_agentes(L, chaves):
         for i, l in enumerate(L):
             if re.match(r"\s*[a-z0-9_-]+\s+\S", l): return i
     for k, v in chaves.items():
-        if k.startswith("pool."): edita_chaves(L, k[5:], v, primeira_conta)
+        if k.startswith("pool.") and k != "pool.ordem": edita_chaves(L, k[5:], v, primeira_conta)
     def acha(nome):
         return next((j for j, l in enumerate(L) if re.match(r"\s*%s\s+\S" % re.escape(nome), l)), None)
     for k, v in chaves.items():  # conta nova: linha mínima no fim; vagas, peso, papéis e config entram pelos campos abaixo
@@ -173,7 +174,33 @@ def edita_agentes(L, chaves):
     for nome in sorted(removidas):  # a linha da conta e a legada nome=N
         if acha(nome) is None: raise Erro("conta inexistente no agentes.conf: %s" % nome)
         L = [l for l in L if not (re.match(r"\s*%s\s+\S" % re.escape(nome), l) or re.fullmatch(r"\s*%s=[0-9]+\s*" % re.escape(nome), l.rstrip("\r\n")))]
+    if "pool.ordem" in chaves: L = reordena(L, chaves["pool.ordem"].split(","))
     return L
+
+def reordena(L, ordem):
+    """Troca de lugar só as linhas de conta (com os comentários colados acima); o resto do arquivo fica onde está."""
+    blocos = {}  # nome -> (início, fim) em L
+    ant_fim = -1
+    for i, l in enumerate(L):
+        m = re.match(r"\s*([a-z0-9_-]+)\s+\S", l)
+        if not m or l.lstrip().startswith("#"): continue
+        ini = i
+        while ini - 1 > ant_fim and L[ini - 1].lstrip().startswith("#"): ini -= 1
+        blocos[m.group(1)] = (ini, i + 1); ant_fim = i
+    if len(set(ordem)) != len(ordem): raise Erro("conta repetida em pool.ordem")
+    if [n for n in ordem if n not in blocos]: raise Erro("conta inexistente no agentes.conf: %s" % ", ".join(n for n in ordem if n not in blocos))
+    if set(ordem) != set(blocos): raise Erro("pool.ordem precisa trazer todas as contas; faltam: %s" % ", ".join(n for n in blocos if n not in ordem))
+    inicios = {blocos[n][0]: blocos[n][1] for n in blocos}
+    novo, fila, j = [], iter(ordem), 0
+    while j < len(L):
+        if j in inicios:
+            ini, fim = blocos[next(fila)]
+            bloco = L[ini:fim]
+            if not bloco[-1].endswith("\n"): bloco[-1] += "\n"
+            novo += bloco; j = inicios[j]
+        else:
+            novo.append(L[j]); j += 1
+    return novo
 
 def roda_contas(conf):  # valida o candidato (.tmp) antes de ele virar o agentes.conf: nenhum outro processo vê registro inválido
     sh = os.path.join(cache, "contas.sh")
