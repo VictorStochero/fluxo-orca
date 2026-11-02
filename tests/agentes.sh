@@ -14,7 +14,7 @@ py() { local p; for p in python3 python; do "$p" -c '' 2>/dev/null && { "$p" -I 
 
 export HOME="$tmp/home"
 mkdir -p "$HOME/.cache"
-cp "$raiz/hooks/guarda-externos.sh" "$raiz/hooks/fim-worker.sh" "$raiz/skills/fila-testes/e-teste.sh" "$HOME/.cache/"
+cp "$raiz/hooks/guarda-externos.sh" "$raiz/hooks/fim-worker.sh" "$HOME/.cache/"
 
 # --- guarda-externos.sh: um exemplo de cada formato de hook ---
 ssh_gemini='{"hook_event_name":"BeforeTool","tool_name":"run_shell_command","tool_input":{"command":"ssh -V"}}'
@@ -29,7 +29,7 @@ printf '%s' "$ssh_kimi" | bash "$HOME/.cache/guarda-externos.sh" exit2 2>/dev/nu
 printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status"}}' | bash "$HOME/.cache/guarda-externos.sh" exit2 2>/dev/null
 igual 'kimi/zcode: comando comum sai 0' 0 $?
 printf '%s' '{"tool_name":"Bash","tool_input":{"command":"php artisan test"}}' | bash "$HOME/.cache/guarda-externos.sh" exit2 2>/dev/null
-igual 'exit2: teste fora da fila sai 2' 2 $?
+igual 'exit2: teste fora da fila passa (a fila é imposta pelo hook do agent-pool)' 0 $?
 
 # --- plugin do opencode: mesmo guarda, via tool.execute.before ---
 if command -v node >/dev/null 2>&1; then
@@ -97,9 +97,7 @@ contem 'codex: simulação avisa que nada gravou' 'nada foi gravado' "$saida"
 igual 'codex: simulação não altera hooks.json' "$antes" "$(cat "$HOME/.codex/hooks.json")"
 igual 'codex: simulação não altera as regras' 'minhas regras' "$(cat "$HOME/.codex/AGENTS.md")"
 [ ! -e "$HOME/.codex/config.toml" ] && ok 'codex: simulação não cria config.toml' || ruim 'codex: simulação criou config.toml'
-[ ! -e "$HOME/.cache/trava-codex.ok" ] && ok 'codex: simulação não grava o carimbo da trava' || ruim 'codex: simulação gravou o carimbo'
 inst codex --aplicar >/dev/null
-[ -s "$HOME/.cache/trava-codex.ok" ] && ok 'codex: --aplicar grava o carimbo da trava' || ruim 'codex: carimbo da trava ausente'
 igual 'codex: grupo do Orca preservado' orca-hook "$(ha_json "$HOME/.codex/hooks.json" 'd["hooks"]["PreToolUse"][0]["hooks"][0]["command"]')"
 contem 'codex: trava em PreToolUse' guarda-externos "$(ha_json "$HOME/.codex/hooks.json" 'd["hooks"]["PreToolUse"][1]["hooks"][0]["command"]')"
 contem 'codex: fim em Stop' fim-worker "$(ha_json "$HOME/.codex/hooks.json" 'd["hooks"]["Stop"][1]["hooks"][0]["command"]')"
@@ -110,7 +108,7 @@ contem 'codex: hash gravado' 'trusted_hash = "sha256:' "$toml"
 contem 'codex: regras preservam o texto do usuário' 'minhas regras' "$(cat "$HOME/.codex/AGENTS.md")"
 contem 'codex: regras do fluxo' 'fluxo-orca:inicio' "$(cat "$HOME/.codex/AGENTS.md")"
 [ -f "$HOME/.agents/skills/fila-testes/SKILL.md" ] && ok 'codex: skills copiadas' || ruim 'codex: skills não copiadas'
-[ -f "$HOME/.cache/fila-teste.sh" ] && ok 'codex: scripts em ~/.cache' || ruim 'codex: scripts não copiados'
+[ -f "$HOME/.cache/orca-libera.sh" ] && ok 'codex: scripts em ~/.cache' || ruim 'codex: scripts não copiados'
 sem_mudanca codex codex
 copia=$(cat "$HOME/.codex/hooks.json" "$HOME/.codex/config.toml" "$HOME/.codex/AGENTS.md")
 inst codex --aplicar >/dev/null
@@ -192,7 +190,7 @@ while IFS= read -r s; do
     [ -f "$HOME/.cache/$(basename "$s")" ] || faltou="$faltou $s"
 done < "$raiz/hooks/scripts.lista"
 igual 'instala-scripts: tudo da lista em ~/.cache' '' "$faltou"
-[ -f "$HOME/.cache/medidores/claude.sh" ] && ok 'instala-scripts: medidores' || ruim 'instala-scripts: medidores ausentes'
+[ ! -e "$HOME/.cache/medidores" ] && ok 'instala-scripts: sem medidores (agent-pool)' || ruim 'instala-scripts: medidores copiados'
 [ -f "$HOME/.claude/agents/somente-leitura.json" ] && ok 'instala-scripts: somente-leitura.json' || ruim 'instala-scripts: somente-leitura.json ausente'
 
 [ "$falhas" = 0 ] && echo "tudo ok" || { echo "$falhas falha(s)"; exit 1; }

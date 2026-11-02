@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Fecha o ciclo de um worker concluído: libera o dispatch, fecha a aba do terminal que o coordenador criou e solta a vaga do pool.
+# Fecha o ciclo de um worker concluído: libera o dispatch, fecha a aba do terminal que o coordenador criou e solta a vaga do pool (agent-pool slot release).
 # Uso: bash ~/.cache/orca-libera.sh --cria <argumentos de orca terminal create>   → imprime o handle e o registra
 #      bash ~/.cache/orca-libera.sh <dispatch_id> [...]
 # worker-release só fecha o terminal que o próprio worker-start criou; o aberto com `orca terminal create` + --terminal
 # volta como retained/external_terminal. Só é fechado aqui o que foi criado pelo --cria e não serve a outro dispatch ativo.
 reg="$HOME/.cache/orca-terminais"
+pool="$HOME/.agents/bin/agent-pool"; [ -x "$pool" ] || pool=$(command -v agent-pool)
 for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break; done
 handle_de() { grep -o "\"$1\": *\"[^\"]*\"" | head -1 | cut -d'"' -f4; }
 if [ "${1:-}" = --cria ]; then
@@ -52,6 +53,6 @@ print(next((w["dispatchId"] for w in ws if w.get("agentTerminalHandle") == os.en
             fi ;;
         *) echo "$d: release falhou: $r" >&2; rc=1; continue ;;
     esac
-    [ -f "$HOME/.cache/vaga-agente.sh" ] && bash "$HOME/.cache/vaga-agente.sh" solta "$d" >/dev/null 2>&1
+    [ -n "$pool" ] && "$pool" slot release "$d" >/dev/null 2>&1
 done
 exit $rc

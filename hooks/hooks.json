@@ -16,12 +16,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell",
-        "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/fila-testes.sh\"", "shell": "bash", "timeout": 10 }
-        ]
-      },
-      {
         "matcher": "Bash|PowerShell|Edit",
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/bloqueia-bulk.sh\"", "shell": "bash", "timeout": 10 }

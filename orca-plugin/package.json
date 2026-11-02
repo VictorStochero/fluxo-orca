@@ -1,9 +1,0 @@
-{
-  "name": "fluxo-orca-painel",
-  "private": true,
-  "description": "Só para a checagem de tipos (npm install && npx tsc -p .); o Orca não lê este arquivo.",
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.0"
-  }
-}
