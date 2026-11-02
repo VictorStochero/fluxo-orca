@@ -5,9 +5,132 @@ raiz=$(cd "$(dirname "$0")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 falhas=0
-fila_script="$raiz/skills/fila-testes/fila-teste.sh"
+fila_script="${FILA_SCRIPT_TESTE:-$raiz/skills/fila-testes/fila-teste.sh}"
 ok() { echo "ok   $1"; }
 ruim() { echo "FALHA $1"; falhas=$((falhas + 1)); }
+
+aguarda_arquivo() {
+    local i
+    for i in {1..100}; do
+        [ -s "$1" ] && return 0
+        kill -0 "${2:-$$}" 2>/dev/null || return 1
+        sleep 0.1
+    done
+    return 1
+}
+
+modos() (
+    export HOME="$tmp/modos-$1" FILA_TESTE_VAGAS=1 FILA_TESTE_TETO=3
+    unset FILA_TESTE_FILA GS_TESTE_FILA FILA_TESTE_RUNNER GS_TESTE_RUNNER
+    local modo=$1 serializa=$2 fila=$3
+    [ "$modo" = padrao ] || export FILA_TESTE_FILA="$modo"
+    mkdir -p "$HOME" "$HOME/a" "$HOME/b"
+    touch "$HOME/a/artisan" "$HOME/b/artisan"
+    printf 'DB_HOST=servidor-teste\nDB_PORT=3307\n' > "$HOME/a/.env.testing"
+    printf 'DB_PORT=3308\n' > "$HOME/b/.env.testing"
+    cat > "$HOME/executor.sh" <<'E'
+trava="$HOME/.cache/$FILA_ESPERADA.lock1"
+[ "$(cat "$trava/recurso" 2>/dev/null)" = "$RECURSO_ESPERADO" ] || exit 10
+grep -qE '^[0-9]{13}$' "$trava/inicio" || exit 11
+[ ! -e "$HOME/.cache/gs-teste-teto.lock1/recurso" ] || exit 12
+[ ! -d "$HOME/.cache/fila-espera/$PPID" ] || exit 14
+printf 'entrou\n' > "$HOME/$1.entrou"
+if [ "$1" = a ]; then
+    for i in {1..150}; do [ -f "$HOME/libera" ] && exit 0; sleep 0.1; done
+    exit 13
+fi
+E
+    export FILA_ESPERADA="$fila" RECURSO_ESPERADO='mysql servidor-teste:3307'
+    [ "$modo" = global ] && RECURSO_ESPERADO=global
+    (cd "$HOME/a" && exec bash "$fila_script" -- bash "$HOME/executor.sh" a) > "$HOME/a.log" 2>&1 &
+    local primeiro=$!
+    if ! aguarda_arquivo "$HOME/a.entrou" "$primeiro"; then wait "$primeiro"; cat "$HOME/a.log"; return 1; fi
+    [ "$serializa" = 1 ] || FILA_ESPERADA=gs-teste-3308
+    RECURSO_ESPERADO='mysql 127.0.0.1:3308'
+    [ "$modo" = global ] && RECURSO_ESPERADO=global
+    (cd "$HOME/b" && exec bash "$fila_script" -- bash "$HOME/executor.sh" b) > "$HOME/b.log" 2>&1 &
+    local segundo=$! registro="$HOME/.cache/fila-espera/$!" resultado=0
+    if [ "$serializa" = 1 ]; then
+        aguarda_arquivo "$registro/comando" "$segundo" || resultado=1
+        [ ! -f "$HOME/b.entrou" ] || resultado=1
+        [ "$(cat "$registro/recurso" 2>/dev/null)" = global ] || resultado=1
+        [ "$(cat "$registro/fila" 2>/dev/null)" = gs-teste-global.lock ] || resultado=1
+        [ "$(cat "$registro/worktree" 2>/dev/null)" = "$HOME/b" ] || resultado=1
+        grep -qE '^[0-9]{13}$' "$registro/inicio_ts" || resultado=1
+        grep -qF "$HOME/executor.sh b" "$registro/comando" || resultado=1
+    else
+        aguarda_arquivo "$HOME/b.entrou" "$segundo" || resultado=1
+    fi
+    touch "$HOME/libera"
+    wait "$primeiro" || resultado=1
+    wait "$segundo" || resultado=1
+    [ ! -d "$registro" ] || resultado=1
+    [ -f "$HOME/b.entrou" ] || resultado=1
+    cat "$HOME/a.log" "$HOME/b.log"
+    return "$resultado"
+)
+for modo in global banco recurso padrao; do
+    serializa=0; fila=gs-teste-3307
+    [ "$modo" = global ] && { serializa=1; fila=gs-teste-global; }
+    if modos "$modo" "$serializa" "$fila"; then
+        ok "$modo: disputa entre bancos, recurso, início e limpeza da espera"
+    else
+        ruim "$modo: disputa entre bancos ou metadados incorretos"
+    fi
+done
+
+recursos() (
+    export HOME="$tmp/recursos-home" FILA_TESTE_FILA=banco
+    unset FILA_TESTE_RUNNER GS_TESTE_RUNNER
+    mkdir -p "$HOME/app"
+    cd "$HOME/app" || exit 1
+    cat > "$HOME/confere.sh" <<'E'
+[ "$(cat "$HOME/.cache/$1.lock1/recurso" 2>/dev/null)" = "$2" ]
+E
+    bash "$fila_script" -- bash "$HOME/confere.sh" gs-teste-geral geral || exit 1
+    FILA_TESTE_FILA=projeto bash "$fila_script" -- bash "$HOME/confere.sh" gs-teste-proj-app 'projeto app' || exit 2
+    touch artisan
+    mkdir -p "$HOME/bin"
+    cp "$HOME/confere.sh" "$HOME/bin/docker"; chmod +x "$HOME/bin/docker"
+    PATH="$HOME/bin:$PATH" bash "$fila_script" -- docker gs-teste-ctr 'container docker' || exit 3
+    printf 'DB_HOST=env-host\n' > .env
+    bash "$fila_script" -- bash "$HOME/confere.sh" gs-teste 'mysql env-host:3306'
+)
+if recursos; then ok 'recurso: geral, projeto, container e host herdado do ambiente de teste'; else ruim 'metadados por recurso'; fi
+
+espera_teto() (
+    export HOME="$tmp/espera-home" FILA_TESTE_FILA=banco FILA_TESTE_TETO=1 FILA_TESTE_VAGAS=1
+    unset FILA_TESTE_RUNNER GS_TESTE_RUNNER
+    mkdir -p "$HOME/.cache/gs-teste-teto.lock1" "$HOME/app"
+    printf '%s\n' "$$" > "$HOME/.cache/gs-teste-teto.lock1/pid"
+    cd "$HOME/app" || exit 1
+    cat > "$HOME/relogio.sh" <<'E'
+sleep() {
+    local r="$HOME/.cache/fila-espera/$$"
+    [ "$(cat "$r/recurso")" = geral ] &&
+    [ "$(cat "$r/fila")" = gs-teste-teto.lock ] &&
+    grep -qE '^[0-9]{13}$' "$r/inicio_ts" &&
+    printf '%s\n' "$$" > "$HOME/esperou"
+    SECONDS=1000
+}
+E
+    BASH_ENV="$HOME/relogio.sh" bash "$fila_script" -- true > "$HOME/saida" 2>&1
+    [ $? = 75 ] || exit 1
+    local pid=$(cat "$HOME/esperou" 2>/dev/null)
+    [ -n "$pid" ] && [ ! -d "$HOME/.cache/fila-espera/$pid" ] || exit 2
+    [ ! -d "$HOME/.cache/gs-teste-geral.lock1" ] || exit 3
+    grep -q 'FILA OCUPADA' "$HOME/saida" || exit 4
+    bash "$fila_script" -- true > "$HOME/sinal.log" 2>&1 &
+    pid=$!
+    if ! aguarda_arquivo "$HOME/.cache/fila-espera/$pid/comando" "$pid"; then
+        kill -TERM "$pid" 2>/dev/null; wait "$pid"; exit 5
+    fi
+    kill -TERM "$pid"
+    wait "$pid"
+    [ $? = 143 ] && [ ! -d "$HOME/.cache/fila-espera/$pid" ] && [ ! -d "$HOME/.cache/gs-teste-geral.lock1" ]
+)
+if espera_teto; then ok 'espera no teto: registra recurso e remove registro ao desistir com 75 ou receber TERM'; else ruim 'registro de espera no teto'; fi
+if [ "${FILA_SOMENTE_MODOS:-}" = 1 ]; then [ "$falhas" = 0 ]; exit $?; fi
 
 projeto() (
     export HOME="$tmp/projeto-home" FILAS_REGISTRO="$tmp/filas"
@@ -290,7 +413,7 @@ case $rc in
     *) ruim "fila.conf: etapa $rc falhou (1 ambiente, 2 worktree.conf, 3 aviso, 4 GS_ no worktree.conf, 5 GS_ no ambiente)" ;;
 esac
 
-# Modo da fila: global é o nome novo, recurso continua valendo como sinônimo; outro valor é recusado; fila.conf aceita os dois.
+# Os três modos e o alias legado são aceitos em ambiente, fila.conf e worktree.conf.
 modo_global() (
     export HOME="$tmp/fc-home"; unset FILA_TESTE_VAGAS GS_TESTE_VAGAS GS_TESTE_FILA
     rm -rf "$HOME/.cache" "$HOME/.claude/fila.conf"; mkdir -p "$HOME/.claude"
@@ -298,17 +421,35 @@ modo_global() (
     FILA_TESTE_FILA=global bash "$fila_script" -- true >/dev/null 2>&1 || exit 1
     FILA_TESTE_FILA=recurso bash "$fila_script" -- true >/dev/null 2>&1 || exit 2
     FILA_TESTE_FILA=xx bash "$fila_script" -- true >/dev/null 2>"$tmp/modo.err"; [ $? = 2 ] || exit 3
-    grep -q 'global' "$tmp/modo.err" || exit 4
-    for m in global recurso; do
+    grep -q 'global, banco (ou recurso) ou projeto' "$tmp/modo.err" || exit 4
+    cat > "$HOME/confere-modo.sh" <<'E'
+for trava in "$HOME"/.cache/gs-teste*.lock[0-9]*; do
+    [ -f "$trava/recurso" ] || continue
+    [ "$(cat "$trava/recurso")" = "$1" ] || exit 1
+    exit 0
+done
+exit 1
+E
+    for m in global banco recurso projeto; do
+        esperado=geral
+        [ "$m" = global ] && esperado=global
+        [ "$m" = projeto ] && esperado='projeto p'
         printf 'FILA_TESTE_FILA=%s\n' "$m" > "$HOME/.claude/fila.conf"
-        aviso=$(bash "$fila_script" -- true 2>&1 >/dev/null)
+        aviso=$(FILA_TESTE_FILA=invalido bash "$fila_script" -- bash "$HOME/confere-modo.sh" "$esperado" 2>&1 >/dev/null) || exit 5
         case "$aviso" in *'linha ignorada'*) exit 5 ;; esac
+        mkdir -p .orca
+        printf 'FILA_TESTE_FILA=%s\n' "$m" > .orca/worktree.conf
+        printf 'FILA_TESTE_FILA=global\n' > "$HOME/.claude/fila.conf"
+        bash "$fila_script" -- bash "$HOME/confere-modo.sh" "$esperado" || exit 6
+        printf 'GS_TESTE_FILA=%s\n' "$m" > .orca/worktree.conf
+        bash "$fila_script" -- bash "$HOME/confere-modo.sh" "$esperado" || exit 7
+        rm -f .orca/worktree.conf
     done
 )
 modo_global; rc=$?
 case $rc in
-    0) ok "modo da fila: global e recurso (sinônimo) valem, outro valor é recusado, fila.conf aceita os dois" ;;
-    *) ruim "modo da fila: etapa $rc falhou (1 global, 2 recurso, 3 valor inválido, 4 mensagem, 5 fila.conf)" ;;
+    0) ok "modo da fila: global, banco, recurso e projeto aceitos, precedência preservada e valor inválido lista os três modos" ;;
+    *) ruim "modo da fila: etapa $rc falhou (1 global, 2 recurso, 3 valor inválido, 4 mensagem, 5 fila.conf, 6 worktree.conf, 7 GS_ no worktree.conf)" ;;
 esac
 
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
