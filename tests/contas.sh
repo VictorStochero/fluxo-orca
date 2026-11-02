@@ -91,6 +91,9 @@ igual 'trava: kimi sem papeis não escreve' nao "$(carrega 'conta_tem_papel k es
 igual 'trava: kimi sem papeis fora do pool' nao "$(carrega 'conta_no_pool k || echo nao')"
 igual 'trava: kimi com papel escrito escreve' sim "$(carrega 'conta_tem_papel k2 escritor && echo sim')"
 igual 'trava: codex mantém o padrão' sim "$(carrega 'conta_tem_papel c escritor && echo sim')"
+printf 'm agente=kimi vagas=1 papeis=\n' > "$HOME/.claude/agentes.conf"
+igual 'papeis vazio: registro válido' 0 "$(carrega 'echo 0')"
+igual 'papeis vazio: conta só medida fora do pool' nao "$(carrega 'conta_no_pool m || echo nao')"
 cat > "$HOME/.claude/agentes.conf" <<'EOF'
 pessoal agente=claude papeis=orquestra
 team    agente=claude config=~/.claude-team vagas=1 papeis=escritor,revisor
