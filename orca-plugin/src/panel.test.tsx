@@ -6,29 +6,53 @@ import * as panel from './panel'
 let view: TestPanel | undefined
 afterEach(() => view?.unmount())
 
-test('linhas recolhidas: conta com 5h e Semanal, trava com viva, sem RAM', async () => {
-  const host = mockHost({ requests: { 'estado.ler': () => estadoExemplo } })
-  view = await mount(panel, { host })
-  assert.ok(view.find({ type: 'Button', text: 'Atualizar' }))
-  assert.ok(view.find({ label: '⚠ pessoal · 1/2 · 5h 90% · Semanal 25%' }))
-  assert.ok(view.find({ label: 'codex · 0/1 · 5h 24% · Semanal 42%' })) // cota nativa do Orca
-  assert.ok(view.find({ label: 'claude-abcdef12 · fora do pool · 5h - · Semanal -' }))
-  assert.ok(view.find({ label: '3308 · vaga 1 · viva' }))
-  assert.ok(view.find({ label: 'teto · vaga 1 · morta' }))
-  assert.equal(view.find({ text: /Workers/ }), null)
+const POOL = { label: 'Contas do pool' }
+const FILA = { label: 'Travas da fila' }
+
+function hostCom(gravados: unknown[] = [], estado: Estado = estadoExemplo) {
+  return mockHost({
+    requests: {
+      'estado.ler': () => estado,
+      'config.gravar': ({ valores }) => {
+        gravados.push(valores)
+        return estado
+      }
+    }
+  })
+}
+
+test('tabelas recolhidas: Fila · Vaga · Viva e Conta · Vagas · 5h · Semanal, sem RAM nem Workers', async () => {
+  view = await mount(panel, { host: hostCom() })
+  assert.deepEqual(view.columnsOf(FILA), ['fila', 'vaga', 'viva'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1'])
+  assert.deepEqual(view.columnsOf(POOL), ['conta', 'vagas', 'h5', 'semanal'])
+  assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
+  assert.ok(view.find({ text: /modo Global · 5 vagas · teto 5/ }))
+  assert.equal(view.find({ text: /Workers|curta|longa/ }), null)
   assert.equal(view.find({ type: 'Heading', text: /RAM/ }), null)
-  assert.equal(view.find({ text: /\bcurta\b|\blonga\b/ }), null)
   assert.ok(view.find({ type: 'RelativeTime' }))
   assert.deepEqual(view.errors, [])
   assert.deepEqual(view.warnings, [])
   assert.deepEqual(view.refusals, [])
 })
 
-test('configuração da fila mostra a origem e quem sobrescreve', async () => {
-  const host = mockHost({ requests: { 'estado.ler': () => estadoExemplo } })
-  view = await mount(panel, { host })
-  assert.ok(view.find({ text: /origem: variável de ambiente · sobrescrito pelo projeto \(meu-projeto: 1\)/ }))
-  assert.ok(view.find({ text: /origem: fila\.conf/ }))
+test('selecionar a linha abre os detalhes logo abaixo e selecionar de novo recolhe', async () => {
+  view = await mount(panel, { host: hostCom() })
+  await view.selectRows(FILA, ['3308.1'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', '3308.1#0', '3308.1#1', '3308.1#2', '3308.1#3', 'teto.1'])
+  await view.selectRows(FILA, [])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1'])
+})
+
+test('pool: o detalhe da conta mostra Orca + agentes.conf, só agentes.conf e só Orca', async () => {
+  view = await mount(panel, { host: hostCom() })
+  await view.selectRows(POOL, ['codex'])
+  assert.ok(view.find({ text: /Orca \+ agentes\.conf/ }))
+  await view.selectRows(POOL, ['pessoal'])
+  assert.ok(view.find({ text: /agentes\.conf/ }))
+  assert.equal(view.find({ text: /Orca \+ agentes\.conf/ }), null)
+  await view.selectRows(POOL, ['claude-abcdef12'])
+  assert.ok(view.find({ text: /Orca \(fora do pool\)/ }))
 })
 
 test('erro do coletor aparece com o código e some na próxima leitura boa', async () => {
@@ -47,7 +71,7 @@ test('erro do coletor aparece com o código e some na próxima leitura boa', asy
   falha = false
   await view.press({ text: 'Atualizar' })
   assert.equal(view.find({ text: /coletor_falhou/ }), null)
-  assert.ok(view.find({ label: /pessoal · 1\/2/ }))
+  assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
 })
 
 test('o post estado.mudou lê o estado de novo', async () => {
@@ -60,7 +84,7 @@ test('o post estado.mudou lê o estado de novo', async () => {
   assert.ok(view.find({ text: 'Nenhuma conta no registro.' }))
 })
 
-test('salvar a conta manda só o que mudou e mostra o estado novo', async () => {
+test('editar a conta aberta manda só o que mudou e mostra o estado novo', async () => {
   const enviados: unknown[] = []
   let atual: Estado = estadoExemplo
   const host = mockHost({
@@ -74,13 +98,33 @@ test('salvar a conta manda só o que mudou e mostra o estado novo', async () => 
     }
   })
   view = await mount(panel, { host })
-  await view.toggle({ label: '⚠ pessoal · 1/2 · 5h 90% · Semanal 25%' })
+  await view.selectRows(POOL, ['pessoal'])
   await view.type({ label: 'Vagas' }, '3', { replace: true })
-  await view.press(view.findAll({ type: 'Button', text: 'Salvar' })[0]) // só a linha aberta expõe o botão
+  await view.press({ type: 'Button', text: 'Salvar' })
   assert.deepEqual(enviados, [{ 'conta.pessoal.vagas': '3' }])
   assert.ok(view.find({ text: 'Salvo.' }))
-  assert.ok(view.find({ label: /pessoal · 1\/3/ }))
   assert.deepEqual(view.refusals, [])
+})
+
+test('modo da fila: Global e Por projeto com dica em cada opção; grava o valor escolhido', async () => {
+  const enviados: unknown[] = []
+  view = await mount(panel, { host: hostCom(enviados) })
+  await view.toggle({ label: 'Configurar a fila' })
+  assert.ok(view.find({ label: /^Uma fila por recurso, compartilhada/ }))
+  assert.ok(view.find({ label: /^Cada projeto tem a própria fila/ }))
+  assert.ok(view.find({ label: /^Máximo de testes ao mesmo tempo na máquina/ }))
+  assert.ok(view.find({ label: /^Testes ao mesmo tempo em cada fila/ }))
+  assert.ok(view.find({ label: /Só vale no modo Por projeto/ }))
+  await view.select({ label: 'Modo da fila' }, 'projeto')
+  await view.press({ type: 'Button', text: 'Salvar' })
+  assert.deepEqual(enviados, [{ 'fila.modo': 'projeto' }])
+})
+
+test('configuração da fila mostra a origem e quem sobrescreve', async () => {
+  view = await mount(panel, { host: hostCom() })
+  await view.toggle({ label: 'Configurar a fila' })
+  assert.ok(view.find({ text: /origem: variável de ambiente · sobrescrito pelo projeto \(meu-projeto: 1\)/ }))
+  assert.ok(view.find({ text: /origem: fila\.conf/ }))
 })
 
 test('recusa do validador aparece em português e não limpa a edição', async () => {
@@ -94,51 +138,24 @@ test('recusa do validador aparece em português e não limpa a edição', async 
   })
   view = await mount(panel, { host })
   await view.toggle({ label: 'Configurar a fila' })
-  await view.type({ label: 'Vagas por recurso' }, '0', { replace: true })
-  await view.press(view.findAll({ type: 'Button', text: 'Salvar' })[0])
+  await view.type({ label: 'Vagas' }, '0', { replace: true })
+  await view.press({ type: 'Button', text: 'Salvar' })
   assert.ok(view.find({ text: 'valor inválido para fila.vagas: 0' }))
-  assert.equal(view.valueOf({ label: 'Vagas por recurso' }), '0')
-})
-
-test('cada linha do pool marca a origem: manual, manual detectada e só do Orca', async () => {
-  const host = mockHost({ requests: { 'estado.ler': () => estadoExemplo } })
-  view = await mount(panel, { host })
-  assert.match(view.find({ label: /^⚠ pessoal/ })?.text ?? '', /manual \(agentes\.conf\)/)
-  assert.match(view.find({ label: /^codex ·/ })?.text ?? '', /agentes\.conf · detectada pelo Orca/)
-  assert.match(view.find({ label: /^claude-abcdef12/ })?.text ?? '', /detectada pelo Orca/)
+  assert.equal(view.valueOf({ label: 'Vagas' }), '0')
 })
 
 test('Adicionar ao pool grava conta.<nome>.adicionar=<agente> da conta detectada', async () => {
   const enviados: unknown[] = []
-  const host = mockHost({
-    requests: {
-      'estado.ler': () => estadoExemplo,
-      'config.gravar': ({ valores }) => {
-        enviados.push(valores)
-        return estadoExemplo
-      }
-    }
-  })
-  view = await mount(panel, { host })
-  await view.toggle({ label: /^claude-abcdef12/ })
+  view = await mount(panel, { host: hostCom(enviados) })
+  await view.selectRows(POOL, ['claude-abcdef12'])
   await view.press({ type: 'Button', text: 'Adicionar ao pool' })
   assert.deepEqual(enviados, [{ 'conta.claude-abcdef12.adicionar': 'claude' }])
-  assert.deepEqual(view.refusals, [])
 })
 
 test('Remover do pool pede confirmação e só então grava conta.<nome>.remover=1', async () => {
   const enviados: unknown[] = []
-  const host = mockHost({
-    requests: {
-      'estado.ler': () => estadoExemplo,
-      'config.gravar': ({ valores }) => {
-        enviados.push(valores)
-        return estadoExemplo
-      }
-    }
-  })
-  view = await mount(panel, { host })
-  await view.toggle({ label: /^codex ·/ })
+  view = await mount(panel, { host: hostCom(enviados) })
+  await view.selectRows(POOL, ['codex'])
   await view.press({ type: 'Button', text: 'Remover do pool' })
   assert.deepEqual(enviados, [])
   assert.ok(view.find({ text: /Remover codex do agentes\.conf\?/ }))
@@ -151,16 +168,7 @@ test('Remover do pool pede confirmação e só então grava conta.<nome>.remover
 
 test('Nova conta manual: nome, agente do catálogo e config viram um único pedido', async () => {
   const enviados: unknown[] = []
-  const host = mockHost({
-    requests: {
-      'estado.ler': () => estadoExemplo,
-      'config.gravar': ({ valores }) => {
-        enviados.push(valores)
-        return estadoExemplo
-      }
-    }
-  })
-  view = await mount(panel, { host })
+  view = await mount(panel, { host: hostCom(enviados) })
   await view.toggle({ label: 'Nova conta manual' })
   assert.equal(view.find({ type: 'Button', text: 'Adicionar conta' })?.disabled, true)
   await view.type({ label: 'Nome da conta' }, 'minha')

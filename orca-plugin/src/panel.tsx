@@ -8,9 +8,10 @@ import {
   Collapsible,
   EmptyState,
   Heading,
+  IconButton,
   Input,
-  KeyValue,
   plugin,
+  RadioGroup,
   read,
   RelativeTime,
   Row,
@@ -18,11 +19,13 @@ import {
   set,
   Skeleton,
   Stack,
+  Table,
   Text,
   update,
-  type PanelContext
+  type PanelContext,
+  type TableRow
 } from 'orca'
-import type { Conta, Estado, ItemFila, Trava, ValorFila } from './protocol'
+import type { Conta, Estado, ItemFila, ValorFila } from './protocol'
 import { t } from './textos'
 
 type Erro = { code: string; message: string }
@@ -37,6 +40,9 @@ const avisos = atom<Record<string, Aviso>>({})
 const gravando = atom<string | null>(null)
 /** Conta com o pedido de remoção aguardando confirmação. */
 const removendo = atom<string | null>(null)
+/** Linha aberta de cada tabela (a selecionada mostra os detalhes logo abaixo). */
+const abertaTrava = atom<string | null>(null)
+const abertaConta = atom<string | null>(null)
 
 export async function atualizar(): Promise<void> {
   if (read(carregando)) return
@@ -57,7 +63,7 @@ export function setup(ctx: PanelContext): void {
   void atualizar()
 }
 
-/** Grava as edições das `chaves` da seção; a recusa do validador volta como mensagem da seção. */
+/** Grava as edições das `chaves` da seção (mais os `extras`); a recusa do validador volta como mensagem da seção. */
 export async function salvar(secao: string, chaves: string[], extras: Record<string, string> = {}): Promise<boolean> {
   const todas = read(edicoes)
   const valores: Record<string, string> = { ...extras }
@@ -104,66 +110,131 @@ function Salvar({ secao, chaves }: { secao: string; chaves: string[] }) {
   )
 }
 
+/** Ícone de dica: no Orca 1.4.246 o `label` é o nome acessível e o tooltip (a prop `tooltip` só existe desde a 1.4.247). */
+function Dica({ texto }: { texto: string }) {
+  return <IconButton icon="info" label={texto} size="xs" variant="ghost" />
+}
+
+type LinhaExpansivel = { key: string; cells: Record<string, string | number>; detalhes: [string, string | number][] }
+
+/**
+ * Table não expande linha: a selecionada ganha, logo abaixo, linhas de detalhe (desabilitadas) com o rótulo na
+ * primeira coluna e o valor na segunda. Clicar de novo na linha aberta a recolhe.
+ */
+function TabelaExpansivel(props: {
+  label: string
+  colunas: { key: string; label: string; align?: 'start' | 'center' | 'end'; width?: 'auto' | 'xs' | 'sm' | 'md' | 'lg'; minWidth?: 'auto' | 'xs' | 'sm' | 'md' }[]
+  linhas: LinhaExpansivel[]
+  aberta: string | null
+  onAbrir: (key: string | null) => void
+}) {
+  const [c0, c1] = props.colunas
+  const rows: TableRow[] = props.linhas.flatMap((l) => [
+    { key: l.key, cells: l.cells } as TableRow,
+    ...(l.key === props.aberta
+      ? l.detalhes.map(([rotulo, valor], i) => ({ key: `${l.key}#${i}`, disabled: true, cells: { [c0.key]: rotulo, [c1.key]: valor } }) as TableRow)
+      : [])
+  ])
+  return (
+    <Table
+      label={props.label}
+      columns={props.colunas}
+      rows={rows}
+      selectionMode="single"
+      selected={props.aberta ? [props.aberta] : []}
+      onSelectionChange={({ keys }) => props.onAbrir(keys.find((k) => !k.includes('#')) ?? null)}
+    />
+  )
+}
+
+const ORIGEM = t.fila.origens
+
 function Origem({ v }: { v: ValorFila }) {
   const sobrescritas = v.projetos.map((p) => `${p.projeto}: ${p.valor}`).join(', ')
   return (
     <Text muted size="xs">
-      {t.fila.origem(t.fila.origens[v.origem], sobrescritas)}
+      {t.fila.origem(ORIGEM[v.origem], sobrescritas)}
     </Text>
-  )
-}
-
-function CampoFila({ item, e }: { item: ItemFila; e: Estado }) {
-  const v = e.fila.config[item]
-  const chave = `fila.${item}`
-  const rotulo = t.fila.campos[item]
-  const valor = read(edicoes)[chave] ?? String(v.valor)
-  return (
-    <Stack gap="xs">
-      {item === 'modo' ? (
-        <Select
-          label={rotulo}
-          value={valor}
-          options={[{ value: 'recurso', label: 'recurso' }, { value: 'projeto', label: 'projeto' }]}
-          onChange={(x) => mudar(chave, x)}
-        />
-      ) : (
-        <Input label={rotulo} value={valor} onChange={(x) => mudar(chave, x)} />
-      )}
-      <Origem v={v} />
-    </Stack>
   )
 }
 
 const ITENS_FILA: ItemFila[] = ['modo', 'vagas', 'vagas_projeto', 'teto', 'processos']
 
-function LinhaTrava({ tr }: { tr: Trava }) {
+function CampoModo({ e }: { e: Estado }) {
+  const v = e.fila.config.modo
+  const valor = read(edicoes)['fila.modo'] ?? String(v.valor)
   return (
-    <Collapsible title={t.fila.trava(tr.fila, tr.vaga, tr.viva)}>
-      <KeyValue
-        items={[
-          { label: t.fila.worktree, value: tr.worktree ?? '-', code: true },
-          { label: t.fila.comando, value: tr.comando ?? '-', code: true },
-          { label: t.fila.pid, value: tr.pid ?? '-' },
-          { label: t.fila.desde, value: tr.desde ?? '-' }
+    <Stack gap="xs">
+      <RadioGroup
+        label={t.fila.campos.modo}
+        value={valor}
+        options={[
+          { value: 'global', label: t.fila.modos.global },
+          { value: 'projeto', label: t.fila.modos.projeto }
         ]}
+        onChange={(x) => mudar('fila.modo', x)}
       />
-    </Collapsible>
+      {(['global', 'projeto'] as const).map((m) => (
+        <Row key={m} gap="xs" align="center">
+          <Text size="xs" muted>
+            {t.fila.modos[m]}
+          </Text>
+          <Dica texto={t.fila.dicas[m]} />
+        </Row>
+      ))}
+      <Origem v={v} />
+    </Stack>
+  )
+}
+
+function CampoFila({ item, e }: { item: Exclude<ItemFila, 'modo'>; e: Estado }) {
+  const v = e.fila.config[item]
+  const chave = `fila.${item}`
+  const dica = item === 'vagas' || item === 'vagas_projeto' || item === 'teto' ? t.fila.dicas[item] : null
+  return (
+    <Stack gap="xs">
+      <Row gap="xs" align="end">
+        <Input label={t.fila.campos[item]} value={read(edicoes)[chave] ?? String(v.valor)} onChange={(x) => mudar(chave, x)} />
+        {dica ? <Dica texto={dica} /> : null}
+      </Row>
+      <Origem v={v} />
+    </Stack>
   )
 }
 
 function SecaoFila({ e }: { e: Estado }) {
   const { fila } = e
+  const linhas: LinhaExpansivel[] = fila.travas.map((tr) => ({
+    key: `${tr.fila}.${tr.vaga}`,
+    cells: { fila: tr.fila, vaga: tr.vaga, viva: tr.viva ? t.fila.sim : t.fila.nao },
+    detalhes: [
+      [t.fila.worktree, tr.worktree ?? '-'],
+      [t.fila.comando, tr.comando ?? '-'],
+      [t.fila.pid, tr.pid ?? '-'],
+      [t.fila.desde, tr.desde ?? '-']
+    ]
+  }))
   return (
-    <Card title={t.fila.titulo} description={t.fila.resumo(fila.modo, fila.vagas, fila.teto)}>
+    <Card title={t.fila.titulo} description={t.fila.resumo(t.fila.modos[fila.modo] ?? fila.modo, fila.vagas, fila.teto)}>
       {fila.travas.length === 0 ? (
         <Text muted>{t.fila.semTravas}</Text>
       ) : (
-        fila.travas.map((tr) => <LinhaTrava key={`${tr.fila}.${tr.vaga}`} tr={tr} />)
+        <TabelaExpansivel
+          label={t.fila.tabela}
+          colunas={[
+            { key: 'fila', label: t.fila.colFila, width: 'md' },
+            { key: 'vaga', label: t.fila.colVaga },
+            { key: 'viva', label: t.fila.colViva, width: 'xs' }
+          ]}
+          linhas={linhas}
+          aberta={read(abertaTrava)}
+          onAbrir={(k) => set(abertaTrava, k)}
+        />
       )}
       <Collapsible title={t.fila.configurar} description={t.fila.configurarDescricao}>
         <Stack gap="sm">
-          {ITENS_FILA.map((i) => (
+          <CampoModo e={e} />
+          {(['vagas', 'vagas_projeto', 'teto', 'processos'] as const).map((i) => (
             <CampoFila key={i} item={i} e={e} />
           ))}
           <Mensagem secao="fila" />
@@ -179,43 +250,21 @@ function origemDaConta(c: Conta): string {
   return c.detectada ? t.pool.origemManualOrca : t.pool.origemManual
 }
 
-function DetalhesConta({ c }: { c: Conta }) {
-  const q = c.cota
-  return (
-    <KeyValue
-      items={[
-        { label: t.pool.origem, value: origemDaConta(c) },
-        ...(c.rotulo ? [{ label: t.pool.rotulo, value: c.rotulo }] : []),
-        { label: t.pool.agente, value: c.agente ?? '-' },
-        { label: t.pool.peso, value: c.peso },
-        { label: t.pool.papeis, value: c.papeis.join(', ') || '-' },
-        { label: t.pool.janelas, value: q ? q.texto : t.pool.semMedida },
-        { label: t.pool.medidaHa, value: q ? t.pool.minutos(q.medida_ha_min) : '-' },
-        { label: t.pool.vagasEmUso, value: c.ocupantes.map((o) => o.dispatch ?? '?').join(', ') || t.pool.nenhuma, code: c.ocupantes.length > 0 }
-      ]}
-    />
-  )
-}
-
-/** Conta detectada pelo Orca que ainda não está no agentes.conf. */
-function LinhaContaOrca({ c }: { c: Conta }) {
+/** Edição e ações da conta aberta: o que uma célula de tabela não comporta. */
+function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
   const secao = `conta.${c.nome}`
-  return (
-    <Collapsible title={t.pool.contaForaDoPool(c.nome, c.cota?.curta ?? null, c.cota?.longa ?? null)} description={origemDaConta(c)}>
-      <Stack gap="sm">
-        <DetalhesConta c={c} />
-        <Mensagem secao={secao} />
-        <Button size="sm" icon="add" disabled={read(gravando) !== null} onPress={() => void salvar(secao, [], { [`conta.${c.nome}.adicionar`]: c.agente ?? '' })}>
-          {t.pool.adicionar}
-        </Button>
-      </Stack>
-    </Collapsible>
-  )
-}
-
-function LinhaConta({ c, e }: { c: Conta; e: Estado }) {
-  if (c.origem === 'orca') return <LinhaContaOrca c={c} />
-  const q = c.cota
+  if (c.origem === 'orca') {
+    return (
+      <Card title={t.pool.editar(c.nome)}>
+        <Stack gap="sm">
+          <Mensagem secao={secao} />
+          <Button size="sm" icon="add" disabled={read(gravando) !== null} onPress={() => void salvar(secao, [], { [`conta.${c.nome}.adicionar`]: c.agente ?? '' })}>
+            {t.pool.adicionar}
+          </Button>
+        </Stack>
+      </Card>
+    )
+  }
   const chaveVagas = `conta.${c.nome}.vagas`
   const chavePeso = `conta.${c.nome}.peso`
   const chavePapeis = `conta.${c.nome}.papeis`
@@ -224,11 +273,9 @@ function LinhaConta({ c, e }: { c: Conta; e: Estado }) {
   const papeis = (ed[chavePapeis] ?? c.papeis.join(',')).split(',').filter(Boolean)
   const alterna = (p: string, marcado: boolean) =>
     mudar(chavePapeis, e.pool.papeis_validos.filter((x) => (x === p ? marcado : papeis.includes(x))).join(','))
-  const secao = `conta.${c.nome}`
   return (
-    <Collapsible title={t.pool.conta(Boolean(q?.alerta), c.nome, c.usadas, c.vagas, q?.curta ?? null, q?.longa ?? null)} description={origemDaConta(c)}>
+    <Card title={t.pool.editar(c.nome)}>
       <Stack gap="sm">
-        <DetalhesConta c={c} />
         <Input label={t.pool.vagas} value={ed[chaveVagas] ?? String(c.vagas)} onChange={(x) => mudar(chaveVagas, x)} />
         <Input label={t.pool.peso} value={ed[chavePeso] ?? String(c.peso)} onChange={(x) => mudar(chavePeso, x)} />
         <Input label={t.pool.config} value={ed[chaveConfig] ?? c.config ?? ''} onChange={(x) => mudar(chaveConfig, x)} />
@@ -251,6 +298,7 @@ function LinhaConta({ c, e }: { c: Conta; e: Estado }) {
                 icon="delete"
                 onPress={() => {
                   set(removendo, null)
+                  set(abertaConta, null)
                   void salvar(secao, [], { [`conta.${c.nome}.remover`]: '1' })
                 }}
               >
@@ -267,7 +315,7 @@ function LinhaConta({ c, e }: { c: Conta; e: Estado }) {
           </Button>
         )}
       </Stack>
-    </Collapsible>
+    </Card>
   )
 }
 
@@ -306,9 +354,46 @@ function NovaConta({ e }: { e: Estado }) {
 function SecaoPool({ e }: { e: Estado }) {
   const { pool } = e
   const ed = read(edicoes)
+  const aberta = read(abertaConta)
+  const conta = pool.contas.find((c) => c.nome === aberta)
+  const linhas: LinhaExpansivel[] = pool.contas.map((c) => ({
+    key: c.nome,
+    cells: {
+      conta: c.nome,
+      vagas: c.origem === 'orca' ? t.pool.foraDoPool : t.pool.vagasDaConta(c.usadas, c.vagas),
+      h5: t.pool.percentual(c.cota?.curta ?? null, (c.cota?.curta ?? 0) > 80),
+      semanal: t.pool.percentual(c.cota?.longa ?? null, (c.cota?.longa ?? 0) > 80)
+    },
+    detalhes: [
+      [t.pool.origem, origemDaConta(c)],
+      ...(c.rotulo ? ([[t.pool.rotulo, c.rotulo]] as [string, string][]) : []),
+      [t.pool.agente, c.agente ?? '-'],
+      [t.pool.peso, c.peso],
+      [t.pool.papeis, c.papeis.join(', ') || '-'],
+      [t.pool.janelas, c.cota ? c.cota.texto : t.pool.semMedida],
+      [t.pool.medidaHa, c.cota ? t.pool.minutos(c.cota.medida_ha_min) : '-'],
+      [t.pool.vagasEmUso, c.ocupantes.map((o) => o.dispatch ?? '?').join(', ') || t.pool.nenhuma]
+    ]
+  }))
   return (
     <Card title={t.pool.titulo} description={t.pool.resumo(pool.maquina.usadas, pool.maquina.teto, pool.ram_min, pool.escolha)}>
-      {pool.contas.length === 0 ? <Text muted>{t.pool.semContas}</Text> : pool.contas.map((c) => <LinhaConta key={c.nome} c={c} e={e} />)}
+      {pool.contas.length === 0 ? (
+        <Text muted>{t.pool.semContas}</Text>
+      ) : (
+        <TabelaExpansivel
+          label={t.pool.tabela}
+          colunas={[
+            { key: 'conta', label: t.pool.colConta, width: 'md' },
+            { key: 'vagas', label: t.pool.colVagas },
+            { key: 'h5', label: t.pool.col5h, align: 'end', width: 'xs' },
+            { key: 'semanal', label: t.pool.colSemanal, align: 'end', width: 'sm', minWidth: 'sm' }
+          ]}
+          linhas={linhas}
+          aberta={aberta}
+          onAbrir={(k) => set(abertaConta, k)}
+        />
+      )}
+      {conta ? <EdicaoConta c={conta} e={e} /> : null}
       <NovaConta e={e} />
       <Collapsible title={t.pool.configurar}>
         <Stack gap="sm">
@@ -354,6 +439,7 @@ export default function Painel() {
         <Stack gap="md">
           <Text muted size="xs">
             {t.atualizadoEm} <RelativeTime at={Date.parse(e.gerado_em)} />
+            {` · ${t.dicaLinha}`}
           </Text>
           {e.aviso ? <Callout tone="warning">{e.aviso}</Callout> : null}
           {e.saude.scripts_desatualizados.length > 0 ? (
@@ -361,12 +447,9 @@ export default function Painel() {
               {e.saude.scripts_desatualizados.join(', ')}
             </Callout>
           ) : null}
-          <KeyValue
-            items={[
-              { label: t.plugin, value: e.saude.plugin_versao ?? '?' },
-              { label: t.orca, value: e.saude.orca.rodando ? (e.saude.orca.versao ?? t.orcaRodando) : t.orcaForaDoAr }
-            ]}
-          />
+          <Text size="xs" muted>
+            {`${t.plugin} ${e.saude.plugin_versao ?? '?'} · ${t.orca} ${e.saude.orca.rodando ? (e.saude.orca.versao ?? t.orcaRodando) : t.orcaForaDoAr}`}
+          </Text>
           <SecaoFila e={e} />
           <SecaoPool e={e} />
         </Stack>

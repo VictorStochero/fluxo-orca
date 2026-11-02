@@ -33,7 +33,7 @@ if [ -f "$HOME/.claude/fila.conf" ]; then
         if [[ "$linha" =~ ^[[:space:]]*(FILA_TESTE_[A-Z_]+)=([^[:space:]]*)[[:space:]]*$ ]]; then
             chave=${BASH_REMATCH[1]}; valor=${BASH_REMATCH[2]}
             case "$chave" in
-                FILA_TESTE_FILA) [[ "$valor" =~ ^(recurso|projeto)$ ]] && valido=1 ;;
+                FILA_TESTE_FILA) [[ "$valor" =~ ^(global|recurso|projeto)$ ]] && valido=1 ;;
                 FILA_TESTE_VAGAS | FILA_TESTE_VAGAS_PROJETO | FILA_TESTE_TETO | FILA_TESTE_PROCESSOS) [[ "$valor" =~ ^[1-9][0-9]*$ ]] && valido=1 ;;
             esac
         fi
@@ -52,9 +52,9 @@ TETO=${FILA_TESTE_TETO:-${GS_TESTE_TETO:-3}}
 PROCESSOS=${FILA_TESTE_PROCESSOS:-${GS_TESTE_PROCESSOS:-8}}
 modo=${FILA_TESTE_FILA:-${GS_TESTE_FILA:-recurso}}
 case "$modo" in
-    recurso) ;;
+    global | recurso) modo=global ;; # recurso é o nome antigo de global
     projeto) VAGAS=${FILA_TESTE_VAGAS_PROJETO:-${GS_TESTE_VAGAS_PROJETO:-1}} ;;
-    *) echo 'FILA_TESTE_FILA deve ser recurso ou projeto.' >&2; exit 2 ;;
+    *) echo 'FILA_TESTE_FILA deve ser global (ou recurso) ou projeto.' >&2; exit 2 ;;
 esac
 
 stack=outro

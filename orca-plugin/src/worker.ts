@@ -40,10 +40,24 @@ export function acharOrca(
   return achado?.replace(/\\/g, '/')
 }
 
+/**
+ * Ambiente do coletor. O processo do worker chega sem APPDATA/LOCALAPPDATA (o CLI do Orca responde
+ * `runtime_unavailable: APPDATA is not set`), então completa o que falta a partir da pasta do usuário e aponta o CLI.
+ */
+export function ambienteDoColetor(env: NodeJS.ProcessEnv, plataforma: string, casa: string, orca?: string): NodeJS.ProcessEnv {
+  const novo: NodeJS.ProcessEnv = { ...env }
+  if (plataforma === 'win32') {
+    novo.APPDATA ??= join(casa, 'AppData', 'Roaming')
+    novo.LOCALAPPDATA ??= join(casa, 'AppData', 'Local')
+  }
+  if (orca) novo.ORCA_CMD = orca
+  return novo
+}
+
 function rodarColetor(cache: string, args: string[], recusa: string): Promise<string> {
   const bash = process.platform === 'win32' ? BASH_WINDOWS : 'bash'
   const orca = acharOrca(process.env, process.platform, process.execPath)
-  const env = orca ? { ...process.env, ORCA_CMD: orca } : process.env
+  const env = ambienteDoColetor(process.env, process.platform, homedir(), orca)
   return new Promise((resolve, reject) => {
     execFile(
       bash,

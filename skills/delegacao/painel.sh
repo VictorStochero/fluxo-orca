@@ -75,7 +75,7 @@ FAIXAS = {"fila.vagas": (1, 99), "fila.vagas_projeto": (1, 99), "fila.teto": (1,
 class Erro(Exception): pass
 
 def fila_valida(var, v):  # mesma regra do fila-teste.sh
-    if var == "FILA_TESTE_FILA": return v in ("recurso", "projeto")
+    if var == "FILA_TESTE_FILA": return v in ("global", "recurso", "projeto")  # recurso: nome antigo de global
     return var in FILA_CHAVES.values() and re.fullmatch(r"[1-9][0-9]*", v) is not None
 
 def le_fila_conf():
@@ -89,7 +89,7 @@ def confere(chave, v):
     """Valida e normaliza um valor de configuração; Erro se a chave ou o valor não valem."""
     inteiro_ = re.fullmatch(r"[0-9]+", v) is not None
     faixa = None
-    if chave == "fila.modo": ok = v in ("recurso", "projeto")
+    if chave == "fila.modo": ok = v in ("global", "recurso", "projeto"); v = "global" if v == "recurso" else v
     elif chave in FILA_CHAVES: ok = inteiro_; faixa = FAIXAS[chave]
     elif chave == "pool.teto": ok = inteiro_; faixa = FAIXAS[chave]
     elif chave == "pool.ram_min": ok = re.fullmatch(r"[0-9]+(\.[0-9]+)?", v) is not None; faixa = FAIXAS[chave]
@@ -284,13 +284,14 @@ for l in le(os.path.join(tmp, "travas")).split("\n"):
     })
 travas.sort(key=lambda t: (t["fila"], t["vaga"]))
 # Mesma precedência do fila-teste.sh: padrão < ambiente < fila.conf (o .orca/worktree.conf do projeto vence os dois e entra em "projetos").
-ITENS = (("modo", "FILA", "recurso"), ("vagas", "VAGAS", "2"), ("vagas_projeto", "VAGAS_PROJETO", "1"), ("teto", "TETO", "3"), ("processos", "PROCESSOS", "8"))
+ITENS = (("modo", "FILA", "global"), ("vagas", "VAGAS", "2"), ("vagas_projeto", "VAGAS_PROJETO", "1"), ("teto", "TETO", "3"), ("processos", "PROCESSOS", "8"))
 fc = le_fila_conf()
 efetivo = {}
 for item, suf, padrao in ITENS:
     if "FILA_TESTE_" + suf in fc: val, origem = fc["FILA_TESTE_" + suf], "fila.conf"
     elif E["PAINEL_ENV_" + suf]: val, origem = E["PAINEL_ENV_" + suf], "ambiente"
     else: val, origem = padrao, "padrao"
+    if item == "modo" and val == "recurso": val = "global"
     efetivo[item] = {"valor": val if item == "modo" else inteiro(val, int(padrao)), "origem": origem, "projetos": []}
 modo_fila = efetivo["modo"]["valor"]
 fila = {"modo": modo_fila, "vagas": efetivo["vagas_projeto" if modo_fila == "projeto" else "vagas"]["valor"],

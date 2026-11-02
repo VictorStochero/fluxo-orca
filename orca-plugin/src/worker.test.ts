@@ -4,9 +4,9 @@ import { join } from 'node:path'
 import { afterEach, assert, mountWorker, test } from 'orca/testing'
 import { estadoExemplo } from './fixtures'
 import * as main from './worker'
-import { acharOrca } from './worker'
+import { acharOrca, ambienteDoColetor } from './worker'
 
-const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA, ORCA_CMD: process.env.ORCA_CMD, ORCA_CLI_COMMAND: process.env.ORCA_CLI_COMMAND }
+const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA, APPDATA: process.env.APPDATA, ORCA_CMD: process.env.ORCA_CMD, ORCA_CLI_COMMAND: process.env.ORCA_CLI_COMMAND }
 let casa = ''
 
 // Casa isolada com um painel.sh falso em ~/.cache; o worker lê homedir() ao ativar.
@@ -19,11 +19,12 @@ function novaCasa(coletor: string): string {
 }
 
 afterEach(() => {
+  main.deactivate() // fecha os observadores mesmo quando o teste falhou antes do deactivate (senão o processo não encerra)
   process.env.HOME = casaOriginal.HOME
   process.env.USERPROFILE = casaOriginal.USERPROFILE
   if (casaOriginal.LOCALAPPDATA === undefined) delete process.env.LOCALAPPDATA
   else process.env.LOCALAPPDATA = casaOriginal.LOCALAPPDATA
-  for (const k of ['ORCA_CMD', 'ORCA_CLI_COMMAND'] as const) {
+  for (const k of ['APPDATA', 'ORCA_CMD', 'ORCA_CLI_COMMAND'] as const) {
     if (casaOriginal[k] === undefined) delete process.env[k]
     else process.env[k] = casaOriginal[k]
   }
@@ -135,16 +136,28 @@ test('acharOrca: respeita o ORCA_CMD existente e procura o CLI nos lugares do Or
 
 test('o coletor roda com ORCA_CMD apontando o CLI da instalação padrão', async () => {
   if (process.platform !== 'win32') return
-  const cache = novaCasa('echo "{\\"cmd\\":\\"$ORCA_CMD\\"}"\n')
+  const cache = novaCasa('echo "{\\"cmd\\":\\"$ORCA_CMD\\",\\"appdata\\":\\"${APPDATA//\\\\//}\\"}"\n')
   const bin = join(casa, 'local', 'Programs', 'orca', 'resources', 'bin')
   mkdirSync(bin, { recursive: true })
   writeFileSync(join(bin, 'orca.exe'), '')
   process.env.LOCALAPPDATA = join(casa, 'local')
   process.env.ORCA_CMD = 'orca' // como no processo do Orca: nome sem caminho
+  delete process.env.APPDATA // o worker chega sem APPDATA e o CLI do Orca recusa ('APPDATA is not set')
   delete process.env.ORCA_CLI_COMMAND
   const worker = await mountWorker(main)
-  const saida = (await worker.request('estado.ler')) as unknown as { cmd: string }
+  const saida = (await worker.request('estado.ler')) as unknown as { cmd: string; appdata: string }
   assert.equal(saida.cmd, join(bin, 'orca.exe').replace(/\\/g, '/'))
+  assert.match(saida.appdata, /AppData.Roaming$/)
   assert.ok(cache)
   await worker.deactivate()
+})
+
+test('ambienteDoColetor completa APPDATA e LOCALAPPDATA no Windows e não mexe no que já existe', () => {
+  const sem = ambienteDoColetor({ PATH: 'p' }, 'win32', 'C:/Users/u', 'C:/o/orca.exe')
+  assert.match(sem.APPDATA ?? '', /u.AppData.Roaming$/)
+  assert.match(sem.LOCALAPPDATA ?? '', /u.AppData.Local$/)
+  assert.equal(sem.ORCA_CMD, 'C:/o/orca.exe')
+  const com = ambienteDoColetor({ APPDATA: 'X', LOCALAPPDATA: 'Y' }, 'win32', 'C:/u')
+  assert.deepEqual([com.APPDATA, com.LOCALAPPDATA, com.ORCA_CMD], ['X', 'Y', undefined])
+  assert.equal(ambienteDoColetor({}, 'linux', '/home/u').APPDATA, undefined)
 })

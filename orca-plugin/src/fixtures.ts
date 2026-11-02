@@ -6,7 +6,7 @@ export const estadoExemplo: Estado = {
   aviso: null,
   saude: { plugin_versao: '2.13.0', scripts_desatualizados: [], orca: { rodando: true, versao: '1.4.246' } },
   fila: {
-    modo: 'recurso',
+    modo: 'global',
     vagas: 5,
     teto: 5,
     travas: [
@@ -14,7 +14,7 @@ export const estadoExemplo: Estado = {
       { fila: 'teto', vaga: 1, worktree: 'C:/Herd/wt-dois', desde: null, comando: null, pid: null, viva: false }
     ],
     config: {
-      modo: { valor: 'recurso', origem: 'padrao', projetos: [] },
+      modo: { valor: 'global', origem: 'padrao', projetos: [] },
       vagas: { valor: 5, origem: 'ambiente', projetos: [{ projeto: 'meu-projeto', valor: 1 }] },
       vagas_projeto: { valor: 1, origem: 'padrao', projetos: [] },
       teto: { valor: 5, origem: 'fila.conf', projetos: [] },

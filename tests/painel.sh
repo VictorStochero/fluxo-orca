@@ -48,7 +48,7 @@ igual 'fila: trava sem pid' 'None False' "$(j 'str([t for t in d["fila"]["travas
 igual 'fila: trava morta' False "$(j '[t for t in d["fila"]["travas"] if t["fila"]=="teto"][0]["viva"]' "$tmp/e.json")"
 igual 'fila: worktree do dono' C:/Herd/wt-um "$(j '[t for t in d["fila"]["travas"] if t["fila"]=="3308"][0]["worktree"]' "$tmp/e.json")"
 igual 'fila: comando do dono' 'runner --compact tests/Feature/X.php' "$(j '[t for t in d["fila"]["travas"] if t["fila"]=="3308"][0]["comando"]' "$tmp/e.json")"
-igual 'fila: padrões' 'recurso 2 3' "$(j 'd["fila"]["modo"]+" "+str(d["fila"]["vagas"])+" "+str(d["fila"]["teto"])' "$tmp/e.json")"
+igual 'fila: padrões' 'global 2 3' "$(j 'd["fila"]["modo"]+" "+str(d["fila"]["vagas"])+" "+str(d["fila"]["teto"])' "$tmp/e.json")"
 igual 'pool: usadas e vagas' '1 2' "$(j 'str(d["pool"]["contas"][0]["usadas"])+" "+str(d["pool"]["contas"][0]["vagas"])' "$tmp/e.json")"
 igual 'pool: cota curta/longa/alerta' '90 25 True' "$(j 'str(d["pool"]["contas"][0]["cota"]["curta"])+" "+str(d["pool"]["contas"][0]["cota"]["longa"])+" "+str(d["pool"]["contas"][0]["cota"]["alerta"])' "$tmp/e.json")"
 igual 'orca: cota nativa vale sobre a medida (codex sem medida)' '95 50 orca True' "$(j 'str(d["pool"]["contas"][1]["cota"]["curta"])+" "+str(d["pool"]["contas"][1]["cota"]["longa"])+" "+d["pool"]["contas"][1]["cota"]["fonte"]+" "+str(d["pool"]["contas"][1]["detectada"])' "$tmp/e.json")"
@@ -136,6 +136,15 @@ rmdir "$conf_fila"; mv "$tmp/fila.bak" "$conf_fila"
 rm -f "$conf_ag"; cfg pool.teto=3; igual 'config pool: cria agentes.conf' 'teto=3' "$(cat "$conf_ag" 2>/dev/null)"
 cfg conta.a.vagas=1; igual 'config conta: sem conta no arquivo não cria conta' 2 $?
 printf 'teto=4\nram_min=3\na agente=claude vagas=2 peso=5 papeis=escritor,revisor\nb agente=codex vagas=1\nb=3\n' > "$conf_ag"
+
+# Modo da fila: o painel grava global; recurso (nome antigo) é aceito e gravado como global.
+cfg fila.modo=recurso; igual 'config modo: recurso exit 0' 0 $?
+igual 'config modo: recurso vira global no arquivo' 1 "$(grep -c '^FILA_TESTE_FILA=global$' "$conf_fila")"
+printf 'FILA_TESTE_FILA=recurso
+' > "$conf_fila"; painel --json > "$tmp/m.json"
+igual 'modo: recurso antigo aparece como global' global "$(j 'd["fila"]["modo"]' "$tmp/m.json")"
+cfg fila.modo=projeto; painel --json > "$tmp/m.json"
+igual 'modo: projeto usa as vagas por projeto' 'projeto 1' "$(j 'd["fila"]["modo"]+" "+str(d["fila"]["vagas"])' "$tmp/m.json")"
 
 # Faixas e entradas inválidas: nada é gravado.
 cp "$conf_ag" "$tmp/ag.bak"; antes=$(cat "$conf_fila")

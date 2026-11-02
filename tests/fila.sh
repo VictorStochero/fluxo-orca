@@ -290,4 +290,25 @@ case $rc in
     *) ruim "fila.conf: etapa $rc falhou (1 ambiente, 2 worktree.conf, 3 aviso, 4 GS_ no worktree.conf, 5 GS_ no ambiente)" ;;
 esac
 
+# Modo da fila: global é o nome novo, recurso continua valendo como sinônimo; outro valor é recusado; fila.conf aceita os dois.
+modo_global() (
+    export HOME="$tmp/fc-home"; unset FILA_TESTE_VAGAS GS_TESTE_VAGAS GS_TESTE_FILA
+    rm -rf "$HOME/.cache" "$HOME/.claude/fila.conf"; mkdir -p "$HOME/.claude"
+    cd "$tmp/fc/p" || exit 9
+    FILA_TESTE_FILA=global bash "$fila_script" -- true >/dev/null 2>&1 || exit 1
+    FILA_TESTE_FILA=recurso bash "$fila_script" -- true >/dev/null 2>&1 || exit 2
+    FILA_TESTE_FILA=xx bash "$fila_script" -- true >/dev/null 2>"$tmp/modo.err"; [ $? = 2 ] || exit 3
+    grep -q 'global' "$tmp/modo.err" || exit 4
+    for m in global recurso; do
+        printf 'FILA_TESTE_FILA=%s\n' "$m" > "$HOME/.claude/fila.conf"
+        aviso=$(bash "$fila_script" -- true 2>&1 >/dev/null)
+        case "$aviso" in *'linha ignorada'*) exit 5 ;; esac
+    done
+)
+modo_global; rc=$?
+case $rc in
+    0) ok "modo da fila: global e recurso (sinônimo) valem, outro valor é recusado, fila.conf aceita os dois" ;;
+    *) ruim "modo da fila: etapa $rc falhou (1 global, 2 recurso, 3 valor inválido, 4 mensagem, 5 fila.conf)" ;;
+esac
+
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
