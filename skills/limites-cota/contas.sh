@@ -14,7 +14,9 @@ conta_tem_papel() { local v=c_${1//-/_}_papeis; case ",${!v}," in *",$2,"*) retu
 conta_existe() { case " $CONTAS " in *" $1 "*) return 0 ;; esac; return 1; }
 # Só medida (sem papel, ou só orquestra) não ocupa vaga: fica fora do pool.
 conta_no_pool() { local v=c_${1//-/_}_papeis; conta_existe "$1" && case ",${!v}," in ,, | ,orquestra,) return 1 ;; esac; }
-CONTAS_CAMPOS="agente id comando args config modelo vagas peso papeis medidor pre fim regras skills testado nota"
+CONTAS_CAMPOS="agente id comando args config modelo vagas peso papeis medidor pre fim regras skills testado nota ativo"
+# Inativa (ativo=nao) segue no registro e medida, mas fora do pool; campo vazio (cache antigo) vale ativa.
+conta_ativa() { local v=c_${1//-/_}_ativo; [ "${!v}" != nao ]; }
 CONTAS_PAPEIS_TRABALHO=" escritor revisor verificador mecanico "
 _contas_erro() { echo "contas: $1: $2" >&2; return 2; }
 
@@ -30,7 +32,7 @@ _contas_define() { # conta chave-do-catálogo
         _contas_set "$1" agente "$2"; _contas_set "$1" id "$id"; _contas_set "$1" comando "$cmd"
         _contas_set "$1" args "$args"; _contas_set "$1" medidor "$med"; _contas_set "$1" nota "$nota"
         _contas_set "$1" config ""; _contas_set "$1" modelo ""; _contas_set "$1" vagas 1
-        _contas_set "$1" peso 1
+        _contas_set "$1" peso 1; _contas_set "$1" ativo sim
         _contas_set "$1" pre "$pre"; _contas_set "$1" fim "$fim"; _contas_set "$1" regras "$regras"
         _contas_set "$1" skills "$skills"; _contas_set "$1" testado "$testado"
         # Papel de trabalho por padrão só onde há a trava de comando remoto (guarda-externos, GUIA fase 4b); o resto, só se escrito.
@@ -59,6 +61,7 @@ _contas_valida() { # chave valor linha conta
     case "$1" in
         vagas) [[ "$2" =~ ^[0-9]+$ ]] || _contas_erro 'vagas inválidas' "$3" ;;
         peso) [[ "$2" =~ ^[0-9]+$ ]] && [ "$2" -ge 1 ] || _contas_erro 'peso inválido' "$3" ;;
+        ativo) [[ "$2" =~ ^(sim|nao)$ ]] || _contas_erro 'ativo inválido (use sim ou nao)' "$3" ;;
         medidor) [[ "$2" =~ ^(claude|-|orca:[A-Za-z]+)$ ]] || _contas_erro 'medidor desconhecido' "$3" ;;
         papeis)
             local p ag resto=$2,
@@ -222,6 +225,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
         lista) for c in $CONTAS; do
                    p=c_${c//-/_}_; ag=${p}agente; va=${p}vagas; pe=${p}peso; pa=${p}papeis; me=${p}medidor
                    printf '%s agente=%s vagas=%s peso=%s papeis=%s medidor=%s' "$c" "${!ag}" "${!va}" "${!pe}" "${!pa}" "${!me}"
+                   conta_ativa "$c" || printf ' ativo=nao'
                    conta_aviso "$c" > /dev/null && printf ' aviso=%s' "$CONTA_AVISO"
                    echo
                done ;;

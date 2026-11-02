@@ -177,6 +177,7 @@ lanca nenhuma escritor >/dev/null; igual 'lança: conta desconhecida' 2 $?
 for linha in 'Team! agente=claude' 'x agente=inexistente' 'x agente=claude cor=azul' 'x agente=claude vagas=muitas' \
              'x config=~/.y' 'x agente=claude papeis=chefe' 'x agente=claude medidor=balanca' 'escolha=sorteio' \
              'x agente=claude peso=0' 'x agente=claude peso=-1' 'x agente=claude peso=1.5' \
+             'x agente=claude ativo=talvez' 'x agente=claude ativo=' 'x agente=claude ativo=SIM' \
              'teto=-1' 'teto=abc' 'team=abc' 'outra=2' 'x agente=claude modelo="sem fim'; do
     printf '%s\n' "$linha" > "$HOME/.claude/agentes.conf"
     igual "erro: $linha" 2 "$(rc_carrega)"
@@ -186,6 +187,16 @@ printf 'x agente=claude\nx agente=codex\n' > "$HOME/.claude/agentes.conf"
 igual 'erro: conta repetida' 2 "$(rc_carrega)"
 printf 'a-b agente=claude\na_b agente=codex\n' > "$HOME/.claude/agentes.conf"
 igual 'erro: nomes que colidem na variável' 2 "$(rc_carrega)"
+
+# ativo=nao: segue no registro e na lista, marcada; ausente e ativo=sim valem ativa.
+printf 'a agente=claude\nb agente=claude ativo=sim\nc agente=claude ativo=nao\n' > "$HOME/.claude/agentes.conf"
+igual 'ativo: contas continuam no registro' 'a b c' "$(carrega 'echo $CONTAS')"
+igual 'ativo: ausente vale ativa' sim "$(carrega 'conta_ativa a && echo sim')"
+igual 'ativo: sim vale ativa' sim "$(carrega 'conta_ativa b && echo sim')"
+igual 'ativo: nao inativa' nao "$(carrega 'conta_ativa c || echo nao')"
+igual 'ativo: lista marca só a inativa' 'c' "$(bash "$lib" lista | grep -F ativo=nao | cut -d' ' -f1)"
+igual 'ativo: lista mantém a inativa' 3 "$(bash "$lib" lista | grep -c agente=)"
+igual 'ativo: cache preserva' nao "$(carrega 'conta_ativa c || echo nao')"
 
 # Carregar duas vezes (o limites.sh recarrega as padrão quando o registro falha) não acusa repetida.
 printf 'team agente=claude\n' > "$HOME/.claude/agentes.conf"

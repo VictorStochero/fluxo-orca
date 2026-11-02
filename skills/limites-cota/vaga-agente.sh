@@ -96,6 +96,8 @@ conta_maquina() {
     for v in "$dir"/*.lock[0-9]*; do
         [ -d "$v" ] || continue
         [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
+        c=${v##*/}; c=${c%.lock*}
+        conta_existe "$c" && ! conta_ativa "$c" && continue
         recupera "$v"
         [ -d "$v" ] && maquina_ocupadas=$((maquina_ocupadas + 1))
     done
@@ -123,6 +125,7 @@ case "${1:-}" in
         [ "$#" = 3 ] || erro 'uso: pega <conta> <dispatch>'
         conta=$2; dispatch=$3
         conta_no_pool "$conta" || erro 'conta desconhecida'
+        conta_ativa "$conta" || erro "conta inativa (ativo=nao): $conta"
         valida_dispatch "$dispatch"
         total=$(conta_campo "$conta" vagas)
         [ "$total" = 0 ] && [ "$CONTAS_TETO" = 0 ] && [ "$RAM_MIN_GB" = 0 ] && exit 0
@@ -195,6 +198,7 @@ case "${1:-}" in
         for conta in $CONTAS; do
             conta_no_pool "$conta" || continue
             total=$(conta_campo "$conta" vagas); ocupadas=0
+            conta_ativa "$conta" || { printf '%s 0/%s inativa\n' "$conta" "$total"; continue; }
             for v in "$dir/$conta".lock[0-9]*; do
                 [ -d "$v" ] || continue
                 [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
