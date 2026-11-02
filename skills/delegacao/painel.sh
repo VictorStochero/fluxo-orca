@@ -95,10 +95,14 @@ def confere(chave, v):
     elif chave == "pool.ram_min": ok = re.fullmatch(r"[0-9]+(\.[0-9]+)?", v) is not None; faixa = FAIXAS[chave]
     elif chave == "pool.escolha": ok = v in ("ritmo", "ordem")
     else:
-        m = re.fullmatch(r"conta\.([a-z0-9_-]{1,32})\.(vagas|peso|papeis)", chave)
+        m = re.fullmatch(r"conta\.([a-z0-9_-]{1,32})\.(vagas|peso|papeis|config|comando|adicionar|remover)", chave)
         if not m: raise Erro("chave desconhecida (%s)" % chave)
-        if m.group(2) == "papeis": ok = v == "" or all(p in PAPEIS for p in v.split(","))
-        else: ok = inteiro_; faixa = FAIXAS[m.group(2)]
+        campo = m.group(2)
+        if campo == "papeis": ok = v == "" or all(p in PAPEIS for p in v.split(","))
+        elif campo == "adicionar": ok = re.fullmatch(r"[a-z0-9_-]{1,32}", v) is not None  # agente do catálogo: o contas.sh confere
+        elif campo == "remover": ok = v == "1"
+        elif campo in ("config", "comando"): ok = re.fullmatch(r"[~A-Za-z0-9_./:\@+-]+", v) is not None  # sem espaço nem aspas: vira um token da linha
+        else: ok = inteiro_; faixa = FAIXAS[campo]
     if ok and faixa and not faixa[0] <= float(v) <= faixa[1]: ok = False
     if not ok: raise Erro("valor inválido para %s: %s" % (chave, v or "(vazio)"))
     return str(int(v)) if inteiro_ else v
@@ -145,11 +149,19 @@ def edita_agentes(L, chaves):
             if re.match(r"\s*[a-z0-9_-]+\s+\S", l): return i
     for k, v in chaves.items():
         if k.startswith("pool."): edita_chaves(L, k[5:], v, primeira_conta)
-    for k, v in chaves.items():
-        m = re.fullmatch(r"conta\.(.+)\.(vagas|peso|papeis)", k)
+    def acha(nome):
+        return next((j for j, l in enumerate(L) if re.match(r"\s*%s\s+\S" % re.escape(nome), l)), None)
+    for k, v in chaves.items():  # conta nova: linha mínima no fim; vagas, peso, papéis e config entram pelos campos abaixo
+        m = re.fullmatch(r"conta\.(.+)\.adicionar", k)
         if not m: continue
+        if acha(m.group(1)) is not None: raise Erro("conta já existe no agentes.conf: %s" % m.group(1))
+        insere(L, None, "%s agente=%s vagas=1 peso=1\n" % (m.group(1), v))
+    removidas = {k.split(".")[1] for k in chaves if k.endswith(".remover")}
+    for k, v in chaves.items():
+        m = re.fullmatch(r"conta\.(.+)\.(vagas|peso|papeis|config|comando)", k)
+        if not m or m.group(1) in removidas: continue
         nome, campo = m.groups()
-        i = next((j for j, l in enumerate(L) if re.match(r"\s*%s\s+\S" % re.escape(nome), l)), None)
+        i = acha(nome)
         if i is None: raise Erro("conta inexistente no agentes.conf: %s" % nome)
         c, eol = corpo_eol(L[i])
         par = re.compile(r'(^|\s)%s=("[^"]*"|[^\s"]*)' % campo)
@@ -158,6 +170,9 @@ def edita_agentes(L, chaves):
         L[i] = c + eol
         if campo == "vagas":  # a linha legada nome=N sobrescreveria o valor gravado
             L = [l for l in L if not re.fullmatch(r"\s*%s=[0-9]+\s*" % re.escape(nome), l.rstrip("\r\n"))]
+    for nome in sorted(removidas):  # a linha da conta e a legada nome=N
+        if acha(nome) is None: raise Erro("conta inexistente no agentes.conf: %s" % nome)
+        L = [l for l in L if not (re.match(r"\s*%s\s+\S" % re.escape(nome), l) or re.fullmatch(r"\s*%s=[0-9]+\s*" % re.escape(nome), l.rstrip("\r\n")))]
     return L
 
 def roda_contas(conf):  # valida o candidato (.tmp) antes de ele virar o agentes.conf: nenhum outro processo vê registro inválido
@@ -226,6 +241,7 @@ def orca_json(*args):
 
 aviso = []
 st = orca_json("status", "--json")
+res_contas = ((orca_json("account", "list", "--json") or {}).get("result")) or {}
 
 # saúde
 raiz = le(os.path.join(cache, "fluxo-orca-raiz")).strip()
@@ -338,13 +354,45 @@ for l in conta_linhas:
                 "alerta": (curta or 0) > 80 or (longa or 0) > 80}
     contas.append({"nome": nome, "agente": c.get("agente"), "vagas": inteiro(c.get("vagas"), 0), "usadas": len(ocup),
                    "peso": inteiro(c.get("peso"), 1), "papeis": [p for p in c.get("papeis", "").split(",") if p],
-                   "ocupantes": ocup, "cota": cota})
+                   "ocupantes": ocup, "cota": cota, "origem": "manual", "rotulo": None, "config": c.get("config"), "detectada": False})
 for l in conf_linhas:  # linhas "conta=N" mudam só as vagas (contas.sh)
     m = re.match(r"^\s*([A-Za-z0-9_-]+)=(\d+)\s*$", l)
     for c in contas:
         if m and c["nome"] == m.group(1): c["vagas"] = int(m.group(2))
+
+# Contas detectadas pelo Orca (`orca account list`): a cota nativa vale sobre a medida; a conta ainda fora do agentes.conf entra com origem "orca".
+def cota_orca(prov):
+    r = (res_contas.get("rateLimits") or {}).get(prov) or {}
+    if r.get("status") != "ok": return None
+    sess, sem = r.get("session") or {}, r.get("weekly") or {}
+    curta, longa = sess.get("usedPercent"), sem.get("usedPercent")
+    if curta is None and longa is None: return None
+    texto = " · ".join(x for x in ("5h %s%% (zera %s)" % (curta, sess.get("resetDescription") or "?") if sess else "", "semana %s%% (zera %s)" % (longa, sem.get("resetDescription") or "?") if sem else "") if x)
+    return {"texto": texto, "curta": curta, "longa": longa, "medida_ha_min": max(0, int((agora * 1000 - (r.get("updatedAt") or agora * 1000)) // 60000)),
+            "alerta": (curta or 0) > 80 or (longa or 0) > 80, "fonte": "orca"}
+
+def slug(x): return re.sub(r"[^a-z0-9-]+", "-", x.lower()).strip("-")[:32] or "conta"
+
+for prov in ("claude", "codex", "opencode", "devin"):
+    d = res_contas.get(prov) or {}
+    sd = d.get("systemDefault") or {}
+    achadas = [(slug("%s-%s" % (prov, str(a.get("id"))[:8])), a.get("email") or a.get("label") or str(a.get("id")), False) for a in d.get("accounts") or []]
+    if sd.get("hasAuth") or (prov == "claude" and cota_orca("claude")): achadas.append((slug(prov + "-padrao"), sd.get("email") or "padrão do sistema", True))
+    for nome, rotulo, padrao in achadas:
+        # O padrão do sistema é a conta manual do mesmo agente sem config; a gerenciada, a de mesmo nome.
+        dono = next((c for c in contas if c["origem"] == "manual" and ((c["agente"] == prov and not c["config"]) if padrao else c["nome"] == nome)), None)
+        nativa = cota_orca(prov) if padrao else None
+        if dono:
+            dono["detectada"] = True; dono["rotulo"] = rotulo
+            if nativa: dono["cota"] = nativa
+        else:
+            contas.append({"nome": nome, "agente": prov, "vagas": 0, "usadas": 0, "peso": 1, "papeis": [], "ocupantes": [], "cota": nativa,
+                           "origem": "orca", "rotulo": rotulo, "config": None, "detectada": True})
+catalogo = []
+for l in le(os.path.join(os.path.dirname(E["PAINEL_CONTAS"]), "agentes-catalogo.conf")).split("\n"):
+    if l.strip() and not l.startswith("#") and "|" in l: catalogo.append(l.split("|", 1)[0])
 teto = conf.get("teto", 0); ram_min = conf.get("ram_min", 0)
-pool = {"teto": teto, "ram_min": ram_min, "escolha": escolha, "papeis_validos": list(PAPEIS), "maquina": {"usadas": total, "teto": teto}, "contas": contas}
+pool = {"teto": teto, "ram_min": ram_min, "escolha": escolha, "papeis_validos": list(PAPEIS), "catalogo": catalogo, "maquina": {"usadas": total, "teto": teto}, "contas": contas}
 
 sobrescritas_dos_projetos([t["worktree"] for t in travas if t["worktree"]])
 

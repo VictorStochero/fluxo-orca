@@ -63,17 +63,24 @@ export const t = {
     configurar: 'Configurar o pool',
     teto: 'Teto da máquina (0 = sem teto)',
     ramMin: 'RAM mínima livre (GB)',
-    escolha: 'Escolha do escritor'
-  },
-
-  workers: {
-    titulo: 'Workers do Orca',
-    nenhum: 'Nenhum worker ativo.',
-    tabela: 'Workers em andamento',
-    dispatch: 'Dispatch',
-    agente: 'Agente / modelo',
-    estado: 'Estado',
-    worktree: 'Worktree',
-    objetivo: 'Objetivo do run'
+    escolha: 'Escolha do escritor',
+    origemManual: 'manual (agentes.conf)',
+    origemOrca: 'detectada pelo Orca',
+    origemManualOrca: 'agentes.conf · detectada pelo Orca',
+    contaForaDoPool: (nome: string, curta: number | null, longa: number | null) => `${nome} · fora do pool · 5h ${pct(curta)} · Semanal ${pct(longa)}`,
+    origem: 'Origem',
+    rotulo: 'Conta no Orca',
+    adicionar: 'Adicionar ao pool',
+    remover: 'Remover do pool',
+    confirmarRemocao: (nome: string) => `Remover ${nome} do agentes.conf?`,
+    confirmar: 'Confirmar remoção',
+    cancelar: 'Cancelar',
+    config: 'Diretório de config (CLAUDE_CONFIG_DIR etc.)',
+    comando: 'Comando do lançador',
+    nova: 'Nova conta manual',
+    novaNome: 'Nome da conta',
+    novaAgente: 'Agente do catálogo',
+    novaAgentePlaceholder: 'Escolha o agente',
+    novaCriar: 'Adicionar conta'
   }
 }

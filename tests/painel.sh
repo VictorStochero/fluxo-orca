@@ -17,6 +17,7 @@ cat > "$tmp/bin/orca" <<'STUB'
 [ -n "${PAINEL_ORCA_FALHA:-}" ] && exit 1
 case "$1 $2" in
     'status --json') echo '{"ok":true,"result":{"app":{"running":true},"runtime":{"appVersion":"9.9.9"}}}' ;;
+    'account list') echo '{"ok":true,"result":{"claude":{"accounts":[{"id":"abcdef1234567890","email":"gerenciada@x.com"}],"activeAccountId":null},"codex":{"accounts":[],"activeAccountId":null,"systemDefault":{"hasAuth":true,"authKind":"oauth","email":"cx@x.com"}},"opencode":{"accounts":[],"activeAccountId":null},"devin":{"accounts":[{"id":"d1","label":"Devin A"}],"activeAccountId":null},"rateLimits":{"claude":{"status":"unavailable","session":null,"weekly":null},"codex":{"status":"ok","session":{"usedPercent":95,"resetDescription":"14:48"},"weekly":{"usedPercent":50,"resetDescription":"qua., 10:01"},"updatedAt":0}}}}' ;;
     *) exit 2 ;;
 esac
 STUB
@@ -50,7 +51,12 @@ igual 'fila: comando do dono' 'runner --compact tests/Feature/X.php' "$(j '[t fo
 igual 'fila: padrões' 'recurso 2 3' "$(j 'd["fila"]["modo"]+" "+str(d["fila"]["vagas"])+" "+str(d["fila"]["teto"])' "$tmp/e.json")"
 igual 'pool: usadas e vagas' '1 2' "$(j 'str(d["pool"]["contas"][0]["usadas"])+" "+str(d["pool"]["contas"][0]["vagas"])' "$tmp/e.json")"
 igual 'pool: cota curta/longa/alerta' '90 25 True' "$(j 'str(d["pool"]["contas"][0]["cota"]["curta"])+" "+str(d["pool"]["contas"][0]["cota"]["longa"])+" "+str(d["pool"]["contas"][0]["cota"]["alerta"])' "$tmp/e.json")"
-igual 'pool: conta sem medida' None "$(j 'd["pool"]["contas"][1]["cota"]' "$tmp/e.json")"
+igual 'orca: cota nativa vale sobre a medida (codex sem medida)' '95 50 orca True' "$(j 'str(d["pool"]["contas"][1]["cota"]["curta"])+" "+str(d["pool"]["contas"][1]["cota"]["longa"])+" "+d["pool"]["contas"][1]["cota"]["fonte"]+" "+str(d["pool"]["contas"][1]["detectada"])' "$tmp/e.json")"
+igual 'orca: conta sem cota nativa mantém a medida' 'None 90 False' "$(j 'str(d["pool"]["contas"][0]["cota"].get("fonte"))+" "+str(d["pool"]["contas"][0]["cota"]["curta"])+" "+str(d["pool"]["contas"][0]["detectada"])' "$tmp/e.json")"
+igual 'orca: conta gerenciada fora do agentes.conf entra com origem orca' 'claude-abcdef12 orca gerenciada@x.com claude' "$(j '" ".join([c["nome"],c["origem"],c["rotulo"],c["agente"]]) if (c:=[x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]) else 0' "$tmp/e.json")"
+igual 'orca: contas detectadas não entram nas vagas' '0 0' "$(j 'str([x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]["vagas"])+" "+str([x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]["usadas"])' "$tmp/e.json")"
+igual 'orca: manual não perde a origem' manual "$(j 'd["pool"]["contas"][0]["origem"]' "$tmp/e.json")"
+igual 'catálogo: agentes para a conta nova' True "$(j '"claude" in d["pool"]["catalogo"] and "codex" in d["pool"]["catalogo"]' "$tmp/e.json")"
 igual 'pool: linha conta=N muda as vagas' 3 "$(j 'd["pool"]["contas"][1]["vagas"]' "$tmp/e.json")"
 igual 'pool: máquina' '1/4 ram_min 3' "$(j 'str(d["pool"]["maquina"]["usadas"])+"/"+str(d["pool"]["maquina"]["teto"])+" ram_min "+str(d["pool"]["ram_min"])' "$tmp/e.json")"
 igual 'saída: JSON só ASCII (nenhum console estraga o acento)' 0 "$(LC_ALL=C grep -c -P '[^\x00-\x7F]' "$tmp/e.json")"
@@ -159,5 +165,25 @@ igual 'projeto: aspas e nome novo no teto' 2 "$(j 'd["fila"]["config"]["teto"]["
 igual 'projeto: valor inválido ignorado' '[]' "$(j 'd["fila"]["config"]["modo"]["projetos"]' "$tmp/o.json")"
 igual 'projeto: o valor da máquina não muda' 4 "$(j 'd["fila"]["config"]["vagas"]["valor"]' "$tmp/o.json")"
 igual 'pool: papéis válidos e escolha' 'orquestra ritmo' "$(j 'd["pool"]["papeis_validos"][-1]+" "+d["pool"]["escolha"]' "$tmp/o.json")"
+
+
+# Conta nova, adicionar a detectada e remover: pelo --config, validado pelo contas.sh antes de trocar o arquivo.
+printf '# minhas contas\nteto=4\na agente=claude vagas=2 peso=5 papeis=escritor,revisor\nb agente=codex vagas=1\nb=3\n' > "$conf_ag"
+cfg conta.nova.adicionar=codex conta.nova.vagas=2 conta.nova.config=~/.codex-nova conta.nova.papeis=revisor; igual 'conta nova: exit 0' 0 $?
+igual 'conta nova: linha no fim, comentário e ordem preservados' '# minhas contas|teto=4|a agente=claude vagas=2 peso=5 papeis=escritor,revisor|b agente=codex vagas=1|b=3|nova agente=codex vagas=2 peso=1 config=~/.codex-nova papeis=revisor' "$(junta '|' < "$conf_ag")"
+cfg conta.nova.adicionar=codex; igual 'conta nova: nome repetido, exit 2' 2 $?
+grep -q 'já existe' "$tmp/c.err" && ok 'conta nova: mensagem de conta repetida' || ruim 'conta nova: sem mensagem'
+cp "$conf_ag" "$tmp/ag.bak"
+cfg conta.zz.adicionar=agente-fora-do-catalogo; igual 'conta nova: agente fora do catálogo, exit 2' 2 $?
+grep -q 'fora do catálogo' "$tmp/c.err" && ok 'conta nova: mensagem do contas.sh' || ruim "conta nova: $(cat "$tmp/c.err")"
+cfg 'conta.zz.config=com espaço' conta.zz.adicionar=codex; igual 'conta nova: config com espaço, exit 2' 2 $?
+cfg conta.Zz.adicionar=codex; igual 'conta nova: nome inválido, exit 2' 2 $?
+cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'conta nova: recusas não gravam nada' || ruim 'conta nova: arquivo mudou'
+cfg conta.b.remover=1; igual 'remover: exit 0' 0 $?
+igual 'remover: some a linha da conta e a legada nome=N' '# minhas contas|teto=4|a agente=claude vagas=2 peso=5 papeis=escritor,revisor|nova agente=codex vagas=2 peso=1 config=~/.codex-nova papeis=revisor' "$(junta '|' < "$conf_ag")"
+cfg conta.b.remover=1; igual 'remover: conta inexistente, exit 2' 2 $?
+cfg conta.a.remover=2; igual 'remover: valor diferente de 1, exit 2' 2 $?
+cfg conta.a.remover=1 conta.a.vagas=3 conta.nova.comando=codex; igual 'remover: edição da conta removida é descartada' 0 $?
+igual 'remover: só a nova sobra, com o comando' '# minhas contas|teto=4|nova agente=codex vagas=2 peso=1 config=~/.codex-nova papeis=revisor comando=codex' "$(junta '|' < "$conf_ag")"
 
 [ "$falhas" = 0 ] && echo 'TUDO OK' || { echo "$falhas falha(s)"; exit 1; }

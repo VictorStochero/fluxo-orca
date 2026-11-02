@@ -25,6 +25,7 @@ export const estadoExemplo: Estado = {
     teto: 4,
     ram_min: 3,
     escolha: 'ritmo',
+    catalogo: ['claude', 'codex', 'opencode'],
     papeis_validos: ['escritor', 'revisor', 'verificador', 'mecanico', 'segunda-opiniao', 'orquestra'],
     maquina: { usadas: 1, teto: 4 },
     contas: [
@@ -36,9 +37,14 @@ export const estadoExemplo: Estado = {
         peso: 10,
         papeis: ['escritor', 'revisor'],
         ocupantes: [{ dispatch: 'ctx_a', desde: '2026-11-02T13:00:00Z' }],
+        origem: 'manual',
+        rotulo: null,
+        config: null,
+        detectada: false,
         cota: { texto: 'pessoal: sessão 90% usado | semana 25% usado, zera 6 nov 20:00', curta: 90, longa: 25, medida_ha_min: 3, alerta: true }
       },
-      { nome: 'codex', agente: 'codex', vagas: 1, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: null }
+      { nome: 'codex', agente: 'codex', vagas: 1, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: { texto: '5h 24% (zera 14:48) · semana 42% (zera qua., 10:01)', curta: 24, longa: 42, medida_ha_min: 1, alerta: false, fonte: 'orca' }, origem: 'manual', rotulo: 'eu@exemplo.com', config: null, detectada: true },
+      { nome: 'claude-abcdef12', agente: 'claude', vagas: 0, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: null, origem: 'orca', rotulo: 'gerenciada@exemplo.com', config: null, detectada: true }
     ]
   }
 }

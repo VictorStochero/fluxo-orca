@@ -18,6 +18,8 @@ export type Cota = {
   longa: number | null
   medida_ha_min: number
   alerta: boolean
+  /** `orca` quando vem do `orca account list` (nativa); ausente na medida do cache. */
+  fonte?: 'orca'
 }
 
 export type Ocupante = { dispatch: string | null; desde: string | null }
@@ -31,6 +33,12 @@ export type Conta = {
   papeis: string[]
   ocupantes: Ocupante[]
   cota: Cota | null
+  /** `manual`: linha do agentes.conf; `orca`: detectada pelo Orca e ainda fora do pool. */
+  origem: 'manual' | 'orca'
+  rotulo: string | null
+  config: string | null
+  /** O Orca também enxerga esta conta (cota nativa). */
+  detectada: boolean
 }
 
 export type ItemFila = 'modo' | 'vagas' | 'vagas_projeto' | 'teto' | 'processos'
@@ -53,6 +61,7 @@ export type Estado = {
     ram_min: number
     escolha: string
     papeis_validos: string[]
+    catalogo: string[]
     maquina: { usadas: number; teto: number }
     contas: Conta[]
   }

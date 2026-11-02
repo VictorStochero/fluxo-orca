@@ -35,6 +35,8 @@ const carregando = atom(false)
 const edicoes = atom<Record<string, string>>({})
 const avisos = atom<Record<string, Aviso>>({})
 const gravando = atom<string | null>(null)
+/** Conta com o pedido de remoção aguardando confirmação. */
+const removendo = atom<string | null>(null)
 
 export async function atualizar(): Promise<void> {
   if (read(carregando)) return
@@ -56,19 +58,24 @@ export function setup(ctx: PanelContext): void {
 }
 
 /** Grava as edições das `chaves` da seção; a recusa do validador volta como mensagem da seção. */
-export async function salvar(secao: string, chaves: string[]): Promise<void> {
+export async function salvar(secao: string, chaves: string[], extras: Record<string, string> = {}): Promise<boolean> {
   const todas = read(edicoes)
-  const valores: Record<string, string> = {}
+  const valores: Record<string, string> = { ...extras }
   for (const c of chaves) if (c in todas) valores[c] = todas[c]
   const aviso = (a: Aviso) => update(avisos, (p) => ({ ...p, [secao]: a }))
-  if (Object.keys(valores).length === 0) return aviso({ tom: 'success', texto: t.nadaAlterado })
+  if (Object.keys(valores).length === 0) {
+    aviso({ tom: 'success', texto: t.nadaAlterado })
+    return false
+  }
   set(gravando, secao)
   try {
     set(estado, await plugin.request('config.gravar', { valores }))
     update(edicoes, (p) => Object.fromEntries(Object.entries(p).filter(([c]) => !(c in valores))))
     aviso({ tom: 'success', texto: t.salvo })
+    return true
   } catch (e) {
     aviso({ tom: 'danger', texto: (e as { message?: string }).message ?? String(e) })
+    return false
   } finally {
     set(gravando, null)
   }
@@ -167,30 +174,64 @@ function SecaoFila({ e }: { e: Estado }) {
   )
 }
 
+function origemDaConta(c: Conta): string {
+  if (c.origem === 'orca') return t.pool.origemOrca
+  return c.detectada ? t.pool.origemManualOrca : t.pool.origemManual
+}
+
+function DetalhesConta({ c }: { c: Conta }) {
+  const q = c.cota
+  return (
+    <KeyValue
+      items={[
+        { label: t.pool.origem, value: origemDaConta(c) },
+        ...(c.rotulo ? [{ label: t.pool.rotulo, value: c.rotulo }] : []),
+        { label: t.pool.agente, value: c.agente ?? '-' },
+        { label: t.pool.peso, value: c.peso },
+        { label: t.pool.papeis, value: c.papeis.join(', ') || '-' },
+        { label: t.pool.janelas, value: q ? q.texto : t.pool.semMedida },
+        { label: t.pool.medidaHa, value: q ? t.pool.minutos(q.medida_ha_min) : '-' },
+        { label: t.pool.vagasEmUso, value: c.ocupantes.map((o) => o.dispatch ?? '?').join(', ') || t.pool.nenhuma, code: c.ocupantes.length > 0 }
+      ]}
+    />
+  )
+}
+
+/** Conta detectada pelo Orca que ainda não está no agentes.conf. */
+function LinhaContaOrca({ c }: { c: Conta }) {
+  const secao = `conta.${c.nome}`
+  return (
+    <Collapsible title={t.pool.contaForaDoPool(c.nome, c.cota?.curta ?? null, c.cota?.longa ?? null)} description={origemDaConta(c)}>
+      <Stack gap="sm">
+        <DetalhesConta c={c} />
+        <Mensagem secao={secao} />
+        <Button size="sm" icon="add" disabled={read(gravando) !== null} onPress={() => void salvar(secao, [], { [`conta.${c.nome}.adicionar`]: c.agente ?? '' })}>
+          {t.pool.adicionar}
+        </Button>
+      </Stack>
+    </Collapsible>
+  )
+}
+
 function LinhaConta({ c, e }: { c: Conta; e: Estado }) {
+  if (c.origem === 'orca') return <LinhaContaOrca c={c} />
   const q = c.cota
   const chaveVagas = `conta.${c.nome}.vagas`
   const chavePeso = `conta.${c.nome}.peso`
   const chavePapeis = `conta.${c.nome}.papeis`
+  const chaveConfig = `conta.${c.nome}.config`
   const ed = read(edicoes)
   const papeis = (ed[chavePapeis] ?? c.papeis.join(',')).split(',').filter(Boolean)
   const alterna = (p: string, marcado: boolean) =>
     mudar(chavePapeis, e.pool.papeis_validos.filter((x) => (x === p ? marcado : papeis.includes(x))).join(','))
+  const secao = `conta.${c.nome}`
   return (
-    <Collapsible title={t.pool.conta(Boolean(q?.alerta), c.nome, c.usadas, c.vagas, q?.curta ?? null, q?.longa ?? null)}>
+    <Collapsible title={t.pool.conta(Boolean(q?.alerta), c.nome, c.usadas, c.vagas, q?.curta ?? null, q?.longa ?? null)} description={origemDaConta(c)}>
       <Stack gap="sm">
-        <KeyValue
-          items={[
-            { label: t.pool.agente, value: c.agente ?? '-' },
-            { label: t.pool.peso, value: c.peso },
-            { label: t.pool.papeis, value: c.papeis.join(', ') || '-' },
-            { label: t.pool.janelas, value: q ? q.texto : t.pool.semMedida },
-            { label: t.pool.medidaHa, value: q ? t.pool.minutos(q.medida_ha_min) : '-' },
-            { label: t.pool.vagasEmUso, value: c.ocupantes.map((o) => o.dispatch ?? '?').join(', ') || t.pool.nenhuma, code: c.ocupantes.length > 0 }
-          ]}
-        />
+        <DetalhesConta c={c} />
         <Input label={t.pool.vagas} value={ed[chaveVagas] ?? String(c.vagas)} onChange={(x) => mudar(chaveVagas, x)} />
         <Input label={t.pool.peso} value={ed[chavePeso] ?? String(c.peso)} onChange={(x) => mudar(chavePeso, x)} />
+        <Input label={t.pool.config} value={ed[chaveConfig] ?? c.config ?? ''} onChange={(x) => mudar(chaveConfig, x)} />
         <Stack gap="xs">
           <Text weight="medium" size="sm">
             {t.pool.papeis}
@@ -199,8 +240,64 @@ function LinhaConta({ c, e }: { c: Conta; e: Estado }) {
             <Checkbox key={p} label={p} checked={papeis.includes(p)} onChange={(m) => alterna(p, m)} />
           ))}
         </Stack>
-        <Mensagem secao={`conta.${c.nome}`} />
-        <Salvar secao={`conta.${c.nome}`} chaves={[chaveVagas, chavePeso, chavePapeis]} />
+        <Mensagem secao={secao} />
+        <Salvar secao={secao} chaves={[chaveVagas, chavePeso, chavePapeis, chaveConfig]} />
+        {read(removendo) === c.nome ? (
+          <Callout tone="warning" title={t.pool.confirmarRemocao(c.nome)}>
+            <Row gap="sm">
+              <Button
+                size="sm"
+                tone="danger"
+                icon="delete"
+                onPress={() => {
+                  set(removendo, null)
+                  void salvar(secao, [], { [`conta.${c.nome}.remover`]: '1' })
+                }}
+              >
+                {t.pool.confirmar}
+              </Button>
+              <Button size="sm" variant="ghost" onPress={() => set(removendo, null)}>
+                {t.pool.cancelar}
+              </Button>
+            </Row>
+          </Callout>
+        ) : (
+          <Button size="sm" variant="outline" tone="danger" icon="delete" onPress={() => set(removendo, c.nome)}>
+            {t.pool.remover}
+          </Button>
+        )}
+      </Stack>
+    </Collapsible>
+  )
+}
+
+function NovaConta({ e }: { e: Estado }) {
+  const ed = read(edicoes)
+  const nome = ed['nova.nome'] ?? ''
+  const agente = ed['nova.agente'] ?? ''
+  const criar = async () => {
+    const extras: Record<string, string> = { [`conta.${nome}.adicionar`]: agente }
+    if (ed['nova.config']) extras[`conta.${nome}.config`] = ed['nova.config']
+    if (ed['nova.comando']) extras[`conta.${nome}.comando`] = ed['nova.comando']
+    if (await salvar('nova', [], extras)) update(edicoes, (p) => Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith('nova.'))))
+  }
+  return (
+    <Collapsible title={t.pool.nova}>
+      <Stack gap="sm">
+        <Input label={t.pool.novaNome} value={nome} onChange={(x) => mudar('nova.nome', x)} />
+        <Select
+          label={t.pool.novaAgente}
+          value={agente || undefined}
+          placeholder={t.pool.novaAgentePlaceholder}
+          options={e.pool.catalogo.map((a) => ({ value: a, label: a }))}
+          onChange={(x) => mudar('nova.agente', x)}
+        />
+        <Input label={t.pool.config} value={ed['nova.config'] ?? ''} onChange={(x) => mudar('nova.config', x)} />
+        <Input label={t.pool.comando} value={ed['nova.comando'] ?? ''} onChange={(x) => mudar('nova.comando', x)} />
+        <Mensagem secao="nova" />
+        <Button size="sm" icon="add" disabled={read(gravando) !== null || !nome || !agente} onPress={() => void criar()}>
+          {t.pool.novaCriar}
+        </Button>
       </Stack>
     </Collapsible>
   )
@@ -212,6 +309,7 @@ function SecaoPool({ e }: { e: Estado }) {
   return (
     <Card title={t.pool.titulo} description={t.pool.resumo(pool.maquina.usadas, pool.maquina.teto, pool.ram_min, pool.escolha)}>
       {pool.contas.length === 0 ? <Text muted>{t.pool.semContas}</Text> : pool.contas.map((c) => <LinhaConta key={c.nome} c={c} e={e} />)}
+      <NovaConta e={e} />
       <Collapsible title={t.pool.configurar}>
         <Stack gap="sm">
           <Input label={t.pool.teto} value={ed['pool.teto'] ?? String(pool.teto)} onChange={(x) => mudar('pool.teto', x)} />
