@@ -1,6 +1,6 @@
 // Worker do painel: roda o coletor do fluxo-orca e avisa o painel quando fila ou pool mudam em disco.
 import { execFile } from 'node:child_process'
-import { existsSync, watch, type FSWatcher } from 'node:fs'
+import { existsSync, readdirSync, statSync, watch, type FSWatcher } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import type { OrcaWorkerApi } from 'orca/worker'
@@ -9,6 +9,11 @@ import type { Estado } from './protocol'
 const TIMEOUT_MS = 60_000
 const DEBOUNCE_MS = 300
 const CICLO_MS = 60_000
+const MEDIDA_VELHA_MS = 5 * 60_000
+const MEDICAO_TIMEOUT_MS = 120_000
+const CHAVE_INTERVALO = 'atualizacao.intervalo_s'
+const INTERVALO_MIN_S = 15
+const INTERVALO_MAX_S = 3600
 // O painel renova a vigília antes do teto de 120 s do plugin.request; a graça cobre o intervalo entre uma e outra.
 const RENOVA_MS = 100_000
 const GRACA_MS = 3_000
@@ -59,26 +64,50 @@ export function ambienteDoColetor(env: NodeJS.ProcessEnv, plataforma: string, ca
   return novo
 }
 
-function rodarColetor(cache: string, args: string[], recusa: string): Promise<string> {
+function rodarColetor(cache: string, args: string[], recusa: string, script = 'painel.sh', timeoutMs = TIMEOUT_MS): Promise<string> {
   const bash = process.platform === 'win32' ? BASH_WINDOWS : 'bash'
   const orca = acharOrca(process.env, process.platform, process.execPath)
   const env = ambienteDoColetor(process.env, process.platform, homedir(), orca)
   return new Promise((resolve, reject) => {
     execFile(
       bash,
-      [join(cache, 'painel.sh'), ...args],
-      { timeout: TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, windowsHide: true, encoding: 'utf8', env },
+      [join(cache, script), ...args],
+      { timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true, encoding: 'utf8', env },
       (erro, stdout, stderr) => {
         if (erro) {
           const e = erro as NodeJS.ErrnoException & { killed?: boolean }
           if (e.code === 'ENOENT') return reject(falha('bash_ausente', `bash não encontrado (${bash})`))
-          if (e.killed) return reject(falha('coletor_timeout', `o coletor passou de ${TIMEOUT_MS / 1000} s`))
+          if (e.killed) return reject(falha('coletor_timeout', `${script} passou de ${timeoutMs / 1000} s`))
           return reject(falha(recusa, stderr.trim().replace(/^erro: /, '') || e.message))
         }
         resolve(stdout)
       }
     )
   })
+}
+
+/** Alguma medida de cota (`agentes/medida.<conta>`) com mais de 5 min. */
+export function medidaVelha(pasta: string, agora = Date.now()): boolean {
+  try {
+    return readdirSync(pasta).some((n) => n.startsWith('medida.') && agora - statSync(join(pasta, n)).mtimeMs > MEDIDA_VELHA_MS)
+  } catch {
+    return false
+  }
+}
+
+let medindo: Promise<void> | undefined
+
+/** Renova as medidas manuais pelo limites.sh (que respeita o próprio cache de 5 min); nunca em paralelo e nunca rejeita: falha ou timeout deixam o cache como está. */
+export function medirSeVelha(cache: string, log: (mensagem: string) => void, timeoutMs = MEDICAO_TIMEOUT_MS): Promise<void> {
+  if (medindo) return medindo
+  if (!medidaVelha(join(cache, 'agentes'))) return Promise.resolve()
+  medindo = rodarColetor(cache, [], 'medicao_falhou', 'limites.sh', timeoutMs)
+    .then(() => undefined)
+    .catch((e) => log(`medição de cota: ${e instanceof Error ? e.message : String(e)}`))
+    .finally(() => {
+      medindo = undefined
+    })
+  return medindo
 }
 
 async function lerEstado(cache: string): Promise<Estado> {
@@ -117,11 +146,18 @@ function lerCompartilhado(cache: string): Promise<Estado> {
   return emVoo
 }
 
+/** Segundos guardados -> ms: ausente ou não numérico usa 60 s; número fora da faixa cai no limite. */
+export function intervaloMs(valor: unknown): number {
+  if (typeof valor !== 'number' || !Number.isFinite(valor)) return CICLO_MS
+  return Math.min(INTERVALO_MAX_S, Math.max(INTERVALO_MIN_S, Math.round(valor))) * 1000
+}
+
 type OpcoesCiclo = { coletar: () => Promise<unknown>; avisar: () => void; erro: (mensagem: string) => void; periodoMs?: number; gracaMs?: number; renovaMs?: number }
 
 /** Coleta a cada `periodoMs` só enquanto há painel vigiando; se a coleta anterior não terminou, pula o ciclo. */
 export function criarCiclo(o: OpcoesCiclo) {
-  const { periodoMs = CICLO_MS, gracaMs = GRACA_MS, renovaMs = RENOVA_MS } = o
+  let periodoMs = o.periodoMs ?? CICLO_MS
+  const { gracaMs = GRACA_MS, renovaMs = RENOVA_MS } = o
   let vigias = 0
   let relogio: ReturnType<typeof setInterval> | undefined
   let graca: ReturnType<typeof setTimeout> | undefined
@@ -145,6 +181,13 @@ export function criarCiclo(o: OpcoesCiclo) {
     relogio = graca = undefined
   }
   return {
+    /** Novo período; com o ciclo ativo, reprograma na hora. */
+    periodo(ms: number) {
+      periodoMs = ms
+      if (relogio === undefined) return
+      clearInterval(relogio)
+      relogio = setInterval(() => void ciclo(), periodoMs)
+    },
     ativo: () => relogio !== undefined,
     parar,
     /** Resolve quando o painel fecha (`signal`) ou a vigília vence; o painel renova em seguida. */
@@ -169,6 +212,7 @@ export function criarCiclo(o: OpcoesCiclo) {
 }
 
 const observadores: FSWatcher[] = []
+const inscricoes: { dispose(): void }[] = []
 let adiado: ReturnType<typeof setTimeout> | undefined
 let vigia: ReturnType<typeof criarCiclo> | undefined
 
@@ -183,7 +227,20 @@ export default function activate(orca: OrcaWorkerApi): void {
   orca.panels.handle('config.gravar', ({ valores }) => gravar(cache, valores))
 
   const avisar = () => orca.panels.post('estado.mudou', { em: Date.now() })
-  vigia = criarCiclo({ coletar: () => lerCompartilhado(cache), avisar, erro: orca.log })
+  vigia = criarCiclo({ coletar: async () => {
+      await medirSeVelha(cache, orca.log)
+      return lerCompartilhado(cache)
+    },
+    avisar, erro: orca.log })
+  const lerIntervalo = async () => {
+    try {
+      vigia?.periodo(intervaloMs(await orca.storage.get(CHAVE_INTERVALO)))
+    } catch (e) {
+      orca.log(`sem intervalo guardado, usa 60 s: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  void lerIntervalo()
+  inscricoes.push(orca.storage.onDidChange(({ key }) => key === CHAVE_INTERVALO && void lerIntervalo()))
   orca.panels.handle('auto.assistir', (_entrada, { signal }) => vigia!.vigiar(signal))
 
   const mudou = () => {
@@ -207,7 +264,8 @@ export default function activate(orca: OrcaWorkerApi): void {
 export function deactivate(): void {
   clearTimeout(adiado)
   vigia?.parar()
+  for (const i of inscricoes.splice(0)) i.dispose()
   vigia = undefined
-  recente = emVoo = undefined
+  recente = emVoo = medindo = undefined
   for (const o of observadores.splice(0)) o.close()
 }

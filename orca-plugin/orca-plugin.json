@@ -8,6 +8,7 @@
     "orca": ">=1.4.246"
   },
   "execution": "trusted-worker",
+  "capabilities": [{ "kind": "storage:own" }],
   "pluginApi": 1,
   "main": "src/worker.ts",
   "contributes": {

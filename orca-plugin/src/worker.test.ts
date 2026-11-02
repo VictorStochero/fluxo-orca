@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { mock } from 'node:test'
 import { join } from 'node:path'
-import { afterEach, assert, mountWorker, test } from 'orca/testing'
+import { afterEach, assert, mockHost, mountWorker, test } from 'orca/testing'
 import { estadoExemplo } from './fixtures'
 import * as main from './worker'
-import { acharOrca, ambienteDoColetor, criarCiclo } from './worker'
+import { acharOrca, ambienteDoColetor, criarCiclo, intervaloMs, medirSeVelha } from './worker'
 
 const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA, APPDATA: process.env.APPDATA, ORCA_CMD: process.env.ORCA_CMD, ORCA_CLI_COMMAND: process.env.ORCA_CLI_COMMAND }
 let casa = ''
@@ -279,4 +279,110 @@ test('estado.ler seguido devolve a coleta recente sem rodar o coletor de novo', 
   await worker.request('estado.ler')
   assert.equal(readFileSync(join(cache, 'n.txt'), 'utf8').trim().split('\n').length, 1)
   await worker.deactivate()
+})
+
+// limites.sh falso: conta as execuções em medidas.txt; `corpo` é o que mais ele faz.
+function comLimites(corpo: string, idadeMin: number | null): string {
+  const cache = novaCasa('echo {}\n')
+  writeFileSync(join(cache, 'limites.sh'), `echo x >> "$HOME/.cache/medidas.txt"\n${corpo}\n`)
+  if (idadeMin !== null) {
+    const f = join(cache, 'agentes', 'medida.team')
+    writeFileSync(f, 'team: 1%')
+    const t = new Date(Date.now() - idadeMin * 60_000)
+    utimesSync(f, t, t)
+  }
+  return cache
+}
+const medidas = (cache: string) => (existsSync(join(cache, 'medidas.txt')) ? readFileSync(join(cache, 'medidas.txt'), 'utf8').trim().split('\n').length : 0)
+
+test('medição: mede quando há medida com mais de 5 min', async () => {
+  const cache = comLimites('', 6)
+  await medirSeVelha(cache, () => {})
+  assert.equal(medidas(cache), 1)
+})
+
+test('medição: não mede quando todas as medidas são recentes ou não há nenhuma', async () => {
+  const recente = comLimites('', 4)
+  await medirSeVelha(recente, () => {})
+  assert.equal(medidas(recente), 0)
+  const nenhuma = comLimites('', null)
+  await medirSeVelha(nenhuma, () => {})
+  assert.equal(medidas(nenhuma), 0)
+})
+
+test('medição: timeout ou falha não rejeitam nem travam, e chamadas simultâneas não rodam em paralelo', async () => {
+  const lenta = comLimites('sleep 30', 6)
+  const logs: string[] = []
+  const ini = Date.now()
+  await Promise.all([medirSeVelha(lenta, (m) => logs.push(m), 400), medirSeVelha(lenta, (m) => logs.push(m), 400)])
+  assert.ok(Date.now() - ini < 10_000)
+  assert.equal(medidas(lenta), 1)
+  assert.match(logs.join(), /limites\.sh passou de/)
+  const quebrada = comLimites('exit 3', 6)
+  await medirSeVelha(quebrada, (m) => logs.push(m))
+  assert.equal(medidas(quebrada), 1)
+})
+
+test('intervalo: ausente ou inválido usa 60 s; fora da faixa cai no limite', () => {
+  for (const v of [null, undefined, 'abc', NaN, {}]) assert.equal(intervaloMs(v), 60_000)
+  assert.equal(intervaloMs(90), 90_000)
+  assert.equal(intervaloMs(5), 15_000)
+  assert.equal(intervaloMs(99999), 3_600_000)
+  assert.equal(intervaloMs(-3), 15_000)
+})
+
+test('ciclo: mudar o período reprograma o relógio na hora', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => {}, erro: () => {}, renovaMs: 1_000_000 })
+    const painel = new AbortController()
+    void c.vigiar(painel.signal)
+    c.periodo(15_000)
+    await avancar(15_000)
+    assert.equal(coletas, 1)
+    c.periodo(30_000)
+    await avancar(15_000)
+    assert.equal(coletas, 1)
+    await avancar(15_000)
+    assert.equal(coletas, 2)
+    painel.abort()
+    c.parar()
+  })
+})
+
+test('worker lê atualizacao.intervalo_s ao iniciar e reprograma o ciclo quando a chave muda', async () => {
+  novaCasa('echo {}\n')
+  let valor: unknown = 20
+  let ouvinte: (c: { key: string }) => void = () => {}
+  let vigiar: (entrada: unknown, ctx: { signal: AbortSignal }) => unknown = () => {}
+  const posts: string[] = []
+  const falso = {
+    log: () => {},
+    storage: { get: async () => valor, onDidChange: (l: typeof ouvinte) => ((ouvinte = l), { dispose() {} }) },
+    panels: { handle: (nome: string, h: typeof vigiar) => (nome === 'auto.assistir' && (vigiar = h), { dispose() {} }), post: (e: string) => void posts.push(e) }
+  }
+  mock.timers.enable({ apis: ['setInterval'] }) // setTimeout segue real: o coletor é um processo de verdade
+  const painel = new AbortController()
+  try {
+    main.default(falso as never)
+    await Promise.resolve()
+    void vigiar(undefined, { signal: painel.signal })
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    mock.timers.tick(20_000)
+    await ate(() => posts.includes('estado.mudou'))
+    assert.equal(posts.filter((p) => p === 'estado.mudou').length, 1)
+    valor = 40
+    ouvinte({ key: 'outra.chave' }) // chave alheia não reprograma
+    ouvinte({ key: 'atualizacao.intervalo_s' })
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    mock.timers.tick(20_000)
+    await new Promise((r) => setTimeout(r, 400))
+    assert.equal(posts.length, 1) // com 40 s, 20 s não basta
+    mock.timers.tick(20_000)
+    await ate(() => posts.length > 1)
+    assert.equal(posts.length, 2)
+  } finally {
+    painel.abort()
+    mock.timers.reset()
+  }
 })
