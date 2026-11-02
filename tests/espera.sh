@@ -27,6 +27,7 @@ cat > "$h/bin/orca" <<EOF
 #!/bin/bash
 case "\$*" in
     *worker-list*--full*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_p","dispatchStatus":"dispatched","projection":{"stage":{"worker":"ready","activity":"working"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}},{"dispatchId":"ctx_fim","dispatchStatus":"completed","projection":{}}]}}' ;;
+    *check*--peek*) echo '{"ok":true,"result":{"messages":[]}}' ;;
     *worker-read*) echo '{"ok":true,"result":{"transcript":{"messages":[{"timestamp":1}],"limited":false}}}' ;;
     *check*) echo check >> "$h/checks"; sleep 60; echo '{"ok":true,"result":{}}' ;;
 esac
@@ -57,6 +58,7 @@ case "\$*" in
     *worker-list*--full*) echo '{"ok":true,"result":{"workers":[{"dispatchId":"ctx_k","dispatchStatus":"dispatched","agentTerminalHandle":"term_k","projection":{"stage":{"worker":"ready","activity":"$1"},"liveness":{"verdict":"live"},"workspace":{"id":"r::$wt"}}}]}}' ;;
     *worker-read*) echo '{"ok":true,"result":{"transcript":{"messages":[{"timestamp":1}],"limited":false}}}' ;;
     *terminal*read*) cat "$h/tela.json" 2>/dev/null || echo '{"ok":true,"result":{"terminal":{"tail":["pronto"]}}}' ;;
+    *check*--peek*) cat "$h/msgs.json" 2>/dev/null || echo '{"ok":true,"result":{"messages":[]}}' ;;
     *check*) echo check >> "$h/checks"; sleep 60; echo '{"ok":true,"result":{}}' ;;
 esac
 EOF2
@@ -74,6 +76,10 @@ else echo "FALHA saída sem novidade"; printf '%s\n' "$um" "$dois"; falhas=$((fa
 if printf '%s' "$um" | grep -q '^Sem novidade em 1 min; ctx_k último commit [0-9a-f]* (.*)\.$' && printf '%s' "$um" | grep -q 'Rearmar'; then echo "ok   resumo no fim"
 else echo "FALHA resumo"; printf '%s\n' "$um" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 if [ ! -e "$h/checks" ]; then echo "ok   vigia não consome correspondência"; else echo "FALHA vigia chamou check"; falhas=$((falhas + 1)); fi
+echo '{"ok":true,"result":{"messages":[{"id":"msg_x","type":"worker_done","subject":"pronto"}]}}' > "$h/msgs.json"
+out=$(roda)
+if printf '%s' "$out" | grep -q '^!! mensagem worker_done msg_x pronto' && [ ! -e "$h/checks" ]; then echo "ok   mensagem não lida acorda sem consumir"
+else echo "FALHA mensagem não lida"; printf '%s\n' "$out" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 rm -rf "$h"
 for atividade in done waiting blocked; do
     cena "$atividade"

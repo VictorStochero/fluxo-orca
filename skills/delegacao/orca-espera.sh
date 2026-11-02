@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Vigia de saúde: sai na primeira novidade; mensagens chegam pelo wake do Orca.
-# Uso: bash ~/.cache/orca-espera.sh [--run <run_id>] [--max-min 25]
+# Vigia: sai na primeira mensagem não lida ou novidade de saúde; o wake do Orca não acorda sessão parada.
+# Uso: bash ~/.cache/orca-espera.sh [--run <run_id>] [--max-min 5]
 for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break; done
 [ -n "$py" ] || { echo "orca-espera: precisa de python." >&2; exit 2; }
-run=(); max=25
+run=(); max=5
 while [ $# -gt 0 ]; do
     case "$1" in --run) run=(--run "$2"); shift 2 ;; --max-min) max=$2; shift 2 ;; *) echo "argumento desconhecido: $1" >&2; exit 2 ;; esac
 done
@@ -147,10 +147,21 @@ sys.exit(0 if alerta else 1)
 EOF
 }
 
+# --peek lista sem marcar como lida: o coordenador lê com o check normal ao acordar.
+mensagens() {
+    orca orchestration check "${run[@]}" --peek --json 2>/dev/null | "$py" -I -c '
+import json, sys
+try: ms = json.load(sys.stdin)["result"].get("messages") or []
+except Exception: sys.exit(1)
+for m in ms: print("!! mensagem", m.get("type"), m.get("id"), (m.get("subject") or "")[:80])
+sys.exit(0 if ms else 1)'
+}
+
 while [ "$(date +%s)" -lt "$fim" ]; do
     restante=$(( fim - $(date +%s) )); espera=60
     [ "$restante" -lt "$espera" ] && espera=$restante
     [ "$espera" -le 0 ] && break
+    mensagens && { echo "Ler com: orca orchestration check ${run[*]}"; exit 0; }
     confere && exit 0
     cota && exit 0
     sleep "$espera"
