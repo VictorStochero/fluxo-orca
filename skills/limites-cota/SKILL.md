@@ -67,7 +67,7 @@ Com `teto>0`, a reserva conta todas as vagas e sai 75 com `POOL CHEIO: teto da m
 
 ## Responder ao usuário
 - `bash ~/.cache/limites.sh` — uso por conta e janela, horário de renovação e escritor escolhido; exit 3 indica algum uso acima de 80%. Apresentar como tabela (conta · janela · uso · zera às), sem reformular números.
-- `bash ~/.cache/vaga-agente.sh livres` — `conta livres/total`; `0/0` = ilimitado por conta, ainda sujeito ao teto da máquina, cuja linha é `maquina livres/teto`. Não comprova que a conta está instalada.
+- `bash ~/.cache/vaga-agente.sh livres` — `conta livres/total`; `0/0 ocupadas=N` = ilimitado por conta (a trava é registrada só para contar N), ainda sujeito ao teto da máquina e à RAM, cuja linha é `maquina livres/teto`. Não comprova que a conta está instalada.
 - `bash ~/.cache/limites.sh --escritor [--reserva <tag>]` — a escolha acima; `--reserva` já reserva a vaga do escolhido (dono provisório `res-<tag>`, anexado à linha como `reserva res-<tag>`).
 - `bash ~/.cache/limites.sh --alerta` — só as linhas de conta com alguma janela acima de 80%, exit 3; nada acima, nada impresso e exit 0. O `orca-espera.sh` usa para avisar antes de estourar.
 

@@ -127,7 +127,6 @@ case "${1:-}" in
         conta_ativa "$conta" || erro "conta inativa (ativo=nao): $conta"
         valida_dispatch "$dispatch"
         total=$(conta_campo "$conta" vagas)
-        [ "$total" = 0 ] && [ "$CONTAS_TETO" = 0 ] && [ "$RAM_MIN_GB" = 0 ] && exit 0
         mkdir -p "$dir" || exit 2
         [ "$CONTAS_TETO" = 0 ] || trava_maquina
         ocupadas=0
@@ -150,7 +149,8 @@ case "${1:-}" in
             bash "$ram" --portao "$RAM_MIN_GB"
             [ $? = 75 ] && exit 75
         fi
-        [ "$total" = 0 ] && exit 0
+        # Conta ilimitada também registra a trava (só para contar a ocupação); nunca recusa por conta.
+        [ "$total" = 0 ] && total=1000
         for ((i=1; i<=total; i++)); do
             v="$dir/$conta.lock$i"
             if mkdir "$v" 2>/dev/null; then
@@ -208,7 +208,7 @@ case "${1:-}" in
                 fi
             done
             livres=$((total - ocupadas)); [ "$livres" -ge 0 ] || livres=0
-            [ "$total" = 0 ] && livres=0
+            [ "$total" = 0 ] && { printf '%s 0/0 ocupadas=%s\n' "$conta" "$ocupadas"; continue; }
             printf '%s %s/%s\n' "$conta" "$livres" "$total"
         done
         if [ "$CONTAS_TETO" -gt 0 ]; then
