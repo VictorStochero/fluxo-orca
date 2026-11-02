@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, assert, mockHost, mountWorker, test } from 'orca/testing'
 import { estadoExemplo } from './fixtures'
 import * as main from './worker'
+import { criarRequisitos, SCRIPTS_FLUXO, versaoAtende } from './requisitos'
 import { acharOrca, ambienteDoColetor, criarCiclo, intervaloMs, medirSeVelha } from './worker'
 
 const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA, APPDATA: process.env.APPDATA, ORCA_CMD: process.env.ORCA_CMD, ORCA_CLI_COMMAND: process.env.ORCA_CLI_COMMAND }
@@ -385,4 +386,128 @@ test('worker lê atualizacao.intervalo_s ao iniciar e reprograma o ciclo quando 
     painel.abort()
     mock.timers.reset()
   }
+})
+
+// Requisitos: orca falso injetado, sem tocar no Orca nem em ~/.cache reais.
+const skillsOk = (extra: object[] = []) =>
+  JSON.stringify({
+    ok: true,
+    result: {
+      skills: [
+        { name: 'orchestration', sourceKind: 'home', sourceLabel: 'Agent skills home' },
+        ...['delegacao', 'fila-testes', 'limites-cota'].map((name) => ({ name, sourceKind: 'plugin', sourceLabel: 'Claude plugin fluxo-orca' })),
+        ...extra
+      ]
+    }
+  })
+
+function requisitosCom(o: { versao?: string; skills?: string; velhos?: string[] | null; ausentes?: string[]; chamadas?: string[][]; agora?: () => number } = {}) {
+  const chamadas = o.chamadas ?? []
+  return criarRequisitos({
+    orca: async (args) => {
+      chamadas.push(args)
+      if (args[0] === '--version') return o.versao ?? '1.4.246\n'
+      if (args[1] === 'installed') return o.skills ?? skillsOk()
+      return '{}'
+    },
+    estado: async () => ({ saude: { plugin_versao: '2.13.0', scripts_desatualizados: o.velhos === null ? (undefined as never) : (o.velhos ?? []), orca: { rodando: true, versao: null } } }),
+    existe: (s) => !(o.ausentes ?? []).includes(s),
+    agora: o.agora
+  })
+}
+
+const achar = (r: { itens: { id: string; ok: boolean; detalhe: string; instalar?: { tipo: string; texto: string } }[] }, id: string) => r.itens.find((i) => i.id === id)!
+
+test('requisitos: tudo instalado dá ok e quatro itens', async () => {
+  const r = await requisitosCom().ler()
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.itens.map((i) => i.id), ['orca', 'orchestration', 'skills-fluxo', 'scripts'])
+  assert.ok(r.itens.every((i) => i.ok && !('instalar' in i)))
+})
+
+test('requisitos: cada item faltando derruba o ok e traz a instalação certa', async () => {
+  const velha = achar(await requisitosCom({ versao: '1.4.245' }).ler(), 'orca')
+  assert.equal(velha.ok, false)
+  assert.equal(versaoAtende('1.5.0'), true)
+  assert.equal(versaoAtende('v2.0.0-rc'), true)
+
+  const sem = skillsOk().replace('"orchestration"', '"outra"')
+  const orch = achar(await requisitosCom({ skills: sem }).ler(), 'orchestration')
+  assert.deepEqual([orch.ok, orch.instalar], [false, { tipo: 'acao', texto: 'orca skills install --skill orchestration' }])
+
+  // delegacao só na casa do usuário (não vem do plugin fluxo-orca) não conta
+  const deHome = skillsOk().replace('"name":"delegacao","sourceKind":"plugin"', '"name":"delegacao","sourceKind":"home"')
+  const fluxo = achar(await requisitosCom({ skills: deHome }).ler(), 'skills-fluxo')
+  assert.deepEqual([fluxo.ok, fluxo.detalhe, fluxo.instalar?.tipo, fluxo.instalar?.texto], [false, 'faltam: delegacao', 'comando', 'claude plugin install fluxo-orca@stochero'])
+
+  const ausente = achar(await requisitosCom({ ausentes: ['limites.sh'] }).ler(), 'scripts')
+  assert.deepEqual([ausente.ok, ausente.detalhe, ausente.instalar?.tipo], [false, 'faltam: limites.sh', 'comando'])
+  const velhos = achar(await requisitosCom({ velhos: ['fila-teste.sh'] }).ler(), 'scripts')
+  assert.deepEqual([velhos.ok, velhos.detalhe], [false, 'desatualizados: fila-teste.sh'])
+  assert.equal(SCRIPTS_FLUXO.length, 5)
+})
+
+test('requisitos: formato inesperado do skills installed vira não verificado, sem derrubar', async () => {
+  for (const skills of ['isto não é json', '{"ok":true,"result":{"skills":"x"}}', '{"result":{"skills":[{"id":1}]}}']) {
+    const r = await requisitosCom({ skills }).ler()
+    assert.equal(r.ok, false)
+    for (const id of ['orchestration', 'skills-fluxo']) assert.match(achar(r, id).detalhe, /^não verificado/)
+    assert.equal(achar(r, 'orca').ok, true)
+    assert.equal(achar(r, 'scripts').ok, true)
+  }
+  assert.match(achar(await requisitosCom({ velhos: null }).ler(), 'scripts').detalhe, /^não verificado/)
+})
+
+test('requisitos: orca ilegível ou ausente não derruba os demais itens', async () => {
+  const r = await criarRequisitos({
+    orca: async () => {
+      throw new Error('orca não encontrado')
+    },
+    estado: async () => ({ saude: { plugin_versao: null, scripts_desatualizados: [], orca: { rodando: false, versao: null } } }),
+    existe: () => true
+  }).ler()
+  assert.equal(r.ok, false)
+  assert.deepEqual(r.itens.map((i) => i.ok), [false, false, false, true])
+  assert.match(achar(r, 'orca').detalhe, /^não verificado: orca não encontrado/)
+})
+
+test('requisitos: resultado fica 60 s e instalar só aceita orchestration', async () => {
+  let t = 1_000
+  const chamadas: string[][] = []
+  const req = requisitosCom({ chamadas, agora: () => t })
+  await req.ler()
+  t += 59_000
+  await req.ler()
+  assert.equal(chamadas.length, 2) // --version e skills installed, uma vez só
+  t += 2_000
+  await req.ler()
+  assert.equal(chamadas.length, 4)
+
+  for (const id of ['outra', 'orca', undefined, '--all']) {
+    await assert.rejects(req.instalar(id), (e: unknown) => (e as { code?: string }).code === 'instalacao_recusada')
+  }
+  assert.equal(chamadas.length, 4)
+  const r = await req.instalar('orchestration')
+  assert.deepEqual(chamadas[4], ['skills', 'install', '--skill', 'orchestration', '--json'])
+  assert.equal(chamadas.length, 7) // instalação + leitura nova ignorando o guardado
+  assert.equal(r.ok, true)
+})
+
+test('requisitos: instalação que falha vira instalacao_falhou', async () => {
+  const req = criarRequisitos({
+    orca: async (args) => {
+      if (args[1] === 'install') throw new Error('sem permissão')
+      return args[0] === '--version' ? '1.4.246' : skillsOk()
+    },
+    estado: async () => ({ saude: { plugin_versao: null, scripts_desatualizados: [], orca: { rodando: true, versao: null } } }),
+    existe: () => true
+  })
+  await assert.rejects(req.instalar('orchestration'), (e: unknown) => (e as { code?: string }).code === 'instalacao_falhou' && /sem permissão/.test((e as Error).message))
+})
+
+test('worker registra requisitos.instalar e recusa id alheio', async () => {
+  novaCasa('echo {}\n')
+  const worker = await mountWorker(main)
+  await assert.rejects(worker.request('requisitos.instalar', { id: 'outra' } as never), (e: unknown) => (e as { code?: string }).code === 'instalacao_recusada')
+  await worker.deactivate()
 })

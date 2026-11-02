@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import type { OrcaWorkerApi } from 'orca/worker'
 import type { Estado } from './protocol'
+import { criarRequisitos } from './requisitos'
 
 const TIMEOUT_MS = 60_000
 const DEBOUNCE_MS = 300
@@ -82,6 +83,17 @@ function rodarColetor(cache: string, args: string[], recusa: string, script = 'p
         }
         resolve(stdout)
       }
+    )
+  })
+}
+
+/** CLI do Orca com o mesmo ambiente do coletor (APPDATA, ORCA_CMD). */
+function rodarOrca(args: string[]): Promise<string> {
+  const orca = acharOrca(process.env, process.platform, process.execPath)
+  const env = ambienteDoColetor(process.env, process.platform, homedir(), orca)
+  return new Promise((resolve, reject) => {
+    execFile(env.ORCA_CMD || env.ORCA_CLI_COMMAND || 'orca', args, { timeout: 30_000, windowsHide: true, encoding: 'utf8', env }, (erro, stdout, stderr) =>
+      erro ? reject(new Error(stderr.trim() || stdout.trim() || erro.message)) : resolve(stdout)
     )
   })
 }
@@ -225,6 +237,13 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   orca.panels.handle('estado.ler', () => lerCompartilhado(cache))
   orca.panels.handle('config.gravar', ({ valores }) => gravar(cache, valores))
+  const requisitos = criarRequisitos({
+    orca: rodarOrca,
+    estado: () => lerCompartilhado(cache),
+    existe: (script) => existsSync(join(cache, script))
+  })
+  orca.panels.handle('requisitos.ler', () => requisitos.ler())
+  orca.panels.handle('requisitos.instalar', ({ id }) => requisitos.instalar(id))
 
   const avisar = () => orca.panels.post('estado.mudou', { em: Date.now() })
   vigia = criarCiclo({ coletar: async () => {
