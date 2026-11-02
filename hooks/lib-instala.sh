@@ -7,11 +7,12 @@ versao_permite() { # raiz-do-plugin marcador: 0 se a versão instalada não for 
     local v i; v=$(versao_do_plugin "$1"); i=$(cat "$2" 2>/dev/null)
     [ -z "$v" ] || [ -z "$i" ] || [ "$(printf '%s\n%s\n' "$i" "$v" | sort -V | tail -1)" = "$v" ]
 }
+avisa_mais_nova() { echo "fluxo-orca: $2 tem a versão $(cat "$2"), mais nova que $(versao_do_plugin "$1"); nada copiado (apague o marcador para forçar)" >&2; }
 grava_versao() { local v; v=$(versao_do_plugin "$1"); [ -z "$v" ] || printf '%s\n' "$v" > "$2"; }
 
 copia_scripts() { # raiz-do-plugin destino
     local s
-    versao_permite "$1" "$2/fluxo-orca.versao" || return 0
+    versao_permite "$1" "$2/fluxo-orca.versao" || { avisa_mais_nova "$1" "$2/fluxo-orca.versao"; return 0; }
     mkdir -p "$2"
     while IFS= read -r s || [ -n "$s" ]; do
         case "$s" in '' | '#'*) continue ;; esac
@@ -44,7 +45,7 @@ E
 copia_skills() { # raiz-do-plugin destino: o cache do plugin muda de caminho a cada versão, os CLIs externos leem uma cópia fixa
     local d n alvo
     mkdir -p "$2"
-    versao_permite "$1" "$2/.fluxo-orca.versao" || return 0
+    versao_permite "$1" "$2/.fluxo-orca.versao" || { avisa_mais_nova "$1" "$2/.fluxo-orca.versao"; return 0; }
     for d in "$1"/skills/*/; do
         n=$(basename "$d"); alvo="$2/$n"
         [ ! -L "$alvo" ] && diff -rq "$d" "$alvo" >/dev/null 2>&1 && continue
