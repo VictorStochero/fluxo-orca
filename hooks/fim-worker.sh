@@ -2,7 +2,7 @@
 # Stop: worker do Orca não encerra o turno sem worker_done — o coordenador só sabe que acabou por ele.
 # Vale para Claude Code, Codex e Kimi (mesmo JSON de bloqueio); com o argumento gemini (AfterAgent) a decisão é deny. Fora de worker, ou com o Orca fora do ar, não faz nada.
 in=$(cat)
-# Uma cobrança só: na segunda parada (stop_hook_active) o turno termina e o orca-espera.sh do coordenador detecta.
+# Uma cobrança só: na segunda parada o Orca acorda o coordenador com escalation.
 printf '%s' "$in" | grep -q '"stop_hook_active"[[:space:]]*:[[:space:]]*true' && exit 0
 tp=$(printf '%s' "$in" | grep -o '"transcript_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"//; s/"$//; s/\\\\/\\/g')
 [ -n "$tp" ] && command -v cygpath >/dev/null 2>&1 && tp=$(cygpath -u "$tp")
@@ -11,7 +11,7 @@ tp=$(printf '%s' "$in" | grep -o '"transcript_path"[[:space:]]*:[[:space:]]*"[^"
 d=$(grep -o -- '--dispatch-id ctx_[0-9a-f]*' "$tp" | tail -1 | cut -d' ' -f2)
 [ -n "$d" ] || exit 0
 [ -n "${ORCA_TERMINAL_HANDLE:-}" ] && command -v orca >/dev/null 2>&1 || exit 0
-show=$(orca orchestration worker-show --dispatch "$d" --json 2>/dev/null)
+show=$(orca orchestration worker-show --dispatch "$d" --json --full 2>/dev/null)
 # Só o terminal designado é cobrado: o transcript do coordenador também cita --dispatch-id.
 printf '%s' "$show" | grep -q "\"assigneeHandle\"[[:space:]]*:[[:space:]]*\"$ORCA_TERMINAL_HANDLE\"" || exit 0
 st=$(printf '%s' "$show" | grep -o '"status"[[:space:]]*:[[:space:]]*"[a-z_]*"' | head -1 | cut -d'"' -f4)

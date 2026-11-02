@@ -20,7 +20,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 - **Worktree filho do coordenador**: worktree de tarefa nasce filho do worktree da sessão coordenadora (`--parent-worktree path:<coordenador>`), nunca solto.
 - **Ordem do usuário não se reduz**: "aplicar a recomendada" vale para o que o usuário não decidiu; variante menor de uma ordem explícita vira pergunta, nunca decisão silenciosa.
 - **Resposta automática não é decisão**: pergunta interativa que volta com todas as recomendadas sem resposta real do usuário é tratada como não respondida — perguntar de novo no texto e esperar; nada vai a worker nem a registro antes.
-- **Pergunta pendente não para o fluxo**: com pergunta aberta, seguir o ciclo de espera (`orca-espera.sh`) e despachar o que não depende da resposta, sem encerrar o turno parado.
+- **Pergunta pendente não para o fluxo**: com pergunta aberta, despachar o que não depende da resposta e encerrar o turno; o Orca acorda com o que chegar.
 - **A recomendação sai destes critérios, nesta ordem, e a pergunta cita o que cada um diz:** (1) arquitetura — o guia/wiki do projeto (`wiki/arquitetura/`, `docs/` ou `doc/`) (vence o código vizinho; onde for omisso, decide-se pela regra análoga e o guia é complementado na mesma entrega); (2) skills — a skill da stack e as boas práticas que ela indica (ex.: `laravel-best-practices`) e as skills do projeto (`.claude/skills`, `.ai/skills`); (3) padrões do framework (ex.: "Laravel way", docs oficiais); (4) ponytail; (5) CLAUDE.md/AGENTS.md do projeto. Dados de produção (consulta só leitura) entram como evidência de risco — quem usa, quanto —, não como critério de arquitetura. Critério que não se aplica é omitido.
 
 ## Como worker do Orca

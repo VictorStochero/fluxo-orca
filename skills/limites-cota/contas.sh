@@ -188,10 +188,10 @@ contas_carrega() {
     return 0
 }
 
-conta_aviso() { # Conta de trabalho em agente sem hook de fim de turno: o orca-espera.sh é quem cobra o worker_done.
+conta_aviso() { # Conta de trabalho em agente sem hook de fim de turno: o Orca acorda o coordenador se parar sem worker_done.
     local p v=c_${1//-/_}_fim
     [ "${!v}" = sim ] && return 1
-    for p in $CONTAS_PAPEIS_TRABALHO; do conta_tem_papel "$1" "$p" && { CONTA_AVISO='sem fim de turno: coordenador cobra worker_done'; echo "$CONTA_AVISO"; return 0; }; done
+    for p in $CONTAS_PAPEIS_TRABALHO; do conta_tem_papel "$1" "$p" && { CONTA_AVISO='sem fim de turno: Orca avisa parada sem worker_done'; echo "$CONTA_AVISO"; return 0; }; done
     return 1
 }
 
