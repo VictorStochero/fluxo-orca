@@ -2,7 +2,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import type { OrcaWorkerApi } from 'orca/worker'
 import type { Estado } from './protocol'
 
@@ -24,7 +24,9 @@ export function acharOrca(
   execPath: string,
   existe: (caminho: string) => boolean = existsSync
 ): string | undefined {
-  if (env.ORCA_CMD || env.ORCA_CLI_COMMAND) return undefined
+  // Só vale o que já aponta um arquivo: um `orca` sem caminho, herdado do processo do Orca, não resolve sem a pasta do CLI no PATH.
+  const dado = env.ORCA_CMD || env.ORCA_CLI_COMMAND
+  if (dado && isAbsolute(dado) && existe(dado)) return undefined
   const candidatos: string[] = []
   if (plataforma === 'win32') {
     const local = env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local')
@@ -84,6 +86,10 @@ let adiado: ReturnType<typeof setTimeout> | undefined
 
 export default function activate(orca: OrcaWorkerApi): void {
   const cache = join(homedir(), '.cache')
+  const e = process.env
+  orca.log(
+    `ORCA_CMD=${e.ORCA_CMD ?? '-'} ORCA_CLI_COMMAND=${e.ORCA_CLI_COMMAND ?? '-'} execPath=${process.execPath} candidato=${acharOrca(e, process.platform, process.execPath) ?? '-'}`
+  )
 
   orca.panels.handle('estado.ler', () => lerEstado(cache))
   orca.panels.handle('config.gravar', ({ valores }) => gravar(cache, valores))

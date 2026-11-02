@@ -6,7 +6,7 @@ import { estadoExemplo } from './fixtures'
 import * as main from './worker'
 import { acharOrca } from './worker'
 
-const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA }
+const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA, ORCA_CMD: process.env.ORCA_CMD, ORCA_CLI_COMMAND: process.env.ORCA_CLI_COMMAND }
 let casa = ''
 
 // Casa isolada com um painel.sh falso em ~/.cache; o worker lê homedir() ao ativar.
@@ -23,6 +23,10 @@ afterEach(() => {
   process.env.USERPROFILE = casaOriginal.USERPROFILE
   if (casaOriginal.LOCALAPPDATA === undefined) delete process.env.LOCALAPPDATA
   else process.env.LOCALAPPDATA = casaOriginal.LOCALAPPDATA
+  for (const k of ['ORCA_CMD', 'ORCA_CLI_COMMAND'] as const) {
+    if (casaOriginal[k] === undefined) delete process.env[k]
+    else process.env[k] = casaOriginal[k]
+  }
   if (casa) rmSync(casa, { recursive: true, force: true })
 })
 
@@ -118,8 +122,13 @@ test('config.gravar sem valores é recusado antes de rodar o coletor', async () 
 
 test('acharOrca: respeita o ORCA_CMD existente e procura o CLI nos lugares do Orca', () => {
   const existe = (c: string) => c.endsWith('resources/bin/orca.exe') || c.endsWith('resources\\bin\\orca.exe')
-  assert.equal(acharOrca({ ORCA_CMD: 'x' }, 'win32', 'C:/Orca/Orca.exe', existe), undefined)
-  assert.equal(acharOrca({ ORCA_CLI_COMMAND: 'x' }, 'win32', 'C:/Orca/Orca.exe', existe), undefined)
+  const local = { LOCALAPPDATA: 'C:/Users/u/AppData/Local' }
+  // Variável que já aponta um arquivo existente vale; `orca` sem caminho (herdado do Orca) não.
+  assert.equal(acharOrca({ ORCA_CMD: 'C:/Orca/orca.exe' }, 'win32', 'C:/Orca/Orca.exe', () => true), undefined)
+  assert.equal(acharOrca({ ORCA_CLI_COMMAND: 'C:/Orca/orca.exe' }, 'win32', 'C:/Orca/Orca.exe', () => true), undefined)
+  for (const env of [{ ORCA_CMD: 'orca' }, { ORCA_CLI_COMMAND: 'orca' }, { ORCA_CMD: 'C:/some/orca.exe' }]) {
+    assert.match(acharOrca({ ...env, ...local }, 'win32', 'C:/node.exe', (c) => c.includes('Programs')) ?? '', /Programs\/orca\/resources\/bin\/orca\.exe$/)
+  }
   assert.match(acharOrca({ LOCALAPPDATA: 'C:/Users/u/AppData/Local' }, 'win32', 'C:/node.exe', (c) => c.includes('Programs')) ?? '', /^C:\/Users\/u\/AppData\/Local\/Programs\/orca\/resources\/bin\/orca\.exe$/)
   assert.equal(acharOrca({}, 'win32', 'C:/node.exe', () => false), undefined)
 })
@@ -131,7 +140,7 @@ test('o coletor roda com ORCA_CMD apontando o CLI da instalação padrão', asyn
   mkdirSync(bin, { recursive: true })
   writeFileSync(join(bin, 'orca.exe'), '')
   process.env.LOCALAPPDATA = join(casa, 'local')
-  delete process.env.ORCA_CMD
+  process.env.ORCA_CMD = 'orca' // como no processo do Orca: nome sem caminho
   delete process.env.ORCA_CLI_COMMAND
   const worker = await mountWorker(main)
   const saida = (await worker.request('estado.ler')) as unknown as { cmd: string }
