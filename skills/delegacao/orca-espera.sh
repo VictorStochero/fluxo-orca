@@ -47,7 +47,7 @@ for c in contas:
     printf '%s\n' "$linhas" | tr -d '\r' | awk 'NF {print $1, $2}' > "$avisadas"
     [ -n "$novas" ] || return 1
     printf '%s\n' "$novas" | sed 's/^/!! cota acima de 80%: /'
-    echo "   próximas etapas: agent-pool writer --reserve <tag> (escolhe a conta com mais folga)"
+    echo "   próximas etapas: ~/.agents/bin/agent-pool writer --reserve <tag> (escolhe a conta com mais folga)"
 }
 
 # Confere somente sinais de saúde que o Orca não notifica por mensagem.
@@ -140,7 +140,7 @@ for w in ws:
         except (ValueError, KeyError, TypeError, IndexError): pass
     if tela and anterior.get("limite") != tela:
         alerta = True
-        print("!! %s bateu limite de cota: %s\n   redistribuir a etapa (agent-pool writer --reserve <tag>) ou esperar o reset" % (w["dispatchId"], tela[:200]))
+        print("!! %s bateu limite de cota: %s\n   redistribuir a etapa (~/.agents/bin/agent-pool writer --reserve <tag>) ou esperar o reset" % (w["dispatchId"], tela[:200]))
     estado["limite"] = tela
     grava(estado_arq, estado)
 sys.exit(0 if alerta else 1)

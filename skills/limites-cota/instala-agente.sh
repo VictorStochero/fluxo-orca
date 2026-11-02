@@ -11,7 +11,7 @@ if [ -z "$agente" ] || [ $# -gt 2 ] || { [ $# = 2 ] && [ $APLICAR = 0 ]; }; then
 fi
 . "$RAIZ/hooks/lib-instala.sh"
 catalogo=${INSTALA_CATALOGO:-$aqui/agentes-catalogo.conf}
-linha=$(awk -F'|' -v a="$agente" '$1 == a {print; exit}' "$catalogo" 2>/dev/null | tr -d '')
+linha=$(awk -F'|' -v a="$agente" '$1 == a {print; exit}' "$catalogo" 2>/dev/null | tr -d '\r')
 [ -n "$linha" ] || { echo "instala-agente: agente fora do catálogo ($agente)" >&2; exit 2; }
 IFS='|' read -r _ _ _ _ _ pre fim regras skills _ <<< "$linha"
 cache="$HOME/.cache"

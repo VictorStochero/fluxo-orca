@@ -12,7 +12,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 
 ## Como coordenador (sessão principal sem Claude Code)
 - Equivalentes genéricos das ferramentas do Claude Code: **pergunta interativa ao usuário** (`AskUserQuestion`) = o recurso de pergunta/escolha do seu agente; sem ele, uma pergunta no texto com contexto para decidir e a opção recomendada marcada, uma decisão por vez. **Consulta curta read-only** (`Agent tool`/Explore) = o subagente ou a busca somente leitura do seu agente. **Trabalho** (escritor, revisor, auditoria) = worker do Orca pela skill `orchestration`, nunca na própria sessão.
-- Hooks do plugin (bloqueio de bulk replace, de teste fora da fila, de despacho fora do Orca, de SQL fora de transação) **não existem fora do Claude Code**: valem como regra escrita, que você cumpre sozinho. A trava de comando remoto só existe onde o agente tem hook (`instala-agente.sh` mostra). Conferir antes de despachar: `agent-pool writer` e `agent-pool slot free`.
+- Hooks do plugin (bloqueio de bulk replace, de teste fora da fila, de despacho fora do Orca, de SQL fora de transação) **não existem fora do Claude Code**: valem como regra escrita, que você cumpre sozinho. A trava de comando remoto só existe onde o agente tem hook (`instala-agente.sh` mostra). Conferir antes de despachar: `~/.agents/bin/agent-pool writer` e `~/.agents/bin/agent-pool slot free`.
 - Antes de despachar: skill `delegacao` (worktree por tarefa, pacote de revisão, merge só depois do gate) e `limites-cota` (quem escreve). Antes de declarar pronto: reexecutar os testes pela fila e conferir o diff arquivo a arquivo — relatório de worker é indício, não prova.
 - Ação remota (servidor, produção): mostrar o comando exato, o alvo e o efeito, e esperar aprovação expressa do usuário, um comando por vez.
 - **Worker não sobe nada**: worker só commita local; push, PR, merge e comentário remoto saem da sessão principal, depois da auditoria, com comando, alvo e efeito apresentados e aprovados um a um.
@@ -43,7 +43,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 - Censo e auditoria com busca nativa (rg/grep sem pipe que resuma) — quanto mais limpa a resposta, mais suspeita.
 
 ## Testes e validação
-- **Testes só pela fila**: `agent-pool test -- <comando>` (exit 75 = `FILA OCUPADA`, rodar de novo). Nunca o comando de teste direto. Um arquivo por chamada.
+- **Testes só pela fila**: `~/.agents/bin/agent-pool test -- <comando>` (exit 75 = `FILA OCUPADA`, rodar de novo). Nunca o comando de teste direto. Um arquivo por chamada.
 - **Relatório e log fora do repo**: evidência vai no `worker_done` e no PR; arquivo de apoio em `~/.cache/handoff/<tarefa>/`, nunca versionado (`reports/`, `*.log`).
 - Nenhuma chamada passa de 10 min: dividir por arquivo e **commitar antes de verificação longa**. Gravar o relatório em arquivo desde o primeiro achado.
 - Após cada etapa: formatador/linter da stack nos arquivos tocados; teste de regressão (sem teste no caminho, criar um mínimo); falhou → não declarar concluído.
