@@ -29,6 +29,7 @@ import {
   update,
   type OrcaNode,
   type PanelContext,
+  type TableCell,
   type TableRow
 } from 'orca'
 import type { Conta, Estado, ItemFila, Requisitos, ValorFila } from './protocol'
@@ -195,7 +196,7 @@ function ComDica({ texto, children }: { texto: string; children: OrcaNode }) {
   )
 }
 
-type Linha = { key: string; cells: Record<string, string | number>; detalhes: [string, string | number][] }
+type Linha = { key: string; cells: Record<string, TableCell>; detalhes: [string, string | number][] }
 type Coluna = { key: string; label: string; align?: 'start' | 'center' | 'end'; width?: 'auto' | 'xs' | 'sm' | 'md' | 'lg'; minWidth?: 'auto' | 'xs' | 'sm' | 'md' }
 
 /**
@@ -282,27 +283,49 @@ function CampoFila({ item, e }: { item: Exclude<ItemFila, 'modo'>; e: Estado }) 
 
 function SecaoFila({ e }: { e: Estado }) {
   const { fila } = e
-  const linhas: Linha[] = fila.travas.map((tr) => ({
-    key: `${tr.fila}.${tr.vaga}`,
-    cells: { fila: tr.fila, vaga: tr.vaga, viva: tr.viva ? t.fila.sim : t.fila.nao },
-    detalhes: [
-      [t.fila.worktree, tr.worktree ?? '-'],
-      [t.fila.comando, tr.comando ?? '-'],
-      [t.fila.pid, tr.pid ?? '-'],
-      [t.fila.desde, tr.desde ?? '-']
-    ]
-  }))
+  // A trava "teto" repete o teste que já está na trava da fila: uma linha por teste (pid, quando houver).
+  const vistos = new Set<number>()
+  const testes = fila.travas.filter((tr) => {
+    if (tr.fila === 'teto') return false
+    if (tr.pid === null) return true
+    return !vistos.has(tr.pid) && !!vistos.add(tr.pid)
+  })
+  const linhas: Linha[] = testes.map((tr) => {
+    // desde_ts pode vir em segundos ou milissegundos.
+    const inicio = tr.desde_ts ? (tr.desde_ts < 1e12 ? tr.desde_ts * 1000 : tr.desde_ts) : null
+    return {
+      key: `${tr.fila}.${tr.vaga}`,
+      cells: {
+        projeto: (tr.worktree ?? '-').split(/[\\/]/).filter(Boolean).pop() ?? '-',
+        fila: fila.modo === 'projeto' ? t.fila.filaProjeto(tr.fila) : t.fila.filaGlobal,
+        ha: inicio ? { type: 'relative', at: inicio, format: 'duration' } : (tr.desde ?? '-'),
+        situacao: tr.viva ? t.fila.rodando : t.fila.parado
+      },
+      detalhes: [
+        [t.fila.disputa, /^\d+$/.test(tr.fila) ? t.fila.disputaBanco(tr.fila) : tr.fila],
+        [t.fila.comando, tr.comando ?? '-'],
+        [t.fila.pid, tr.pid ?? '-'],
+        [t.fila.inicio, tr.desde ?? '-']
+      ]
+    }
+  })
   return (
-    <Card title={t.fila.titulo} description={t.fila.resumo(t.fila.modos[fila.modo] ?? fila.modo, fila.vagas, fila.teto)}>
-      {fila.travas.length === 0 ? (
+    <Card title={t.fila.titulo} description={t.fila.resumo(testes.length, fila.teto, t.fila.modos[fila.modo] ?? fila.modo)}>
+      <ComDica texto={t.fila.explica}>
+        <Text muted size="xs">
+          {t.fila.comoFunciona}
+        </Text>
+      </ComDica>
+      {testes.length === 0 ? (
         <Text muted>{t.fila.semTravas}</Text>
       ) : (
         <TabelaExpansivel
           label={t.fila.tabela}
           colunas={[
+            { key: 'projeto', label: t.fila.colProjeto, width: 'md' },
             { key: 'fila', label: t.fila.colFila, width: 'md' },
-            { key: 'vaga', label: t.fila.colVaga },
-            { key: 'viva', label: t.fila.colViva, width: 'xs' }
+            { key: 'ha', label: t.fila.colHa, width: 'xs' },
+            { key: 'situacao', label: t.fila.colSituacao, width: 'lg' }
           ]}
           linhas={linhas}
           abertas={read(abertasTrava)}

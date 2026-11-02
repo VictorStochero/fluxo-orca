@@ -6,6 +6,8 @@ export type Trava = {
   vaga: number
   worktree: string | null
   desde: string | null
+  /** Início do teste em epoch (s ou ms); acrescentado pelo backend. Ausente = só o `desde` textual. */
+  desde_ts?: number | null
   comando: string | null
   pid: number | null
   viva: boolean

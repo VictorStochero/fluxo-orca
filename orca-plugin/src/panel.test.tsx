@@ -13,7 +13,7 @@ async function abrir(v: TestPanel, aba?: string) {
   await v.toggle({ label: 'Configurações' })
   if (aba) await v.select({ label: 'Assuntos das configurações' }, aba)
 }
-const FILA = { label: 'Travas da fila' }
+const FILA = { label: 'Testes rodando' }
 
 function hostCom(gravados: unknown[] = [], estado: Estado = estadoExemplo) {
   return mockHost({
@@ -29,11 +29,18 @@ function hostCom(gravados: unknown[] = [], estado: Estado = estadoExemplo) {
 
 test('tabelas nativas recolhidas: Fila · Vaga · Viva e Conta · Vagas · 5h · Semanal, sem RAM, Workers nem origem', async () => {
   view = await mount(panel, { host: hostCom() })
-  assert.deepEqual(view.columnsOf(FILA), ['fila', 'vaga', 'viva'])
-  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1'])
+  assert.deepEqual(view.columnsOf(FILA), ['projeto', 'fila', 'ha', 'situacao'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', '3307.1']) // uma linha por teste: a trava "teto" repetida some
   assert.deepEqual(view.columnsOf(POOL), ['conta', 'vagas', 'h5', 'semanal'])
   assert.deepEqual(view.rowsOf(POOL), ['pessoal', 'codex', 'claude-abcdef12'])
-  assert.ok(view.find({ text: /modo Global · 5 vagas · teto 5/ }))
+  assert.ok(view.find({ text: /2 de 5 testes ao mesmo tempo na máquina · Modo Global/ }))
+  assert.ok(view.find({ type: 'Table', label: 'Testes rodando', text: /wt-um/ }))
+  assert.ok(view.find({ type: 'Table', label: 'Testes rodando', text: /wt-dois/ }))
+  assert.ok(view.find({ type: 'Table', label: 'Testes rodando', text: /Global/ }))
+  assert.ok(view.find({ type: 'Table', label: 'Testes rodando', text: /Rodando/ }))
+  assert.ok(view.find({ type: 'Table', label: 'Testes rodando', text: /⚠ Parado: o processo terminou e deixou a vaga presa/ }))
+  assert.equal(view.find({ text: /Banco 3307|Container|Viva|\bVaga\b/ }), null)
+  assert.ok(view.find({ type: 'IconButton', label: /^Os testes esperam a vez numa fila/ }))
   assert.equal(view.find({ text: /Workers|curta|longa|origem|Origem/ }), null)
   assert.equal(view.find({ type: 'Heading', text: /RAM/ }), null)
   assert.ok(view.find({ type: 'RelativeTime' }))
@@ -50,13 +57,27 @@ test('sem os componentes de layout que quebraram o desenho: Grid, Callout, Skele
 test('fila: clicar abre os detalhes na própria tabela, várias ficam abertas e o segundo clique recolhe', async () => {
   view = await mount(panel, { host: hostCom() })
   await view.selectRows(FILA, ['3308.1'])
-  assert.deepEqual(view.rowsOf(FILA), ['3308.1', '3308.1#0', '3308.1#1', '3308.1#2', '3308.1#3', 'teto.1'])
-  await view.selectRows(FILA, ['3308.1', 'teto.1'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', '3308.1#0', '3308.1#1', '3308.1#2', '3308.1#3', '3307.1'])
+  assert.ok(view.find({ type: 'Table', label: 'Testes rodando', text: /Disputa.*banco 3308/ }))
+  assert.ok(view.find({ type: 'Table', label: 'Testes rodando', text: /runner tests\/X\.php/ }))
+  await view.selectRows(FILA, ['3308.1', '3307.1'])
   assert.equal(view.rowsOf(FILA).length, 10) // as duas abertas ao mesmo tempo
-  await view.selectRows(FILA, ['teto.1'])
-  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1', 'teto.1#0', 'teto.1#1', 'teto.1#2', 'teto.1#3'])
+  await view.selectRows(FILA, ['3307.1'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', '3307.1', '3307.1#0', '3307.1#1', '3307.1#2', '3307.1#3'])
   await view.selectRows(FILA, [])
-  assert.deepEqual(view.rowsOf(FILA), ['3308.1', 'teto.1'])
+  assert.deepEqual(view.rowsOf(FILA), ['3308.1', '3307.1'])
+})
+
+test('fila: modo Por projeto mostra "Projeto <nome>" e sem testes diz "Nenhum teste rodando"', async () => {
+  const porProjeto: Estado = { ...estadoExemplo, fila: { ...estadoExemplo.fila, modo: 'projeto', travas: [{ ...estadoExemplo.fila.travas[0], fila: 'meu-projeto' }] } }
+  view = await mount(panel, { host: hostCom([], porProjeto) })
+  assert.ok(view.find({ type: 'Table', label: 'Testes rodando', text: /Projeto meu-projeto/ }))
+  assert.ok(view.find({ text: /1 de 5 testes ao mesmo tempo na máquina · Modo Por projeto/ }))
+  await view.unmount()
+  const vazio: Estado = { ...estadoExemplo, fila: { ...estadoExemplo.fila, travas: [] } }
+  view = await mount(panel, { host: hostCom([], vazio) })
+  assert.ok(view.find({ text: 'Nenhum teste rodando' }))
+  assert.equal(view.find({ type: 'Table', label: 'Testes rodando' }), null)
 })
 
 test('pool: detalhes dentro da tabela, várias abertas, sem botão nem campo na linha', async () => {
@@ -320,7 +341,7 @@ test('requisitos faltando: só a seção Requisitos, com ✓/✗, botão Instala
   const host = mockHost({ requests: { 'requisitos.ler': () => faltando, 'estado.ler': () => (estadoLido++, estadoExemplo) } })
   view = await mount(panel, { host })
   assert.deepEqual(view.rowsOf({ label: 'Requisitos do painel' }), ['cli', 'orchestration', 'python'])
-  assert.equal(view.find({ type: 'Table', label: 'Travas da fila' }), null)
+  assert.equal(view.find({ type: 'Table', label: 'Testes rodando' }), null)
   assert.equal(view.find({ type: 'Table', label: 'Contas do pool' }), null)
   assert.equal(view.find({ type: 'Heading', text: 'Configurações' }), null)
   assert.equal(estadoLido, 0) // nem coleta o resto

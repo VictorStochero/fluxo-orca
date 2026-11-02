@@ -10,8 +10,9 @@ export const estadoExemplo: Estado = {
     vagas: 5,
     teto: 5,
     travas: [
-      { fila: '3308', vaga: 1, worktree: 'C:/Herd/wt-um', desde: '20:14:25', comando: 'runner tests/X.php', pid: 4242, viva: true },
-      { fila: 'teto', vaga: 1, worktree: 'C:/Herd/wt-dois', desde: null, comando: null, pid: null, viva: false }
+      { fila: '3308', vaga: 1, worktree: 'C:/Herd/wt-um', desde: '20:14:25', desde_ts: 1793650465, comando: 'runner tests/X.php', pid: 4242, viva: true },
+      { fila: 'teto', vaga: 1, worktree: 'C:/Herd/wt-um', desde: '20:14:25', desde_ts: 1793650465, comando: 'runner tests/X.php', pid: 4242, viva: true },
+      { fila: '3307', vaga: 1, worktree: 'C:\\Herd\\wt-dois', desde: '19:00:00', comando: null, pid: 99, viva: false }
     ],
     config: {
       modo: { valor: 'global', origem: 'padrao', projetos: [] },
