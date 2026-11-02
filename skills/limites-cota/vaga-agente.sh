@@ -97,7 +97,6 @@ conta_maquina() {
         [ -d "$v" ] || continue
         [[ "${v##*.lock}" =~ ^[0-9]+$ ]] || continue
         c=${v##*/}; c=${c%.lock*}
-        conta_existe "$c" && ! conta_ativa "$c" && continue
         recupera "$v"
         [ -d "$v" ] && maquina_ocupadas=$((maquina_ocupadas + 1))
     done
