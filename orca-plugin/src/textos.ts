@@ -111,7 +111,7 @@ export const t = {
     vagasDaConta: (usadas: number, vagas: number) => `${usadas}/${vagas || '∞'}`,
     naoUtilizada: 'não utilizada',
     situacao: 'Situação',
-    naoUtilizadaDetalhe: 'Não utilizada: continua listada e medida, mas não recebe trabalho nem conta no teto.',
+    naoUtilizadaDetalhe: 'Não utilizada: continua listada e medida, mas não recebe trabalho novo; o worker que já roda nela conta no teto até terminar.',
     agente: 'Agente',
     peso: 'Peso',
     pesoDaConta: 'Peso da conta',
@@ -141,7 +141,7 @@ export const t = {
     comandoCli: 'Comando do CLI',
     novaConfig: 'Diretório de config',
     dicas: {
-      naoUtilizar: 'A conta continua listada e medida, mas não recebe trabalho nem conta no teto. Desmarque para voltar a usar.',
+      naoUtilizar: 'A conta continua listada e medida, mas não recebe trabalho novo; o worker que já roda nela conta no teto até terminar. Desmarque para voltar a usar.',
       novoComando: 'Comando que abre o CLI desta conta, por exemplo claude-b ou CLAUDE_CONFIG_DIR=~/.claude-b claude. Informe o comando, o diretório de config ou os dois.',
       novoConfig: 'Pasta de configuração do CLI, por exemplo ~/.claude-b. Informe o diretório de config, o comando ou os dois.',
       vagas: 'Quantos agentes desta conta podem trabalhar ao mesmo tempo. 0 = sem limite próprio (o teto da máquina continua valendo).',
