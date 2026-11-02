@@ -20,22 +20,39 @@ aqui=$(cd "$(dirname "$0")" && pwd)
 
 # Só o que exige kill -0 do bash fica aqui, com builtins (cada fork custa centenas de ms no Windows); o resto é Python.
 coleta_travas() {
-    local d t fila vaga pid viva dono
+    local d t fila vaga pid viva dono recurso inicio
     : > "$tmp/travas"
     for d in "$cache"/gs-teste*.lock[0-9]*; do
         [ -d "$d" ] || continue
         t=${d##*/}; fila=${t%.lock*}; fila=${fila#gs-teste}; fila=${fila#-}; vaga=${t##*.lock}
         [ -n "$fila" ] || fila=3306
-        pid=''; dono=''; viva=false
+        pid=''; dono=''; viva=false; recurso=''; inicio=''
         { read -r pid < "$d/pid"; } 2>/dev/null; { read -r dono < "$d/dono"; } 2>/dev/null
+        { read -r recurso < "$d/recurso"; } 2>/dev/null; { read -r inicio < "$d/inicio"; } 2>/dev/null
         [[ "$pid" =~ ^[0-9]+$ ]] || pid=''
         [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && viva=true
-        dono=${dono//$'\t'/ }; dono=${dono%$'\r'}
-        printf '%s\t%s\t%s\t%s\t%s\n' "$fila" "$vaga" "$pid" "$viva" "$dono" >> "$tmp/travas"
+        dono=${dono//$'\t'/ }; dono=${dono%$'\r'}; recurso=${recurso//$'\t'/ }; recurso=${recurso%$'\r'}; inicio=${inicio%$'\r'}
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$fila" "$vaga" "$pid" "$viva" "$dono" "$recurso" "$inicio" >> "$tmp/travas"
     done
 }
 
-[ "$modo" = config ] || coleta_travas
+# Quem aguarda vaga: uma pasta por processo em ~/.cache/fila-espera/<pid> (recurso, inicio_ts, worktree, comando, fila); pid morto e ignorado.
+coleta_espera() {
+    local d pid recurso inicio wt cmd fila
+    : > "$tmp/espera"
+    for d in "$cache"/fila-espera/*/; do
+        d=${d%/}; [ -d "$d" ] || continue
+        pid=${d##*/}
+        [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null || continue
+        recurso=''; inicio=''; wt=''; cmd=''; fila=''
+        { read -r recurso < "$d/recurso"; } 2>/dev/null; { read -r inicio < "$d/inicio_ts"; } 2>/dev/null
+        { read -r wt < "$d/worktree"; } 2>/dev/null; { read -r cmd < "$d/comando"; } 2>/dev/null; { read -r fila < "$d/fila"; } 2>/dev/null
+        recurso=${recurso//$'\t'/ }; wt=${wt//$'\t'/ }; cmd=${cmd//$'\t'/ }
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$pid" "${recurso%$'\r'}" "${inicio%$'\r'}" "${wt%$'\r'}" "${cmd%$'\r'}" "${fila%$'\r'}" >> "$tmp/espera"
+    done
+}
+
+[ "$modo" = config ] || { coleta_travas; coleta_espera; }
 # Valor do ambiente por item (nome novo antes do legado GS_TESTE_*); vazio = não definido.
 PAINEL_MODO="$modo" PAINEL_TMP="$(w "$tmp")" PAINEL_HOME="$(w "$HOME")" PAINEL_ORCA="$([ -n "$orca_exe" ] && w "$orca_exe")" \
 PAINEL_CONTAS="$(w "$aqui/../limites-cota/contas.sh")" \
@@ -75,7 +92,7 @@ FAIXAS = {"fila.vagas": (1, 99), "fila.vagas_projeto": (1, 99), "fila.teto": (1,
 class Erro(Exception): pass
 
 def fila_valida(var, v):  # mesma regra do fila-teste.sh
-    if var == "FILA_TESTE_FILA": return v in ("global", "recurso", "projeto")  # recurso: nome antigo de global
+    if var == "FILA_TESTE_FILA": return v in ("global", "banco", "recurso", "projeto")  # recurso: nome antigo de banco
     return var in FILA_CHAVES.values() and re.fullmatch(r"[1-9][0-9]*", v) is not None
 
 def le_fila_conf():
@@ -85,24 +102,68 @@ def le_fila_conf():
         if m and fila_valida(m.group(1), m.group(2)): d[m.group(1)] = m.group(2)
     return d
 
+def arq_do_catalogo():
+    """CONTAS_CATALOGO vale como no contas.sh; instalado em ~/.cache o catalogo fica ao lado do script, no repo em skills/limites-cota."""
+    return os.environ.get("CONTAS_CATALOGO") or next((c for c in (os.path.join(cache, "agentes-catalogo.conf"), os.path.join(os.path.dirname(E["PAINEL_CONTAS"]), "agentes-catalogo.conf")) if os.path.isfile(c)), "")
+
+def separa_env(cmd):
+    """'A=1 B=2 claude --x' -> ({'A': '1', 'B': '2'}, ['claude', '--x'])."""
+    envs, toks = {}, cmd.split()
+    while toks and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", toks[0]):
+        k, v = toks.pop(0).split("=", 1)
+        envs[k] = v
+    return envs, toks
+
+def exe_do_comando(cmd):
+    _, toks = separa_env(cmd)
+    if not toks: return None
+    return re.sub(r"\.(exe|cmd|bat)$", "", os.path.basename(toks[0].replace("\\", "/")).lower())
+
+def catalogo_agentes():
+    """[(chave, id-orca, executavel do comando)] do agentes-catalogo.conf."""
+    r = []
+    for l in le(arq_do_catalogo()).split("\n"):
+        if l.strip() and not l.startswith("#") and "|" in l:
+            c = l.split("|")
+            r.append((c[0], c[1] if len(c) > 1 else "", exe_do_comando(c[2]) if len(c) > 2 else None))
+    return r
+
+def deduz_agente(comando, config):
+    """Agente da conta manual pelo executavel do comando (cruzado com o catalogo); so diretorio de config = claude."""
+    cat = catalogo_agentes()
+    if comando:
+        exe = exe_do_comando(comando)
+        if exe:
+            for chave, _, cexe in cat:
+                if exe in (chave.lower(), cexe): return chave
+            base = re.split(r"[-_.]", exe)[0]  # claude-b, claude_team: o agente e o prefixo
+            for chave, _, cexe in cat:
+                if base in (chave.lower(), cexe): return chave
+            raise Erro("não reconheço o agente do comando %s; agentes conhecidos: %s" % (exe, ", ".join(sorted(c[0] for c in cat))))
+    if config: return "claude"
+    raise Erro("informe o comando do CLI ou o diretório de config da conta")
+
+
 def confere(chave, v):
     """Valida e normaliza um valor de configuração; Erro se a chave ou o valor não valem."""
     inteiro_ = re.fullmatch(r"[0-9]+", v) is not None
     faixa = None
-    if chave == "fila.modo": ok = v in ("global", "recurso", "projeto"); v = "global" if v == "recurso" else v
+    if chave == "fila.modo": ok = v in ("global", "banco", "recurso", "projeto"); v = "banco" if v == "recurso" else v
     elif chave in FILA_CHAVES: ok = inteiro_; faixa = FAIXAS[chave]
     elif chave == "pool.teto": ok = inteiro_; faixa = FAIXAS[chave]
     elif chave == "pool.ram_min": ok = re.fullmatch(r"[0-9]+(\.[0-9]+)?", v) is not None; faixa = FAIXAS[chave]
     elif chave == "pool.escolha": ok = v in ("ritmo", "ordem")
     elif chave == "pool.ordem": ok = re.fullmatch(r"[a-z0-9_-]{1,32}(,[a-z0-9_-]{1,32})*", v) is not None
     else:
-        m = re.fullmatch(r"conta\.([a-z0-9_-]{1,32})\.(vagas|peso|papeis|config|comando|adicionar|remover)", chave)
+        m = re.fullmatch(r"conta\.([a-z0-9_-]{1,32})\.(vagas|peso|papeis|config|comando|ativo|adicionar|remover)", chave)
         if not m: raise Erro("chave desconhecida (%s)" % chave)
         campo = m.group(2)
         if campo == "papeis": ok = v == "" or all(p in PAPEIS for p in v.split(","))
+        elif campo == "ativo": ok = v in ("sim", "nao")  # nao = "n\u00e3o utilizar": a linha fica no arquivo, fora da escolha
         elif campo == "adicionar": ok = re.fullmatch(r"[a-z0-9_-]{1,32}", v) is not None  # agente do catálogo: o contas.sh confere
         elif campo == "remover": ok = v == "1"
-        elif campo in ("config", "comando"): ok = re.fullmatch(r"[~A-Za-z0-9_./:\@+-]+", v) is not None  # sem espaço nem aspas: vira um token da linha
+        elif campo == "config": ok = re.fullmatch(r"[~A-Za-z0-9_./:\@+-]+", v) is not None  # sem espaco nem aspas: vira um token da linha
+        elif campo == "comando": ok = re.fullmatch(r"[~A-Za-z0-9_./:\@+= -]+", v) is not None  # sem aspas; com espaco sai entre aspas no agentes.conf
         else: ok = inteiro_; faixa = FAIXAS[campo]
     if ok and faixa and not faixa[0] <= float(v) <= faixa[1]: ok = False
     if not ok: raise Erro("valor inválido para %s: %s" % (chave, v or "(vazio)"))
@@ -144,7 +205,7 @@ def edita_chaves(L, chave, valor, antes=None):
     if not achou: insere(L, antes() if antes else None, "%s=%s\n" % (chave, valor))
 
 def edita_agentes(L, chaves):
-    L = list(L)
+    L = list(L); chaves = dict(chaves)
     def primeira_conta():
         for i, l in enumerate(L):
             if re.match(r"\s*[a-z0-9_-]+\s+\S", l): return i
@@ -152,22 +213,40 @@ def edita_agentes(L, chaves):
         if k.startswith("pool.") and k != "pool.ordem": edita_chaves(L, k[5:], v, primeira_conta)
     def acha(nome):
         return next((j for j, l in enumerate(L) if re.match(r"\s*%s\s+\S" % re.escape(nome), l)), None)
-    for k, v in chaves.items():  # conta nova: linha mínima no fim; vagas, peso, papéis e config entram pelos campos abaixo
+    for k, v in list(chaves.items()):  # conta nova: linha mínima no fim; vagas, peso, papéis e config entram pelos campos abaixo
         m = re.fullmatch(r"conta\.(.+)\.adicionar", k)
         if not m: continue
         if acha(m.group(1)) is not None: raise Erro("conta já existe no agentes.conf: %s" % m.group(1))
+        if v == "auto":  # conta manual: o agente sai do executavel do comando (ou do diretorio de config)
+            nome = m.group(1)
+            comando = chaves.get("conta.%s.comando" % nome); config = chaves.get("conta.%s.config" % nome)
+            if comando:
+                envs, resto = separa_env(comando)
+                if "CLAUDE_CONFIG_DIR" in envs and not config: config = chaves["conta.%s.config" % nome] = envs["CLAUDE_CONFIG_DIR"]
+                extra = sorted(set(envs) - {"CLAUDE_CONFIG_DIR"})
+                if extra: raise Erro("vari\u00e1vel de ambiente sem suporte no comando (%s): use o diret\u00f3rio de config" % ", ".join(extra))
+                comando = " ".join(resto) or None
+            v = deduz_agente(comando, config)
+            padrao = next((c[2] for c in catalogo_agentes() if c[0] == v), None)
+            if comando and len(comando.split()) == 1 and exe_do_comando(comando) == padrao: comando = None  # e o comando do catalogo: nao precisa gravar
+            if comando: chaves["conta.%s.comando" % nome] = comando
+            else: chaves.pop("conta.%s.comando" % nome, None)
         insere(L, None, "%s agente=%s vagas=1 peso=1\n" % (m.group(1), v))
     removidas = {k.split(".")[1] for k in chaves if k.endswith(".remover")}
     for k, v in chaves.items():
-        m = re.fullmatch(r"conta\.(.+)\.(vagas|peso|papeis|config|comando)", k)
+        m = re.fullmatch(r"conta\.(.+)\.(vagas|peso|papeis|config|comando|ativo)", k)
         if not m or m.group(1) in removidas: continue
         nome, campo = m.groups()
         i = acha(nome)
         if i is None: raise Erro("conta inexistente no agentes.conf: %s" % nome)
         c, eol = corpo_eol(L[i])
+        if campo == "ativo" and v == "sim":  # voltar ao normal: tira o token (ativo=sim e o padrao)
+            L[i] = re.sub(r"(^|\s)ativo=\S+", "", c).rstrip() + eol
+            continue
         par = re.compile(r'(^|\s)%s=("[^"]*"|[^\s"]*)' % campo)
-        if par.search(c): c = par.sub(lambda x: "%s%s=%s" % (x.group(1), campo, v), c, count=1)
-        else: c = "%s %s=%s" % (c.rstrip(), campo, v)
+        vq = '"%s"' % v if re.search(r"\s", v) else v
+        if par.search(c): c = par.sub(lambda x: "%s%s=%s" % (x.group(1), campo, vq), c, count=1)
+        else: c = "%s %s=%s" % (c.rstrip(), campo, vq)
         L[i] = c + eol
         if campo == "vagas":  # a linha legada nome=N sobrescreveria o valor gravado
             L = [l for l in L if not re.fullmatch(r"\s*%s=[0-9]+\s*" % re.escape(nome), l.rstrip("\r\n"))]
@@ -299,30 +378,53 @@ saude = {
 }
 
 # fila
+def desde_ts(fila, vaga):
+    """Inicio da trava em epoch ms: mtime do arquivo dono (gravado ao tomar a vaga) ou da pasta; o nome da pasta segue o fila-teste.sh."""
+    for nome in ("gs-teste" + ("" if fila == "3306" else "-" + fila) + ".lock" + vaga, "gs-teste-" + fila + ".lock" + vaga):
+        d = os.path.join(cache, nome)
+        for arq in (os.path.join(d, "dono"), d):
+            try: return int(os.path.getmtime(arq) * 1000)
+            except OSError: pass
+    return None
+
 travas = []
 for l in le(os.path.join(tmp, "travas")).split("\n"):
     if not l: continue
-    fila, vaga, pid, viva, dono = (l.split("\t") + [""] * 5)[:5]
+    fila, vaga, pid, viva, dono, recurso, inicio = (l.split("\t") + [""] * 7)[:7]
     m = re.match(r"^(.*?)(?: \[[^\]]*\])? desde (\d\d:\d\d:\d\d): (.*)$", dono)
     travas.append({
+        "desde_ts": int(inicio) if re.fullmatch(r"\d+", inicio) else desde_ts(fila, vaga),
+        "recurso": recurso or None, "teto": fila == "teto",
         "fila": fila, "vaga": inteiro(vaga, 0), "worktree": m.group(1) if m else dono or None,
         "desde": m.group(2) if m else None, "comando": m.group(3) if m else None,
         "pid": inteiro(pid, None), "viva": viva == "true",
     })
 travas.sort(key=lambda t: (t["fila"], t["vaga"]))
+
+def projeto_de(caminho): return re.split(r"[\\/]", caminho.rstrip("/\\"))[-1] if caminho else None
+
+# fila.testes: o que roda (trava viva), o que aguarda vaga (registro com pid vivo) e o que parou (trava com pid morto); a trava do teto nao entra.
+testes = [{"pid": t["pid"], "estado": "execucao" if t["viva"] else "parado", "recurso": t["recurso"], "worktree": t["worktree"], "projeto": projeto_de(t["worktree"]),
+           "comando": t["comando"], "vaga": t["vaga"], "desde_ts": t["desde_ts"]} for t in travas if not t["teto"] and t["pid"] is not None]
+for l in le(os.path.join(tmp, "espera")).split("\n"):
+    if not l: continue
+    pid_, recurso_, ts_, wt_, cmd_, _fila = (l.split("\t") + [""] * 6)[:6]
+    testes.append({"pid": inteiro(pid_, None), "estado": "aguardando", "recurso": recurso_ or None, "worktree": wt_ or None, "projeto": projeto_de(wt_),
+                   "comando": cmd_ or None, "vaga": None, "desde_ts": int(ts_) if re.fullmatch(r"\d+", ts_) else None})
+testes.sort(key=lambda x: ({"execucao": 0, "aguardando": 1, "parado": 2}[x["estado"]], x["desde_ts"] is None, x["desde_ts"] or 0))
 # Mesma precedência do fila-teste.sh: padrão < ambiente < fila.conf (o .orca/worktree.conf do projeto vence os dois e entra em "projetos").
-ITENS = (("modo", "FILA", "global"), ("vagas", "VAGAS", "2"), ("vagas_projeto", "VAGAS_PROJETO", "1"), ("teto", "TETO", "3"), ("processos", "PROCESSOS", "8"))
+ITENS = (("modo", "FILA", "banco"), ("vagas", "VAGAS", "2"), ("vagas_projeto", "VAGAS_PROJETO", "1"), ("teto", "TETO", "3"), ("processos", "PROCESSOS", "8"))
 fc = le_fila_conf()
 efetivo = {}
 for item, suf, padrao in ITENS:
     if "FILA_TESTE_" + suf in fc: val, origem = fc["FILA_TESTE_" + suf], "fila.conf"
     elif E["PAINEL_ENV_" + suf]: val, origem = E["PAINEL_ENV_" + suf], "ambiente"
     else: val, origem = padrao, "padrao"
-    if item == "modo" and val == "recurso": val = "global"
+    if item == "modo" and val == "recurso": val = "banco"
     efetivo[item] = {"valor": val if item == "modo" else inteiro(val, int(padrao)), "origem": origem, "projetos": []}
 modo_fila = efetivo["modo"]["valor"]
 fila = {"modo": modo_fila, "vagas": efetivo["vagas_projeto" if modo_fila == "projeto" else "vagas"]["valor"],
-        "teto": efetivo["teto"]["valor"], "travas": travas, "config": efetivo}
+        "teto": efetivo["teto"]["valor"], "testes": testes, "travas": travas, "config": efetivo}
 
 def sobrescritas_dos_projetos(caminhos):
     """Lê o .orca/worktree.conf de cada projeto com worktree em uso (travas e workers) e anota o que ele sobrescreve na fila."""
@@ -382,7 +484,7 @@ for l in conta_linhas:
                 "alerta": (curta or 0) > 80 or (longa or 0) > 80}
     contas.append({"nome": nome, "agente": c.get("agente"), "vagas": inteiro(c.get("vagas"), 0), "usadas": len(ocup),
                    "peso": inteiro(c.get("peso"), 1), "papeis": [p for p in c.get("papeis", "").split(",") if p],
-                   "ocupantes": ocup, "cota": cota, "origem": "manual", "rotulo": None, "config": c.get("config"), "detectada": False})
+                   "ocupantes": ocup, "cota": cota, "origem": "manual", "rotulo": None, "config": c.get("config"), "detectada": False, "ativo": c.get("ativo") != "nao"})
 for l in conf_linhas:  # linhas "conta=N" mudam só as vagas (contas.sh)
     m = re.match(r"^\s*([A-Za-z0-9_-]+)=(\d+)\s*$", l)
     for c in contas:
@@ -415,21 +517,46 @@ for prov in ("claude", "codex", "opencode", "devin"):
             if nativa: dono["cota"] = nativa
         else:
             contas.append({"nome": nome, "agente": prov, "vagas": 0, "usadas": 0, "peso": 1, "papeis": [], "ocupantes": [], "cota": nativa,
-                           "origem": "orca", "rotulo": rotulo, "config": None, "detectada": True})
+                           "origem": "orca", "rotulo": rotulo, "config": None, "detectada": True, "ativo": True})
 catalogo = []; instalados = []
-# Instalado em ~/.cache o catálogo fica ao lado do script; no repo, em skills/limites-cota.
-arq_catalogo = os.environ.get("CONTAS_CATALOGO") or next((c for c in (os.path.join(cache, "agentes-catalogo.conf"), os.path.join(os.path.dirname(E["PAINEL_CONTAS"]), "agentes-catalogo.conf")) if os.path.isfile(c)), "")
-for l in le(arq_catalogo).split("\n"):
+for l in le(arq_do_catalogo()).split("\n"):
     if l.strip() and not l.startswith("#") and "|" in l:
         campos = l.split("|")
         catalogo.append(campos[0])
         # Agente que o Orca abre (`orca agent launch --agent <id-orca>`) com o CLI no PATH: o Orca não lista agentes instalados, então cruza id-orca e comando do catálogo.
         if len(campos) > 2 and campos[1] and campos[2].split() and shutil.which(campos[2].split()[0]): instalados.append((campos[0], campos[1]))
 # Agente instalado cujo tipo ainda não tem conta (do agentes.conf ou detectada) entra como conta fora do pool.
+chaves_do_catalogo = {c[0] for c in catalogo_agentes()}
+def perfil_gerenciado_sem_conta(chave):
+    """opencode2 e o perfil gerenciado pelo Orca: so faz sentido com conta cadastrada (`orca account add --agent opencode`)."""
+    base = chave[:-1] if re.fullmatch(r".+2", chave) else None
+    return bool(base and base in chaves_do_catalogo and not (res_contas.get(base) or {}).get("accounts"))
+
 for chave, id_orca in instalados:
+    if perfil_gerenciado_sem_conta(chave): continue
     if not any(c["agente"] == chave for c in contas):
         contas.append({"nome": slug(chave), "agente": chave, "vagas": 0, "usadas": 0, "peso": 1, "papeis": [], "ocupantes": [], "cota": None,
-                       "origem": "orca", "rotulo": "agente instalado (orca agent launch --agent %s)" % id_orca, "config": None, "detectada": True})
+                       "origem": "orca", "rotulo": "agente instalado (orca agent launch --agent %s)" % id_orca, "config": None, "detectada": True, "ativo": True})
+# Conta ou agente detectado que ainda nao esta no agentes.conf entra sozinho, com os padroes do catalogo (vagas 1, peso 1 e os papeis padrao do contas.sh).
+# Idempotente: nunca regrava linha existente, nem a de ativo=nao. Sem agentes.conf nao cria um (o registro padrao valeria).
+def papeis_padrao(agente): return ["escritor", "revisor", "verificador", "mecanico"] if agente in ("claude", "codex", "antigravity") else []
+
+def marca_adicionada(c):
+    c["origem"] = "manual"; c["vagas"] = 1; c["peso"] = 1; c["papeis"] = papeis_padrao(c["agente"])
+
+if os.path.isfile(CONF_AGENTES):
+    no_arquivo = set(re.findall(r"^\s*([a-z0-9_-]+)\s+\S", le(CONF_AGENTES), re.M))
+    novas = [c for c in contas if c["origem"] == "orca" and c["nome"] not in no_arquivo]
+    if novas:
+        try:
+            aplica_config([("conta.%s.adicionar" % c["nome"], c["agente"]) for c in novas])
+            for c in novas: marca_adicionada(c)
+        except Erro:  # uma conta recusada pelo contas.sh nao pode travar as outras: uma por vez
+            for c in novas:
+                try:
+                    aplica_config([("conta.%s.adicionar" % c["nome"], c["agente"])])
+                    marca_adicionada(c)
+                except Erro as e: aviso.append("n\u00e3o consegui adicionar %s ao pool: %s" % (c["nome"], e))
 teto = conf.get("teto", 0); ram_min = conf.get("ram_min", 0)
 pool = {"teto": teto, "ram_min": ram_min, "escolha": escolha, "papeis_validos": list(PAPEIS), "catalogo": catalogo, "maquina": {"usadas": total, "teto": teto}, "contas": contas}
 

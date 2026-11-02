@@ -17,7 +17,7 @@ cat > "$tmp/bin/orca" <<'STUB'
 [ -n "${PAINEL_ORCA_FALHA:-}" ] && exit 1
 case "$1 $2" in
     'status --json') echo '{"ok":true,"result":{"app":{"running":true},"runtime":{"appVersion":"9.9.9"}}}' ;;
-    'account list') echo '{"ok":true,"result":{"claude":{"accounts":[{"id":"abcdef1234567890","email":"gerenciada@x.com"}],"activeAccountId":null},"codex":{"accounts":[],"activeAccountId":null,"systemDefault":{"hasAuth":true,"authKind":"oauth","email":"cx@x.com"}},"opencode":{"accounts":[],"activeAccountId":null},"devin":{"accounts":[{"id":"d1","label":"Devin A"}],"activeAccountId":null},"rateLimits":{"claude":{"status":"unavailable","session":null,"weekly":null},"codex":{"status":"ok","session":{"usedPercent":95,"resetDescription":"14:48"},"weekly":{"usedPercent":50,"resetDescription":"qua., 10:01"},"updatedAt":0}}}}' ;;
+    'account list') oc='[]'; [ -n "${PAINEL_TESTE_OPENCODE:-}" ] && oc='[{"id":"oc1","label":"Conta OC"}]'; echo '{"ok":true,"result":{"claude":{"accounts":[{"id":"abcdef1234567890","email":"gerenciada@x.com"}],"activeAccountId":null},"codex":{"accounts":[],"activeAccountId":null,"systemDefault":{"hasAuth":true,"authKind":"oauth","email":"cx@x.com"}},"opencode":{"accounts":'"$oc"',"activeAccountId":null},"devin":{"accounts":[{"id":"d1","label":"Devin A"}],"activeAccountId":null},"rateLimits":{"claude":{"status":"unavailable","session":null,"weekly":null},"codex":{"status":"ok","session":{"usedPercent":95,"resetDescription":"14:48"},"weekly":{"usedPercent":50,"resetDescription":"qua., 10:01"},"updatedAt":0}}}}' ;;
     *) exit 2 ;;
 esac
 STUB
@@ -48,30 +48,34 @@ igual 'fila: trava sem pid' 'None False' "$(j 'str([t for t in d["fila"]["travas
 igual 'fila: trava morta' False "$(j '[t for t in d["fila"]["travas"] if t["fila"]=="teto"][0]["viva"]' "$tmp/e.json")"
 igual 'fila: worktree do dono' C:/Herd/wt-um "$(j '[t for t in d["fila"]["travas"] if t["fila"]=="3308"][0]["worktree"]' "$tmp/e.json")"
 igual 'fila: comando do dono' 'runner --compact tests/Feature/X.php' "$(j '[t for t in d["fila"]["travas"] if t["fila"]=="3308"][0]["comando"]' "$tmp/e.json")"
-igual 'fila: padrões' 'global 2 3' "$(j 'd["fila"]["modo"]+" "+str(d["fila"]["vagas"])+" "+str(d["fila"]["teto"])' "$tmp/e.json")"
+igual 'fila: padrões' 'banco 2 3' "$(j 'd["fila"]["modo"]+" "+str(d["fila"]["vagas"])+" "+str(d["fila"]["teto"])' "$tmp/e.json")"
 igual 'pool: usadas e vagas' '1 2' "$(j 'str(d["pool"]["contas"][0]["usadas"])+" "+str(d["pool"]["contas"][0]["vagas"])' "$tmp/e.json")"
 igual 'pool: cota curta/longa/alerta' '90 25 True' "$(j 'str(d["pool"]["contas"][0]["cota"]["curta"])+" "+str(d["pool"]["contas"][0]["cota"]["longa"])+" "+str(d["pool"]["contas"][0]["cota"]["alerta"])' "$tmp/e.json")"
 igual 'orca: cota nativa vale sobre a medida (codex sem medida)' '95 50 orca True' "$(j 'str(d["pool"]["contas"][1]["cota"]["curta"])+" "+str(d["pool"]["contas"][1]["cota"]["longa"])+" "+d["pool"]["contas"][1]["cota"]["fonte"]+" "+str(d["pool"]["contas"][1]["detectada"])' "$tmp/e.json")"
 igual 'orca: conta sem cota nativa mantém a medida' 'None 90 False' "$(j 'str(d["pool"]["contas"][0]["cota"].get("fonte"))+" "+str(d["pool"]["contas"][0]["cota"]["curta"])+" "+str(d["pool"]["contas"][0]["detectada"])' "$tmp/e.json")"
-igual 'orca: conta gerenciada fora do agentes.conf entra com origem orca' 'claude-abcdef12 orca gerenciada@x.com claude' "$(j '" ".join([c["nome"],c["origem"],c["rotulo"],c["agente"]]) if (c:=[x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]) else 0' "$tmp/e.json")"
-igual 'orca: contas detectadas não entram nas vagas' '0 0' "$(j 'str([x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]["vagas"])+" "+str([x for x in d["pool"]["contas"] if x["origem"]=="orca"][0]["usadas"])' "$tmp/e.json")"
+igual 'auto: conta gerenciada do Orca entra sozinha no pool' 'claude-abcdef12 manual gerenciada@x.com claude' "$(j '" ".join([c["nome"],c["origem"],c["rotulo"],c["agente"]]) if (c:=[x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]) else 0' "$tmp/e.json")"
+igual 'auto: a linha gravada no agentes.conf tem os padroes (vagas 1, peso 1)' 1 "$(grep -c '^claude-abcdef12 agente=claude vagas=1 peso=1$' "$HOME/.claude/agentes.conf")"
+igual 'auto: papeis padrao do agente e ativa' 'escritor,revisor,verificador,mecanico True' "$(j '",".join([x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["papeis"])+" "+str([x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["ativo"])' "$tmp/e.json")"
+cp "$HOME/.claude/agentes.conf" "$tmp/ag.antes"; painel --json > "$tmp/e2.json"
+cmp -s "$HOME/.claude/agentes.conf" "$tmp/ag.antes" && ok 'auto: idempotente, a segunda coleta nao muda o arquivo' || ruim 'auto: a segunda coleta mudou o arquivo' 
 igual 'orca: manual não perde a origem' manual "$(j 'd["pool"]["contas"][0]["origem"]' "$tmp/e.json")"
 igual 'origem: conta do agentes.conf que o Orca também detecta é ambos' ambos "$(j 'd["pool"]["contas"][1]["origem"]' "$tmp/e.json")"
-igual 'origem: só no agentes.conf é manual, só no Orca é orca' 'manual orca' "$(j 'd["pool"]["contas"][0]["origem"]+" "+[x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["origem"]' "$tmp/e.json")"
+igual 'origem: a conta adicionada sozinha passa a ser da lista (manual)' 'manual manual' "$(j 'd["pool"]["contas"][0]["origem"]+" "+[x for x in d["pool"]["contas"] if x["nome"]=="claude-abcdef12"][0]["origem"]' "$tmp/e.json")"
 # Agentes instalados: catálogo (id-orca + comando) cruzado com o PATH; só entra o tipo que ainda não tem conta.
-printf '%s
-' 'claude|claude|claude||claude|sim|sim|-|-|-|' 'pi|pi|pi-cli||-|nao|nao|-|-|-|' 'ghost|ghost|ghost-cli||-|nao|nao|-|-|-|' 'semid||pi-cli||-|nao|nao|-|-|-|' > "$tmp/cat.conf"
+{ cat "$raiz/skills/limites-cota/agentes-catalogo.conf"; printf "%s
+" "pi|pi|pi-cli||-|nao|nao|-|-|-|" "ghost|ghost|ghost-cli||-|nao|nao|-|-|-|" "semid||pi-cli||-|nao|nao|-|-|-|"; } > "$tmp/cat.conf"
 printf '#!/usr/bin/env bash
 ' > "$tmp/bin/pi-cli"; chmod +x "$tmp/bin/pi-cli"; cp "$tmp/bin/pi-cli" "$tmp/bin/pi-cli.cmd"  # .cmd: o PATHEXT do Windows
 PATH="$tmp/bin:$PATH" CONTAS_CATALOGO="$tmp/cat.conf" painel --json > "$tmp/i.json"
-igual 'instalado: agente do catálogo no PATH entra fora do pool' 'pi orca pi' "$(j '" ".join([c["nome"],c["origem"],c["agente"]]) if (c:=[x for x in d["pool"]["contas"] if x["nome"]=="pi"][0]) else 0' "$tmp/i.json")"
+igual 'instalado: agente do catálogo no PATH entra sozinho no pool' 'pi manual pi' "$(j '" ".join([c["nome"],c["origem"],c["agente"]]) if (c:=[x for x in d["pool"]["contas"] if x["nome"]=="pi"][0]) else 0' "$tmp/i.json")"
+igual 'instalado: a linha de pi foi gravada' 1 "$(grep -c '^pi agente=pi vagas=1 peso=1$' "$HOME/.claude/agentes.conf")"
 igual 'instalado: o rótulo diz como o Orca abre' True "$(j '"orca agent launch --agent pi" in [x for x in d["pool"]["contas"] if x["nome"]=="pi"][0]["rotulo"]' "$tmp/i.json")"
 igual 'instalado: sem CLI no PATH ou sem id-orca não aparece' 0 "$(j 'len([x for x in d["pool"]["contas"] if x["nome"] in ("ghost","semid")])' "$tmp/i.json")"
-igual 'instalado: tipo que já tem conta não duplica' 0 "$(j 'len([x for x in d["pool"]["contas"] if x["agente"]=="claude" and x["origem"]=="orca" and x["nome"]=="claude"])' "$tmp/i.json")"
+igual 'instalado: tipo que já tem conta não duplica' 0 "$(j 'len([x for x in d["pool"]["contas"] if x["nome"]=="claude"])' "$tmp/i.json")"
 # Instalado: o catálogo fica em ~/.cache (ao lado do script), não em ../limites-cota.
-cp "$tmp/cat.conf" "$HOME/.cache/agentes-catalogo.conf"
+(cat "$tmp/cat.conf"; echo 'qq|qq|pi-cli||-|nao|nao|-|-|-|') > "$HOME/.cache/agentes-catalogo.conf"
 PATH="$tmp/bin:$PATH" painel --json > "$tmp/i2.json"
-igual 'instalado: catálogo de ~/.cache vale quando não há CONTAS_CATALOGO' 'pi' "$(j '[x["nome"] for x in d["pool"]["contas"] if x["origem"]=="orca" and x["nome"]=="pi"][0]' "$tmp/i2.json")"
+igual 'instalado: catálogo de ~/.cache vale quando não há CONTAS_CATALOGO' 'qq' "$(j '[x["nome"] for x in d["pool"]["contas"] if x["nome"]=="qq"][0]' "$tmp/i2.json")"
 rm -f "$HOME/.cache/agentes-catalogo.conf"
 igual 'catálogo: agentes para a conta nova' True "$(j '"claude" in d["pool"]["catalogo"] and "codex" in d["pool"]["catalogo"]' "$tmp/e.json")"
 igual 'pool: linha conta=N muda as vagas' 3 "$(j 'd["pool"]["contas"][1]["vagas"]' "$tmp/e.json")"
@@ -154,12 +158,12 @@ rm -f "$conf_ag"; cfg pool.teto=3; igual 'config pool: cria agentes.conf' 'teto=
 cfg conta.a.vagas=1; igual 'config conta: sem conta no arquivo não cria conta' 2 $?
 printf 'teto=4\nram_min=3\na agente=claude vagas=2 peso=5 papeis=escritor,revisor\nb agente=codex vagas=1\nb=3\n' > "$conf_ag"
 
-# Modo da fila: o painel grava global; recurso (nome antigo) é aceito e gravado como global.
+# Modo da fila: global | banco | projeto; recurso (nome antigo) é aceito e gravado como banco.
 cfg fila.modo=recurso; igual 'config modo: recurso exit 0' 0 $?
-igual 'config modo: recurso vira global no arquivo' 1 "$(grep -c '^FILA_TESTE_FILA=global$' "$conf_fila")"
+igual 'config modo: recurso vira banco no arquivo' 1 "$(grep -c '^FILA_TESTE_FILA=banco$' "$conf_fila")"
 printf 'FILA_TESTE_FILA=recurso
 ' > "$conf_fila"; painel --json > "$tmp/m.json"
-igual 'modo: recurso antigo aparece como global' global "$(j 'd["fila"]["modo"]' "$tmp/m.json")"
+igual 'modo: recurso antigo aparece como banco' banco "$(j 'd["fila"]["modo"]' "$tmp/m.json")"
 cfg fila.modo=projeto; painel --json > "$tmp/m.json"
 igual 'modo: projeto usa as vagas por projeto' 'projeto 1' "$(j 'd["fila"]["modo"]+" "+str(d["fila"]["vagas"])' "$tmp/m.json")"
 
@@ -227,5 +231,97 @@ cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'ordem: recusas não gravam nada' || ruim 
 cfg pool.ordem=a,b,c pool.teto=5 conta.b.vagas=2; igual 'ordem: combinada com outras chaves' 0 $?
 igual 'ordem: combinada, linhas' 'a agente=claude vagas=2 peso=5|b agente=codex vagas=2|c agente=claude vagas=1 config=~/.claude-c' "$(grep -E '^(a|b|c) ' "$conf_ag" | junta '|')"
 igual 'ordem: combinada, teto gravado' 1 "$(grep -c '^teto=5$' "$conf_ag")"
+
+
+# Conta manual sem escolher agente: o agente sai do executavel do comando (cruzado com o catalogo) ou do diretorio de config.
+printf '# minhas contas\nteto=4\n' > "$conf_ag"
+cfg conta.cfg.adicionar=auto conta.cfg.config=~/.claude-x; igual 'manual: so diretorio de config e claude' 0 $?
+cfg conta.env.adicionar=auto 'conta.env.comando=CLAUDE_CONFIG_DIR=~/.claude-e claude'; igual 'manual: claude por comando com env' 0 $?
+cfg conta.oc.adicionar=auto conta.oc.comando=opencode; igual 'manual: opencode por comando' 0 $?
+cfg conta.cb.adicionar=auto conta.cb.comando=claude-b; igual 'manual: claude-b e claude pelo prefixo' 0 $?
+cfg conta.ca.adicionar=auto 'conta.ca.comando=claude --x'; igual 'manual: comando com argumento' 0 $?
+igual 'manual: linhas gravadas (comentario preservado, comando do catalogo nao gravado, espaco entre aspas)' '# minhas contas|teto=4|cfg agente=claude vagas=1 peso=1 config=~/.claude-x|env agente=claude vagas=1 peso=1 config=~/.claude-e|oc agente=opencode vagas=1 peso=1|cb agente=claude vagas=1 peso=1 comando=claude-b|ca agente=claude vagas=1 peso=1 comando="claude --x"' "$(junta '|' < "$conf_ag")"
+cp "$conf_ag" "$tmp/ag.bak"
+cfg conta.zz.adicionar=auto conta.zz.comando=xyzzy; igual 'manual: executavel desconhecido, exit 2' 2 $?
+grep -q 'não reconheço o agente do comando xyzzy; agentes conhecidos: ' "$tmp/c.err" && grep -q 'claude' "$tmp/c.err" && ok 'manual: a mensagem lista os agentes conhecidos' || ruim "manual: mensagem $(cat "$tmp/c.err")"
+cfg conta.vz.adicionar=auto; igual 'manual: sem comando nem diretorio, exit 2' 2 $?
+grep -q 'informe o comando do CLI' "$tmp/c.err" && ok 'manual: mensagem de falta de dados' || ruim "manual: mensagem $(cat "$tmp/c.err")"
+cfg conta.ev.adicionar=auto 'conta.ev.comando=FOO=1 claude'; igual 'manual: variavel de ambiente sem suporte, exit 2' 2 $?
+cmp -s "$conf_ag" "$tmp/ag.bak" && ok 'manual: recusas nao gravam nada' || ruim 'manual: arquivo mudou'
+
+
+# O contas.sh que reconhece ativo=nao vem da outra frente (painel-ativo): aqui o validador e um stub que aprova, para provar so o escritor do painel.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$HOME/.cache/contas.sh"
+# Nao utilizar: ativo=nao fica na linha da conta (a linha nao some, entao nao e readicionada) e volta ao normal com sim.
+printf 'teto=4\na agente=claude vagas=2 peso=5\n' > "$conf_ag"
+cfg conta.a.ativo=nao; igual 'ativo: nao grava ativo=nao na linha da conta' 0 $?
+igual 'ativo: a linha ganha o token e o resto fica igual' 'a agente=claude vagas=2 peso=5 ativo=nao' "$(grep '^a ' "$conf_ag")"
+painel --json > "$tmp/at.json"
+igual 'ativo: o --json traz ativo false para a conta marcada' False "$(j '[x for x in d["pool"]["contas"] if x["nome"]=="a"][0]["ativo"]' "$tmp/at.json")"
+igual 'ativo: a conta marcada continua listada' a "$(j '[x["nome"] for x in d["pool"]["contas"] if x["nome"]=="a"][0]' "$tmp/at.json")"
+igual 'ativo: a linha marcada nao e readicionada nem duplicada' 1 "$(grep -c '^a ' "$conf_ag")"
+cfg conta.a.ativo=sim; igual 'ativo: sim volta ao normal, exit 0' 0 $?
+igual 'ativo: sim tira o token' 'a agente=claude vagas=2 peso=5' "$(grep '^a ' "$conf_ag")"
+painel --json > "$tmp/at.json"
+igual 'ativo: o --json volta a ativo true' True "$(j '[x for x in d["pool"]["contas"] if x["nome"]=="a"][0]["ativo"]' "$tmp/at.json")"
+cfg conta.a.ativo=talvez; igual 'ativo: valor invalido, exit 2' 2 $?
+cfg conta.zz.ativo=nao; igual 'ativo: conta inexistente, exit 2' 2 $?
+# Detectada marcada como nao utilizada antes da coleta seguinte: a linha existe e fica como esta.
+cfg conta.claude-abcdef12.ativo=nao; igual 'ativo: detectada ja adicionada tambem aceita nao' 0 $?
+painel --json > "$tmp/at.json"
+igual 'ativo: detectada marcada nao e readicionada' 1 "$(grep -c '^claude-abcdef12 ' "$conf_ag")"
+rm -f "$HOME/.cache/contas.sh"
+
+
+# opencode2 e o perfil gerenciado pelo Orca: so conta como instalado quando o Orca tem conta opencode (orca account add --agent opencode).
+{ grep -v '^opencode' "$raiz/skills/limites-cota/agentes-catalogo.conf"; printf '%s\n' 'opencode|opencode|pi-cli||-|sim|nao|-|-|-|' 'opencode2|opencode2|pi-cli||-|sim|nao|-|-|-|'; } > "$tmp/cat2.conf"
+nomes_oc='",".join(sorted(x["nome"] for x in d["pool"]["contas"] if x["nome"].startswith("opencode")))'
+printf 'teto=4\na agente=claude vagas=2 peso=5\n' > "$conf_ag"
+PATH="$tmp/bin:$PATH" CONTAS_CATALOGO="$tmp/cat2.conf" painel --json > "$tmp/oc1.json"
+igual 'opencode2: sem conta opencode no Orca so o opencode e detectado' opencode "$(j "$nomes_oc" "$tmp/oc1.json")"
+printf 'teto=4\na agente=claude vagas=2 peso=5\n' > "$conf_ag"
+PAINEL_TESTE_OPENCODE=1 PATH="$tmp/bin:$PATH" CONTAS_CATALOGO="$tmp/cat2.conf" painel --json > "$tmp/oc2.json"
+igual 'opencode2: com conta opencode no Orca o perfil gerenciado entra tambem' 'opencode-oc1,opencode2' "$(j "$nomes_oc" "$tmp/oc2.json")"
+
+# Inicio da trava em epoch ms (mtime do arquivo dono, senao da pasta), alem do desde de sempre.
+touch -d @1767225600 "$HOME/.cache/gs-teste-3308.lock1/dono"
+painel --json > "$tmp/ts.json"
+igual 'fila: desde_ts e o mtime do arquivo dono em ms' 1767225600000 "$(j '[t for t in d["fila"]["travas"] if t["fila"]=="3308" and t["vaga"]==1][0]["desde_ts"]' "$tmp/ts.json")"
+igual 'fila: trava sem dono usa o mtime da pasta' True "$(j 'isinstance([t for t in d["fila"]["travas"] if t["fila"]=="3308" and t["vaga"]==2][0]["desde_ts"], int)' "$tmp/ts.json")"
+igual 'fila: o desde de hora do dono continua' 20:14:25 "$(j '[t for t in d["fila"]["travas"] if t["fila"]=="3308" and t["vaga"]==1][0]["desde"]' "$tmp/ts.json")"
+
+
+# Os tres modos da fila e o que cada um grava.
+for m in global banco projeto; do
+    cfg fila.modo=$m; igual "modo: $m e aceito" 0 $?
+    painel --json > "$tmp/m.json"
+    igual "modo: $m sai normalizado no --json" $m "$(j 'd["fila"]["modo"]' "$tmp/m.json")"
+done
+cfg fila.modo=lixo; igual 'modo: valor fora de global, banco e projeto, exit 2' 2 $?
+
+# fila.testes: lista unica (execucao, aguardando, parado), sem a trava do teto, com recurso, projeto e desde_ts em ms.
+rm -rf "$HOME/.cache/gs-teste"*.lock* "$HOME/.cache/fila-espera"
+mkdir -p "$HOME/.cache/gs-teste-3307.lock1" "$HOME/.cache/gs-teste-3307.lock2" "$HOME/.cache/gs-teste-teto.lock1" "$HOME/.cache/gs-teste-3307.lock3"
+echo $$ > "$HOME/.cache/gs-teste-3307.lock1/pid"; echo 'C:/Herd/proj-um [db] desde 20:00:00: php artisan test' > "$HOME/.cache/gs-teste-3307.lock1/dono"
+echo 'mysql 127.0.0.1:3307' > "$HOME/.cache/gs-teste-3307.lock1/recurso"; echo 1793640000000 > "$HOME/.cache/gs-teste-3307.lock1/inicio"
+echo 99999999 > "$HOME/.cache/gs-teste-3307.lock2/pid"; echo 'C:/Herd/proj-dois [db] desde 19:00:00: pest' > "$HOME/.cache/gs-teste-3307.lock2/dono"
+echo 'mysql 127.0.0.1:3307' > "$HOME/.cache/gs-teste-3307.lock2/recurso"; echo 1793630000000 > "$HOME/.cache/gs-teste-3307.lock2/inicio"
+echo $$ > "$HOME/.cache/gs-teste-teto.lock1/pid"; echo 'C:/Herd/proj-um [db] desde 20:00:00: php artisan test' > "$HOME/.cache/gs-teste-teto.lock1/dono"
+# lock3 acabou de ser criada: sem pid nem dono, ainda nao e teste
+mkdir -p "$HOME/.cache/fila-espera/$$" "$HOME/.cache/fila-espera/99999998"
+printf '%s\n' 'mysql 127.0.0.1:3307' > "$HOME/.cache/fila-espera/$$/recurso"; echo 1793645000000 > "$HOME/.cache/fila-espera/$$/inicio_ts"
+echo 'C:/Herd/proj-tres' > "$HOME/.cache/fila-espera/$$/worktree"; echo 'php artisan test --filter X' > "$HOME/.cache/fila-espera/$$/comando"; echo 3307 > "$HOME/.cache/fila-espera/$$/fila"
+echo 'mysql 127.0.0.1:3307' > "$HOME/.cache/fila-espera/99999998/recurso"
+painel --json > "$tmp/t.json"
+igual 'testes: tres itens (execucao, aguardando, parado), sem o teto, sem o ignorado e sem pid morto de espera' 'execucao aguardando parado' "$(j '" ".join(t["estado"] for t in d["fila"]["testes"])' "$tmp/t.json")"
+igual 'testes: execucao com recurso, projeto, comando, vaga e desde_ts' 'mysql 127.0.0.1:3307|proj-um|php artisan test|1|1793640000000' "$(j '"|".join(str(d["fila"]["testes"][0][k]) for k in ("recurso","projeto","comando","vaga","desde_ts"))' "$tmp/t.json")"
+igual 'testes: aguardando sem vaga, com inicio da espera' 'None 1793645000000 proj-tres php artisan test --filter X' "$(j 'str(d["fila"]["testes"][1]["vaga"])+" "+str(d["fila"]["testes"][1]["desde_ts"])+" "+d["fila"]["testes"][1]["projeto"]+" "+d["fila"]["testes"][1]["comando"]' "$tmp/t.json")"
+igual 'testes: parado e a trava com pid morto' '99999999 proj-dois 2' "$(j 'str(d["fila"]["testes"][2]["pid"])+" "+d["fila"]["testes"][2]["projeto"]+" "+str(d["fila"]["testes"][2]["vaga"])' "$tmp/t.json")"
+igual 'testes: cada item traz as chaves do contrato' 'comando desde_ts estado pid projeto recurso vaga worktree' "$(j '" ".join(sorted(d["fila"]["testes"][0]))' "$tmp/t.json")"
+igual 'testes: a trava do teto continua em travas, marcada' True "$(j 'any(t["teto"] for t in d["fila"]["travas"])' "$tmp/t.json")"
+echo 1793600000000 > "$HOME/.cache/gs-teste-3307.lock2/inicio"; echo 1793650000000 > "$HOME/.cache/fila-espera/$$/inicio_ts"
+echo $$ > "$HOME/.cache/gs-teste-3307.lock2/pid"; mkdir -p "$HOME/.cache/fila-espera/$$x" 2>/dev/null
+painel --json > "$tmp/t.json"
+igual 'testes: dois em execucao saem do mais antigo para o mais novo' '1793600000000 1793640000000' "$(j '" ".join(str(t["desde_ts"]) for t in d["fila"]["testes"] if t["estado"]=="execucao")' "$tmp/t.json")"
 
 [ "$falhas" = 0 ] && echo 'TUDO OK' || { echo "$falhas falha(s)"; exit 1; }
