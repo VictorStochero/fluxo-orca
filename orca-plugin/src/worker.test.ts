@@ -1,10 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { mock } from 'node:test'
 import { join } from 'node:path'
-import { afterEach, assert, mountWorker, test } from 'orca/testing'
+import { afterEach, assert, mockHost, mountWorker, test } from 'orca/testing'
 import { estadoExemplo } from './fixtures'
 import * as main from './worker'
-import { acharOrca, ambienteDoColetor } from './worker'
+import { criarRequisitos, SCRIPTS_FLUXO, versaoAtende } from './requisitos'
+import { acharOrca, ambienteDoColetor, criarCiclo, intervaloMs, medirSeVelha } from './worker'
 
 const casaOriginal = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA, APPDATA: process.env.APPDATA, ORCA_CMD: process.env.ORCA_CMD, ORCA_CLI_COMMAND: process.env.ORCA_CLI_COMMAND }
 let casa = ''
@@ -168,4 +170,352 @@ test('ambienteDoColetor completa o PATH com o do sistema, sem repetir entradas e
   assert.equal(env.PATH, undefined)
   assert.equal(ambienteDoColetor({ PATH: '/bin' }, 'linux', '/h', undefined, '/bin:/opt/x').PATH, '/bin:/opt/x')
   assert.equal(ambienteDoColetor({ PATH: '/bin' }, 'linux', '/h').PATH, '/bin')
+})
+
+// Ciclo de 60 s com relógio falso; `coletar` é um contador, `abrir` devolve o AbortController do painel.
+async function comRelogio(corpo: (r: { avancar: (ms: number) => Promise<void> }) => Promise<void>): Promise<void> {
+  mock.timers.enable({ apis: ['setInterval', 'setTimeout'] })
+  try {
+    await corpo({
+      avancar: async (ms) => {
+        mock.timers.tick(ms)
+        for (let i = 0; i < 5; i++) await Promise.resolve() // deixa as continuações da coleta rodarem
+      }
+    })
+  } finally {
+    mock.timers.reset()
+  }
+}
+
+test('ciclo: com painel aberto coleta e avisa a cada 60 s', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    let avisos = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => void avisos++, erro: () => {}, renovaMs: 1_000_000 })
+    const painel = new AbortController()
+    void c.vigiar(painel.signal)
+    await avancar(59_999)
+    assert.equal(coletas, 0)
+    await avancar(1)
+    assert.deepEqual([coletas, avisos], [1, 1])
+    await avancar(60_000)
+    assert.deepEqual([coletas, avisos], [2, 2])
+    painel.abort()
+    c.parar()
+  })
+})
+
+test('ciclo: sem painel não coleta', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => {}, erro: () => {} })
+    await avancar(300_000)
+    assert.equal(coletas, 0)
+    assert.equal(c.ativo(), false)
+  })
+})
+
+test('ciclo: coleta lenta não empilha e o ciclo seguinte volta ao normal', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    let avisos = 0
+    let termina: () => void = () => {}
+    const c = criarCiclo({
+      coletar: () => {
+        coletas++
+        return coletas === 1 ? new Promise<void>((r) => (termina = r)) : Promise.resolve()
+      },
+      avisar: () => void avisos++,
+      erro: () => {},
+      renovaMs: 1_000_000
+    })
+    const painel = new AbortController()
+    void c.vigiar(painel.signal)
+    await avancar(60_000)
+    await avancar(60_000) // a primeira ainda roda: pula
+    await avancar(60_000)
+    assert.deepEqual([coletas, avisos], [1, 0])
+    termina()
+    await avancar(0)
+    assert.equal(avisos, 1)
+    await avancar(60_000)
+    assert.deepEqual([coletas, avisos], [2, 2])
+    painel.abort()
+    c.parar()
+  })
+})
+
+test('ciclo: fechar o último painel para o ciclo; um painel restante o mantém', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => {}, erro: () => {}, gracaMs: 3_000, renovaMs: 1_000_000 })
+    const a = new AbortController()
+    const b = new AbortController()
+    void c.vigiar(a.signal)
+    void c.vigiar(b.signal)
+    a.abort()
+    await avancar(60_000)
+    assert.equal(coletas, 1) // b segue aberto
+    b.abort()
+    await avancar(3_000)
+    assert.equal(c.ativo(), false)
+    await avancar(300_000)
+    assert.equal(coletas, 1)
+  })
+})
+
+test('ciclo: a renovação da vigília não derruba o ciclo (graça cobre o intervalo)', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => {}, erro: () => {}, renovaMs: 100_000, gracaMs: 3_000 })
+    const painel = new AbortController()
+    void c.vigiar(painel.signal)
+    await avancar(100_000) // vence; o painel renova logo
+    void c.vigiar(painel.signal)
+    assert.equal(c.ativo(), true)
+    await avancar(60_000)
+    assert.equal(coletas, 2)
+    painel.abort()
+    c.parar()
+  })
+})
+
+test('estado.ler seguido devolve a coleta recente sem rodar o coletor de novo', async () => {
+  const cache = novaCasa(`echo x >> "$HOME/.cache/n.txt"; echo '{}'
+`)
+  const worker = await mountWorker(main)
+  await worker.request('estado.ler')
+  await worker.request('estado.ler')
+  assert.equal(readFileSync(join(cache, 'n.txt'), 'utf8').trim().split('\n').length, 1)
+  await worker.deactivate()
+})
+
+// limites.sh falso: conta as execuções em medidas.txt; `corpo` é o que mais ele faz.
+function comLimites(corpo: string, idadeMin: number | null): string {
+  const cache = novaCasa('echo {}\n')
+  writeFileSync(join(cache, 'limites.sh'), `echo x >> "$HOME/.cache/medidas.txt"\n${corpo}\n`)
+  if (idadeMin !== null) {
+    const f = join(cache, 'agentes', 'medida.team')
+    writeFileSync(f, 'team: 1%')
+    const t = new Date(Date.now() - idadeMin * 60_000)
+    utimesSync(f, t, t)
+  }
+  return cache
+}
+const medidas = (cache: string) => (existsSync(join(cache, 'medidas.txt')) ? readFileSync(join(cache, 'medidas.txt'), 'utf8').trim().split('\n').length : 0)
+
+test('medição: mede quando há medida com mais de 5 min', async () => {
+  const cache = comLimites('', 6)
+  await medirSeVelha(cache, () => {})
+  assert.equal(medidas(cache), 1)
+})
+
+test('medição: não mede quando todas as medidas são recentes ou não há nenhuma', async () => {
+  const recente = comLimites('', 4)
+  await medirSeVelha(recente, () => {})
+  assert.equal(medidas(recente), 0)
+  const nenhuma = comLimites('', null)
+  await medirSeVelha(nenhuma, () => {})
+  assert.equal(medidas(nenhuma), 0)
+})
+
+test('medição: timeout ou falha não rejeitam nem travam, e chamadas simultâneas não rodam em paralelo', async () => {
+  const lenta = comLimites('sleep 30', 6)
+  const logs: string[] = []
+  const ini = Date.now()
+  await Promise.all([medirSeVelha(lenta, (m) => logs.push(m), 400), medirSeVelha(lenta, (m) => logs.push(m), 400)])
+  assert.ok(Date.now() - ini < 10_000)
+  assert.equal(medidas(lenta), 1)
+  assert.match(logs.join(), /limites\.sh passou de/)
+  const quebrada = comLimites('exit 3', 6)
+  await medirSeVelha(quebrada, (m) => logs.push(m))
+  assert.equal(medidas(quebrada), 1)
+})
+
+test('intervalo: ausente ou inválido usa 60 s; fora da faixa cai no limite', () => {
+  for (const v of [null, undefined, 'abc', NaN, {}]) assert.equal(intervaloMs(v), 60_000)
+  assert.equal(intervaloMs(90), 90_000)
+  assert.equal(intervaloMs(5), 15_000)
+  assert.equal(intervaloMs(99999), 3_600_000)
+  assert.equal(intervaloMs(-3), 15_000)
+})
+
+test('ciclo: mudar o período reprograma o relógio na hora', async () => {
+  await comRelogio(async ({ avancar }) => {
+    let coletas = 0
+    const c = criarCiclo({ coletar: async () => void coletas++, avisar: () => {}, erro: () => {}, renovaMs: 1_000_000 })
+    const painel = new AbortController()
+    void c.vigiar(painel.signal)
+    c.periodo(15_000)
+    await avancar(15_000)
+    assert.equal(coletas, 1)
+    c.periodo(30_000)
+    await avancar(15_000)
+    assert.equal(coletas, 1)
+    await avancar(15_000)
+    assert.equal(coletas, 2)
+    painel.abort()
+    c.parar()
+  })
+})
+
+test('worker lê atualizacao.intervalo_s ao iniciar e reprograma o ciclo quando a chave muda', async () => {
+  novaCasa('echo {}\n')
+  let valor: unknown = 20
+  let ouvinte: (c: { key: string }) => void = () => {}
+  let vigiar: (entrada: unknown, ctx: { signal: AbortSignal }) => unknown = () => {}
+  const posts: string[] = []
+  const falso = {
+    log: () => {},
+    storage: { get: async () => valor, onDidChange: (l: typeof ouvinte) => ((ouvinte = l), { dispose() {} }) },
+    panels: { handle: (nome: string, h: typeof vigiar) => (nome === 'auto.assistir' && (vigiar = h), { dispose() {} }), post: (e: string) => void posts.push(e) }
+  }
+  mock.timers.enable({ apis: ['setInterval'] }) // setTimeout segue real: o coletor é um processo de verdade
+  const painel = new AbortController()
+  try {
+    main.default(falso as never)
+    await Promise.resolve()
+    void vigiar(undefined, { signal: painel.signal })
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    mock.timers.tick(20_000)
+    await ate(() => posts.includes('estado.mudou'))
+    assert.equal(posts.filter((p) => p === 'estado.mudou').length, 1)
+    valor = 40
+    ouvinte({ key: 'outra.chave' }) // chave alheia não reprograma
+    ouvinte({ key: 'atualizacao.intervalo_s' })
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    mock.timers.tick(20_000)
+    await new Promise((r) => setTimeout(r, 400))
+    assert.equal(posts.length, 1) // com 40 s, 20 s não basta
+    mock.timers.tick(20_000)
+    await ate(() => posts.length > 1)
+    assert.equal(posts.length, 2)
+  } finally {
+    painel.abort()
+    mock.timers.reset()
+  }
+})
+
+// Requisitos: orca falso injetado, sem tocar no Orca nem em ~/.cache reais.
+const skillsOk = (extra: object[] = []) =>
+  JSON.stringify({
+    ok: true,
+    result: {
+      skills: [
+        { name: 'orchestration', sourceKind: 'home', sourceLabel: 'Agent skills home' },
+        ...['delegacao', 'fila-testes', 'limites-cota'].map((name) => ({ name, sourceKind: 'plugin', sourceLabel: 'Claude plugin fluxo-orca' })),
+        ...extra
+      ]
+    }
+  })
+
+function requisitosCom(o: { versao?: string; skills?: string; velhos?: string[] | null; ausentes?: string[]; chamadas?: string[][]; agora?: () => number } = {}) {
+  const chamadas = o.chamadas ?? []
+  return criarRequisitos({
+    orca: async (args) => {
+      chamadas.push(args)
+      if (args[0] === '--version') return o.versao ?? '1.4.246\n'
+      if (args[1] === 'installed') return o.skills ?? skillsOk()
+      return '{}'
+    },
+    estado: async () => ({ saude: { plugin_versao: '2.13.0', scripts_desatualizados: o.velhos === null ? (undefined as never) : (o.velhos ?? []), orca: { rodando: true, versao: null } } }),
+    existe: (s) => !(o.ausentes ?? []).includes(s),
+    agora: o.agora
+  })
+}
+
+const achar = (r: { itens: { id: string; ok: boolean; detalhe: string; instalar?: { tipo: string; texto: string } }[] }, id: string) => r.itens.find((i) => i.id === id)!
+
+test('requisitos: tudo instalado dá ok e quatro itens', async () => {
+  const r = await requisitosCom().ler()
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.itens.map((i) => i.id), ['orca', 'orchestration', 'skills-fluxo', 'scripts'])
+  assert.ok(r.itens.every((i) => i.ok && !('instalar' in i)))
+})
+
+test('requisitos: cada item faltando derruba o ok e traz a instalação certa', async () => {
+  const velha = achar(await requisitosCom({ versao: '1.4.245' }).ler(), 'orca')
+  assert.equal(velha.ok, false)
+  assert.equal(versaoAtende('1.5.0'), true)
+  assert.equal(versaoAtende('v2.0.0-rc'), true)
+
+  const sem = skillsOk().replace('"orchestration"', '"outra"')
+  const orch = achar(await requisitosCom({ skills: sem }).ler(), 'orchestration')
+  assert.deepEqual([orch.ok, orch.instalar], [false, { tipo: 'acao', texto: 'orca skills install --skill orchestration' }])
+
+  // delegacao só na casa do usuário (não vem do plugin fluxo-orca) não conta
+  const deHome = skillsOk().replace('"name":"delegacao","sourceKind":"plugin"', '"name":"delegacao","sourceKind":"home"')
+  const fluxo = achar(await requisitosCom({ skills: deHome }).ler(), 'skills-fluxo')
+  assert.deepEqual([fluxo.ok, fluxo.detalhe, fluxo.instalar?.tipo, fluxo.instalar?.texto], [false, 'faltam: delegacao', 'comando', 'claude plugin install fluxo-orca@stochero'])
+
+  const ausente = achar(await requisitosCom({ ausentes: ['limites.sh'] }).ler(), 'scripts')
+  assert.deepEqual([ausente.ok, ausente.detalhe, ausente.instalar?.tipo], [false, 'faltam: limites.sh', 'comando'])
+  const velhos = achar(await requisitosCom({ velhos: ['fila-teste.sh'] }).ler(), 'scripts')
+  assert.deepEqual([velhos.ok, velhos.detalhe], [false, 'desatualizados: fila-teste.sh'])
+  assert.equal(SCRIPTS_FLUXO.length, 5)
+})
+
+test('requisitos: formato inesperado do skills installed vira não verificado, sem derrubar', async () => {
+  for (const skills of ['isto não é json', '{"ok":true,"result":{"skills":"x"}}', '{"result":{"skills":[{"id":1}]}}']) {
+    const r = await requisitosCom({ skills }).ler()
+    assert.equal(r.ok, false)
+    for (const id of ['orchestration', 'skills-fluxo']) assert.match(achar(r, id).detalhe, /^não verificado/)
+    assert.equal(achar(r, 'orca').ok, true)
+    assert.equal(achar(r, 'scripts').ok, true)
+  }
+  assert.match(achar(await requisitosCom({ velhos: null }).ler(), 'scripts').detalhe, /^não verificado/)
+})
+
+test('requisitos: orca ilegível ou ausente não derruba os demais itens', async () => {
+  const r = await criarRequisitos({
+    orca: async () => {
+      throw new Error('orca não encontrado')
+    },
+    estado: async () => ({ saude: { plugin_versao: null, scripts_desatualizados: [], orca: { rodando: false, versao: null } } }),
+    existe: () => true
+  }).ler()
+  assert.equal(r.ok, false)
+  assert.deepEqual(r.itens.map((i) => i.ok), [false, false, false, true])
+  assert.match(achar(r, 'orca').detalhe, /^não verificado: orca não encontrado/)
+})
+
+test('requisitos: resultado fica 60 s e instalar só aceita orchestration', async () => {
+  let t = 1_000
+  const chamadas: string[][] = []
+  const req = requisitosCom({ chamadas, agora: () => t })
+  await req.ler()
+  t += 59_000
+  await req.ler()
+  assert.equal(chamadas.length, 2) // --version e skills installed, uma vez só
+  t += 2_000
+  await req.ler()
+  assert.equal(chamadas.length, 4)
+
+  for (const id of ['outra', 'orca', undefined, '--all']) {
+    await assert.rejects(req.instalar(id), (e: unknown) => (e as { code?: string }).code === 'instalacao_recusada')
+  }
+  assert.equal(chamadas.length, 4)
+  const r = await req.instalar('orchestration')
+  assert.deepEqual(chamadas[4], ['skills', 'install', '--skill', 'orchestration', '--json'])
+  assert.equal(chamadas.length, 7) // instalação + leitura nova ignorando o guardado
+  assert.equal(r.ok, true)
+})
+
+test('requisitos: instalação que falha vira instalacao_falhou', async () => {
+  const req = criarRequisitos({
+    orca: async (args) => {
+      if (args[1] === 'install') throw new Error('sem permissão')
+      return args[0] === '--version' ? '1.4.246' : skillsOk()
+    },
+    estado: async () => ({ saude: { plugin_versao: null, scripts_desatualizados: [], orca: { rodando: true, versao: null } } }),
+    existe: () => true
+  })
+  await assert.rejects(req.instalar('orchestration'), (e: unknown) => (e as { code?: string }).code === 'instalacao_falhou' && /sem permissão/.test((e as Error).message))
+})
+
+test('worker registra requisitos.instalar e recusa id alheio', async () => {
+  novaCasa('echo {}\n')
+  const worker = await mountWorker(main)
+  await assert.rejects(worker.request('requisitos.instalar', { id: 'outra' } as never), (e: unknown) => (e as { code?: string }).code === 'instalacao_recusada')
+  await worker.deactivate()
 })

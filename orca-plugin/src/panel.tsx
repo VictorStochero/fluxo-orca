@@ -32,6 +32,7 @@ import {
   type TableRow
 } from 'orca'
 import type { Conta, Estado, ItemFila, Requisitos, ValorFila } from './protocol'
+import { manterAtualizando } from './atualizacao'
 import { t } from './textos'
 
 type Erro = { code: string; message: string }
@@ -103,10 +104,15 @@ export async function atualizar(): Promise<void> {
   }
 }
 
+function posicaoPapel(p: string): number {
+  const i = t.pool.ordemPapeis.indexOf(p)
+  return i < 0 ? t.pool.ordemPapeis.length : i
+}
+
 export function setup(ctx: PanelContext): void {
   ctx.subscriptions.push(plugin.on('estado.mudou', () => void atualizar()))
   void storage.get(CHAVE_INTERVALO).then((v) => typeof v === 'number' && set(intervalo, v))
-  // Entra no merge com o branch painel-auto: import { manterAtualizando } from './atualizacao'; void manterAtualizando(ctx.signal)
+  void manterAtualizando(ctx.signal)
   void atualizar()
 }
 
@@ -408,9 +414,9 @@ function EdicaoConta({ c, e }: { c: Conta; e: Estado }) {
         <Text weight="medium" size="sm">
           {t.pool.papeis}
         </Text>
-        {e.pool.papeis_validos.map((p) => (
+        {[...e.pool.papeis_validos].sort((a, b) => posicaoPapel(a) - posicaoPapel(b)).map((p) => (
           <Row key={p} gap="xs" align="center">
-            <Checkbox label={p} checked={papeis.includes(p)} onChange={(m) => alterna(p, m)} />
+            <Checkbox label={t.pool.nomesPapel[p] ?? p} checked={papeis.includes(p)} onChange={(m) => alterna(p, m)} />
             <Dica texto={t.pool.dicasPapel[p] ?? p} />
           </Row>
         ))}
@@ -466,7 +472,7 @@ function NovaConta({ e }: { e: Estado }) {
           label={t.pool.novaAgente}
           value={agente || undefined}
           placeholder={t.pool.novaAgentePlaceholder}
-          options={e.pool.catalogo.map((a) => ({ value: a, label: a }))}
+          options={e.pool.catalogo.map((a) => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) }))}
           onChange={(x) => mudar('nova.agente', x)}
         />
       </ComDica>
@@ -521,7 +527,7 @@ function ConfigPool({ e }: { e: Estado }) {
         <Select
           label={t.pool.escolha}
           value={ed['pool.escolha'] ?? pool.escolha}
-          options={[{ value: 'ritmo', label: 'ritmo' }, { value: 'ordem', label: 'ordem' }]}
+          options={[{ value: 'ritmo', label: t.pool.escolhaOpcoes.ritmo }, { value: 'ordem', label: t.pool.escolhaOpcoes.ordem }]}
           onChange={(x) => mudar('pool.escolha', x)}
         />
       </ComDica>

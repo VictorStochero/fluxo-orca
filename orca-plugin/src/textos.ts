@@ -88,7 +88,8 @@ export const t = {
   pool: {
     titulo: 'Pool de agentes',
     resumo: (usadas: number, teto: number, ramMin: number, escolha: string) =>
-      `máquina ${usadas}/${teto || '∞'} · ram_min ${ramMin} GB · escolha ${escolha}`,
+      `Agentes ${usadas}/${teto || '∞'} · RAM mínima ${ramMin} GB · Escritor ${escolha === 'ordem' ? 'pela ordem da tabela' : 'pelo ritmo da cota'}`,
+    escolhaOpcoes: { ritmo: 'Ritmo da cota', ordem: 'Ordem da tabela' } as Record<string, string>,
     semContas: 'Nenhuma conta no registro.',
     tabela: 'Contas do pool',
     colConta: 'Conta',
@@ -133,8 +134,18 @@ export const t = {
       agente: 'Agente do catálogo (agentes-catalogo.conf) a que esta conta pertence: define comando, argumentos e medidor.',
       teto: 'Máximo de agentes trabalhando ao mesmo tempo na máquina, somando todas as contas. 0 = sem limite.',
       ramMin: 'Memória livre mínima (GB) para reservar uma vaga nova. 0 = desligado.',
-      escolha: 'Ritmo: escolhe o escritor pela cota que mais sobra × peso. Ordem: vale a ordem da tabela do Pool, de cima para baixo.'
+      escolha: 'Ritmo da cota: o escritor é a conta com mais cota sobrando × peso. Ordem da tabela: a primeira conta da tabela do Pool com vaga e cota abaixo do teto.'
     },
+    // Do maior para o menor nível de responsabilidade; papel fora da lista vai para o fim.
+    ordemPapeis: ['orquestra', 'revisor', 'verificador', 'escritor', 'segunda-opiniao', 'mecanico'],
+    nomesPapel: {
+      orquestra: 'Orquestra',
+      revisor: 'Revisor',
+      verificador: 'Verificador',
+      escritor: 'Escritor',
+      'segunda-opiniao': 'Segunda opinião',
+      mecanico: 'Mecânico'
+    } as Record<string, string>,
     dicasPapel: {
       escritor: 'Implementa a tarefa: código, testes e commit no worktree.',
       revisor: 'Gate de merge só leitura: revisa comportamento e arquitetura; também faz a auditoria antes de subir.',
@@ -145,7 +156,7 @@ export const t = {
     } as Record<string, string>,
     contasTitulo: 'Contas',
     escolherConta: 'Conta a configurar',
-    ordemNaTabela: 'Posição na tabela (vale com a escolha Ordem)',
+    ordemNaTabela: 'Posição na tabela do Pool (usada quando o escritor é escolhido pela ordem da tabela)',
     foraDoPoolExplica: 'Conta detectada pelo Orca que ainda não está no agentes.conf: adicione para ela entrar no pool.',
     subir: 'Subir',
     descer: 'Descer',

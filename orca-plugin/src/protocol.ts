@@ -78,8 +78,23 @@ export type Estado = {
   }
 }
 
+/** `acao`: o painel executa por `requisitos.instalar`; `comando`: texto para o usuário rodar. */
+export type RequisitoItem = {
+  id: string
+  nome: string
+  ok: boolean
+  detalhe: string
+  instalar?: { tipo: 'acao' | 'comando'; texto: string }
+}
+
+export type Requisitos = { ok: boolean; itens: RequisitoItem[] }
+
 declare module 'orca' {
   interface PluginRequests {
+    /** Orca, skills e scripts do fluxo; guardado por 60 s. Itens: orca, orchestration, skills-fluxo, scripts. */
+    'requisitos.ler': { output: Requisitos }
+    /** Só `orchestration` (`orca skills install --skill orchestration`); devolve `requisitos.ler` novo. Outro id: erro `instalacao_recusada`. */
+    'requisitos.instalar': { input: { id: 'orchestration' }; output: Requisitos }
     /** Roda o coletor (`~/.cache/painel.sh --json`) e devolve o estado da máquina. */
     'estado.ler': { output: Estado }
     /** Confere o que o painel precisa para funcionar; com `ok: false` o painel mostra só os requisitos. */
