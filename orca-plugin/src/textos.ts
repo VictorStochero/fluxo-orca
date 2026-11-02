@@ -39,7 +39,8 @@ export const t = {
     linhas: {
       fila: 'Como os testes esperam a vez — ~/.claude/fila.conf',
       pool: 'Limites da máquina e como o escritor é escolhido — ~/.claude/agentes.conf',
-      contas: 'Vagas, peso, papéis e ordem de cada conta — ~/.claude/agentes.conf',
+      contas:
+        'Vagas, peso, papéis e ordem de cada conta — ~/.claude/agentes.conf. As contas detectadas pelo Orca entram no pool sozinhas; as manuais são CLIs personalizados, cadastrados em "Nova conta manual".',
       painel: 'Este painel — guardado no Orca'
     }
   },
@@ -98,7 +99,9 @@ export const t = {
     colSemanal: 'Semanal',
     percentual: (v: number | null, alerta: boolean) => `${alerta ? '⚠ ' : ''}${pct(v)}`,
     vagasDaConta: (usadas: number, vagas: number) => `${usadas}/${vagas || '∞'}`,
-    foraDoPool: 'fora',
+    naoUtilizada: 'não utilizada',
+    situacao: 'Situação',
+    naoUtilizadaDetalhe: 'Não utilizada: continua listada e medida, mas não recebe trabalho nem conta no teto.',
     agente: 'Agente',
     peso: 'Peso',
     pesoDaConta: 'Peso da conta',
@@ -118,20 +121,21 @@ export const t = {
     escolha: 'Escolha do escritor',
     rotulo: 'Conta no Orca',
     editar: (nome: string) => `Editar ${nome}`,
-    adicionar: 'Adicionar ao pool',
+    naoUtilizar: 'Não utilizar',
     remover: 'Remover do pool',
     confirmarRemocao: (nome: string) => `Remover ${nome} do agentes.conf?`,
     confirmar: 'Confirmar remoção',
     cancelar: 'Cancelar',
     config: 'Diretório de config (CLAUDE_CONFIG_DIR etc.)',
-    comando: 'Comando do lançador',
-    novaConfig: 'Diretório de config da nova conta',
+    comandoCli: 'Comando do CLI',
+    novaConfig: 'Diretório de config',
     dicas: {
+      naoUtilizar: 'A conta continua listada e medida, mas não recebe trabalho nem conta no teto. Desmarque para voltar a usar.',
+      novoComando: 'Comando que abre o CLI desta conta, por exemplo claude-b ou CLAUDE_CONFIG_DIR=~/.claude-b claude. Informe o comando, o diretório de config ou os dois.',
+      novoConfig: 'Pasta de configuração do CLI, por exemplo ~/.claude-b. Informe o diretório de config, o comando ou os dois.',
       vagas: 'Quantos agentes desta conta podem trabalhar ao mesmo tempo. 0 = sem limite próprio (o teto da máquina continua valendo).',
       peso: 'Prioridade na escolha do escritor: multiplica o ritmo da cota. Peso 10 é escolhido bem antes de peso 1 com a mesma folga. Ignorado quando a escolha é Ordem.',
       config: 'Pasta de configuração do agente (por exemplo CLAUDE_CONFIG_DIR) que separa esta conta das outras do mesmo agente. Vazio = a conta padrão do sistema.',
-      comando: 'Comando que o lançador usa para abrir este agente, quando for diferente do comando padrão do catálogo.',
-      agente: 'Agente do catálogo (agentes-catalogo.conf) a que esta conta pertence: define comando, argumentos e medidor.',
       teto: 'Máximo de agentes trabalhando ao mesmo tempo na máquina, somando todas as contas. 0 = sem limite.',
       ramMin: 'Memória livre mínima (GB) para reservar uma vaga nova. 0 = desligado.',
       escolha: 'Ritmo da cota: o escritor é a conta com mais cota sobrando × peso. Ordem da tabela: a primeira conta da tabela do Pool com vaga e cota abaixo do teto.'
@@ -157,13 +161,10 @@ export const t = {
     contasTitulo: 'Contas',
     escolherConta: 'Conta a configurar',
     ordemNaTabela: 'Posição na tabela do Pool (usada quando o escritor é escolhido pela ordem da tabela)',
-    foraDoPoolExplica: 'Conta detectada pelo Orca que ainda não está no agentes.conf: adicione para ela entrar no pool.',
     subir: 'Subir',
     descer: 'Descer',
     nova: 'Nova conta manual',
-    novaNome: 'Nome da conta',
-    novaAgente: 'Agente do catálogo',
-    novaAgentePlaceholder: 'Escolha o agente',
+    novaNome: 'Nome',
     novaCriar: 'Adicionar conta'
   }
 }

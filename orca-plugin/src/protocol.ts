@@ -39,6 +39,8 @@ export type Conta = {
   config: string | null
   /** O Orca também enxerga esta conta (cota nativa). */
   detectada: boolean
+  /** false = "Não utilizar": listada e medida, mas fora do trabalho e do teto. */
+  ativo: boolean
 }
 
 export type ItemFila = 'modo' | 'vagas' | 'vagas_projeto' | 'teto' | 'processos'

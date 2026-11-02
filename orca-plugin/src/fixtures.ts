@@ -41,10 +41,11 @@ export const estadoExemplo: Estado = {
         rotulo: null,
         config: null,
         detectada: false,
+        ativo: true,
         cota: { texto: 'pessoal: sessão 90% usado | semana 25% usado, zera 6 nov 20:00', curta: 90, longa: 25, medida_ha_min: 45, alerta: true }
       },
-      { nome: 'codex', agente: 'codex', vagas: 1, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: { texto: '5h 24% (zera 14:48) · semana 42% (zera qua., 10:01)', curta: 24, longa: 42, medida_ha_min: 1, alerta: false, fonte: 'orca' }, origem: 'manual', rotulo: 'eu@exemplo.com', config: null, detectada: true },
-      { nome: 'claude-abcdef12', agente: 'claude', vagas: 0, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: null, origem: 'orca', rotulo: 'gerenciada@exemplo.com', config: null, detectada: true }
+      { nome: 'codex', agente: 'codex', vagas: 1, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: { texto: '5h 24% (zera 14:48) · semana 42% (zera qua., 10:01)', curta: 24, longa: 42, medida_ha_min: 1, alerta: false, fonte: 'orca' }, origem: 'manual', rotulo: 'eu@exemplo.com', config: null, detectada: true, ativo: true },
+      { nome: 'claude-abcdef12', agente: 'claude', vagas: 1, usadas: 0, peso: 1, papeis: [], ocupantes: [], cota: null, origem: 'manual', rotulo: 'gerenciada@exemplo.com', config: null, detectada: true, ativo: false }
     ]
   }
 }

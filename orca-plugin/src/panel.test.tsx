@@ -87,7 +87,7 @@ test('Configurações: seção recolhida no fim, com abas Fila · Pool · Contas
   await view.select({ label: 'Assuntos das configurações' }, 'pool')
   assert.ok(view.find({ text: /^Limites da máquina e como o escritor é escolhido — ~\/\.claude\/agentes\.conf/ }))
   await view.select({ label: 'Assuntos das configurações' }, 'contas')
-  assert.ok(view.find({ text: /^Vagas, peso, papéis e ordem de cada conta — ~\/\.claude\/agentes\.conf/ }))
+  assert.ok(view.find({ text: /^Vagas, peso, papéis e ordem de cada conta — ~\/\.claude\/agentes\.conf\. As contas detectadas pelo Orca entram no pool sozinhas; as manuais são CLIs personalizados/ }))
   await view.select({ label: 'Assuntos das configurações' }, 'painel')
   assert.ok(view.find({ text: /^Este painel — guardado no Orca/ }))
 })
@@ -109,14 +109,30 @@ test('Configurações > Pool: escolher a conta na lista mostra o formulário del
   }
 })
 
-test('conta detectada fora do pool: escolhida na lista, traz Adicionar ao pool e nenhum formulário', async () => {
+test('conta inativa: marcada na tabela, explicada no detalhe e com "Não utilizar" marcado; não existe mais Adicionar ao pool', async () => {
+  view = await mount(panel, { host: hostCom() })
+  assert.ok(view.find({ type: 'Table', text: /claude-abcdef12 \(não utilizada\)/ }))
+  assert.equal(view.find({ type: 'Table', text: /pessoal \(não utilizada\)/ }), null)
+  await view.selectRows(POOL, ['claude-abcdef12'])
+  assert.ok(view.find({ type: 'Table', text: /Não utilizada: continua listada e medida/ }))
+  await abrir(view, 'contas')
+  assert.equal(view.find({ type: 'Checkbox', label: 'Não utilizar' })?.props.checked, false) // a primeira (pessoal) está ativa
+  await view.select({ label: 'Conta a configurar' }, 'claude-abcdef12')
+  assert.equal(view.find({ type: 'Checkbox', label: 'Não utilizar' })?.props.checked, true)
+  assert.equal(view.find({ type: 'Button', text: 'Adicionar ao pool' }), null)
+})
+
+test('"Não utilizar" grava conta.<nome>.ativo=nao e, desmarcada, =sim; a dica explica o efeito', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
   await abrir(view, 'contas')
+  assert.ok(view.find({ type: 'IconButton', label: /^A conta continua listada e medida, mas não recebe trabalho nem conta no teto/ }))
+  await view.toggle({ label: 'Não utilizar' })
+  await view.press({ type: 'Button', text: 'Salvar' })
   await view.select({ label: 'Conta a configurar' }, 'claude-abcdef12')
-  assert.equal(view.find({ label: 'Peso da conta' }), null)
-  await view.press({ type: 'Button', text: 'Adicionar ao pool' })
-  assert.deepEqual(enviados, [{ 'conta.claude-abcdef12.adicionar': 'claude' }])
+  await view.toggle({ label: 'Não utilizar' })
+  await view.press({ type: 'Button', text: 'Salvar' })
+  assert.deepEqual(enviados, [{ 'conta.pessoal.ativo': 'nao' }, { 'conta.claude-abcdef12.ativo': 'sim' }])
 })
 
 test('editar a conta escolhida manda só o que mudou e mostra o estado novo', async () => {
@@ -146,10 +162,11 @@ test('setas ↑/↓ da conta escolhida: gravam pool.ordem com a lista completa; 
   await abrir(view, 'contas')
   assert.equal(view.find({ type: 'IconButton', label: 'Subir' })?.disabled, true) // pessoal é a primeira
   assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, false)
+  await view.select({ label: 'Conta a configurar' }, 'claude-abcdef12')
+  assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, true) // a inativa também entra na ordem, e é a última
   await view.select({ label: 'Conta a configurar' }, 'codex')
-  assert.equal(view.find({ type: 'IconButton', label: 'Descer' })?.disabled, true) // codex é a última do pool
   await view.press({ type: 'IconButton', label: 'Subir' })
-  assert.deepEqual(enviados, [{ 'pool.ordem': 'codex,pessoal' }])
+  assert.deepEqual(enviados, [{ 'pool.ordem': 'codex,pessoal,claude-abcdef12' }])
 })
 
 test('Remover do pool pede confirmação e só então grava conta.<nome>.remover=1', async () => {
@@ -167,20 +184,40 @@ test('Remover do pool pede confirmação e só então grava conta.<nome>.remover
   assert.deepEqual(enviados, [{ 'conta.codex.remover': '1' }])
 })
 
-test('Nova conta manual: nome, agente do catálogo e config viram um único pedido, com dicas', async () => {
+test('Nova conta manual: nome, comando do CLI e diretório de config (um dos dois basta) viram adicionar=auto, com dicas e sem agente do catálogo', async () => {
   const enviados: unknown[] = []
   view = await mount(panel, { host: hostCom(enviados) })
   await abrir(view, 'contas')
-  for (const trecho of [/^Agente do catálogo \(agentes-catalogo/, /^Comando que o lançador/]) {
+  for (const trecho of [/^Comando que abre o CLI desta conta/, /^Pasta de configuração do CLI/]) {
     assert.ok(view.find({ type: 'IconButton', label: trecho }), String(trecho))
   }
+  assert.equal(view.find({ label: 'Agente do catálogo' }), null)
   assert.equal(view.find({ type: 'Button', text: 'Adicionar conta' })?.disabled, true)
-  await view.type({ label: 'Nome da conta' }, 'minha')
-  await view.select({ label: 'Agente do catálogo' }, 'codex')
-  await view.type({ label: 'Diretório de config da nova conta' }, '~/.codex-minha')
+  await view.type({ label: 'Nome' }, 'minha')
+  assert.equal(view.find({ type: 'Button', text: 'Adicionar conta' })?.disabled, true) // falta comando ou config
+  await view.type({ label: 'Diretório de config' }, '~/.claude-b')
+  await view.type({ label: 'Comando do CLI' }, 'claude-b')
   await view.press({ type: 'Button', text: 'Adicionar conta' })
-  assert.deepEqual(enviados, [{ 'conta.minha.adicionar': 'codex', 'conta.minha.config': '~/.codex-minha' }])
-  assert.equal(view.valueOf({ label: 'Nome da conta' }), '')
+  assert.deepEqual(enviados, [{ 'conta.minha.adicionar': 'auto', 'conta.minha.config': '~/.claude-b', 'conta.minha.comando': 'claude-b' }])
+  assert.equal(view.valueOf({ label: 'Nome' }), '')
+})
+
+test('Nova conta manual: só o comando também vale, e a recusa do backend aparece em português', async () => {
+  const host = mockHost({
+    requests: {
+      'estado.ler': () => estadoExemplo,
+      'config.gravar': () => {
+        throw hostError('config_recusada', 'Não consegui deduzir o agente de "xpto".')
+      }
+    }
+  })
+  view = await mount(panel, { host })
+  await abrir(view, 'contas')
+  await view.type({ label: 'Nome' }, 'minha')
+  await view.type({ label: 'Comando do CLI' }, 'xpto')
+  await view.press({ type: 'Button', text: 'Adicionar conta' })
+  assert.ok(view.find({ text: 'Não consegui deduzir o agente de "xpto".' }))
+  assert.equal(view.valueOf({ label: 'Nome' }), 'minha')
 })
 
 test('modo da fila: cada opção é um rádio com o ícone de dica ao lado, sem linhas repetidas', async () => {
