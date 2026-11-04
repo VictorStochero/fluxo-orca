@@ -81,6 +81,8 @@ existe 'plugin instalado depois entra (agy)' "$agy/laravel-worktree/SKILL.md"
 
 # Segunda execução: nada copiado.
 sem_cp 'segunda sessão não roda cp nem diff' diff
+# Coordenador sem CLAUDE_CONFIG_DIR e worker com ela apontando para a mesma pasta: mesma assinatura.
+CLAUDE_CONFIG_DIR= sem_cp 'sessão sem CLAUDE_CONFIG_DIR depois de uma com ela não roda cp nem diff' diff
 
 # Pasta ou link alheio com o mesmo nome (fora do marcador) não é tocado.
 mar=.fluxo-orca.plugin-auditoria-pre-subida

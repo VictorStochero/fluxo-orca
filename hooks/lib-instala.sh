@@ -130,8 +130,14 @@ copia_skills_plugins() { # raiz-do-plugin destino [--dry]: --dry só diz, em PLU
 # Assinatura do que o hook copia para um destino: versão do fluxo-orca + soma do installed_plugins.json em uso.
 # Igual à gravada no destino, a cópia (skills do fluxo-orca e dos plugins) é pulada; o reparo de cópia editada à mão espera a assinatura mudar.
 assinatura_skills() { # raiz-do-plugin
-    local c soma
-    soma=$(for c in "${CLAUDE_CONFIG_DIR:-}" "$HOME/.claude"; do [ -n "$c" ] && cat "$c/plugins/installed_plugins.json" 2>/dev/null; done | cksum)
+    local c f vistos='' soma
+    # Cada arquivo uma vez pelo caminho físico: as contas ligam plugins/ à mesma pasta, e a soma não pode mudar com a conta.
+    soma=$(for c in "${CLAUDE_CONFIG_DIR:-}" "$HOME/.claude"; do
+        [ -n "$c" ] && [ -f "$c/plugins/installed_plugins.json" ] || continue
+        f=$(cd -P "$c/plugins" 2>/dev/null && pwd) || continue
+        case "$vistos" in *"|$f|"*) continue ;; esac
+        vistos="$vistos|$f|"; cat "$f/installed_plugins.json"
+    done | cksum)
     printf '%s %s\n' "$(versao_do_plugin "$1")" "$soma"
 }
 
