@@ -1,0 +1,5 @@
+# Plugins do Claude Code cujas skills também vão para os CLIs externos (Codex, agy). Um por linha; lido por lib-instala.sh.
+# A origem é a versão ativa (installPath em installed_plugins.json); plugin não instalado é pulado.
+auditoria-pre-subida
+ponytail
+laravel-worktree

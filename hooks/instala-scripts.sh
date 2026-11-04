@@ -24,5 +24,13 @@ if command -v cygpath >/dev/null 2>&1; then
     gera_cmd fim-worker-codex.cmd fim-worker.sh codex
 fi
 
-copia_skills "$CLAUDE_PLUGIN_ROOT" "$HOME/.agents/skills"
+# Destinos de skills vêm do catálogo; ~/.agents/skills vale com qualquer um dos dois, o do agy só com ele.
+catalogo="$CLAUDE_PLUGIN_ROOT/skills/limites-cota/agentes-catalogo.conf"
+destinos=$(skills_do_catalogo "$catalogo" codex)
+command -v agy >/dev/null 2>&1 && destinos=$destinos$'\n'$(skills_do_catalogo "$catalogo" antigravity)
+while IFS= read -r destino; do
+    [ -n "$destino" ] || continue
+    copia_skills "$CLAUDE_PLUGIN_ROOT" "$destino"
+    copia_skills_plugins "$CLAUDE_PLUGIN_ROOT" "$destino"
+done <<< "$destinos"
 exit 0
