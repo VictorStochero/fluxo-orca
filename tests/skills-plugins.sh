@@ -43,17 +43,18 @@ instalados() { # nome=caminho...: grava o installed_plugins.json falso (caminho 
     printf '{"version": 2, "plugins": {%s}}\n' "$json" > "$HOME/.claude/plugins/installed_plugins.json"
 }
 sessao() { echo '{"source":"startup"}' | CLAUDE_PLUGIN_ROOT="$raiz" bash "$raiz/hooks/instala-scripts.sh" 2>&1; }
-sem_cp() { # roda a sessão com um cp que denuncia qualquer cópia
-    cat > "$tmp/bin/cp" <<E
-#!/bin/sh
-echo "\$@" >> "$tmp/cp.log"
-exec /usr/bin/cp "\$@"
-E
-    chmod +x "$tmp/bin/cp"; : > "$tmp/cp.log"
+sem_cp() { # mensagem [diff]: roda a sessão com cp (e diff, se pedido) que denunciam qualquer chamada
+    local f
+    for f in cp diff; do
+        printf '#!/bin/sh\necho "$@" >> "%s/%s.log"\nexec /usr/bin/%s "$@"\n' "$tmp" "$f" "$f" > "$tmp/bin/$f"
+        chmod +x "$tmp/bin/$f"; : > "$tmp/$f.log"
+    done
     sessao > /dev/null
-    igual "$1" '' "$(cat "$tmp/cp.log")"
-    rm "$tmp/bin/cp"
+    igual "$1" '' "$(cat "$tmp/cp.log")$([ "${2:-}" = diff ] && cat "$tmp/diff.log")"
+    rm "$tmp/bin/cp" "$tmp/bin/diff"
 }
+# O reparo de cópia editada à mão só roda quando a assinatura do destino muda: o teste a invalida.
+invalida() { rm -f "$HOME/.agents/skills/.fluxo-orca.assinatura" "$HOME/.gemini/config/skills/.fluxo-orca.assinatura"; }
 
 aud=$(falso_plugin auditoria-pre-subida 1.3.0 auditar)
 pon=$(falso_plugin ponytail 5.3.2 ponytail ponytail-audit ponytail-review)
@@ -79,10 +80,11 @@ existe 'plugin instalado depois entra (codex)' "$agentes/laravel-worktree/SKILL.
 existe 'plugin instalado depois entra (agy)' "$agy/laravel-worktree/SKILL.md"
 
 # Segunda execução: nada copiado.
-sem_cp 'segunda execução não copia nada'
+sem_cp 'segunda sessão não roda cp nem diff' diff
 
 # Pasta ou link alheio com o mesmo nome (fora do marcador) não é tocado.
 mar=.fluxo-orca.plugin-auditoria-pre-subida
+invalida
 rm -rf "$agentes/auditar" "$agy/auditar" "$agentes/$mar" "$agy/$mar"
 mkdir -p "$agentes/auditar"; echo meu > "$agentes/auditar/SKILL.md"; ln -s "$tmp/cache" "$agy/auditar"; link=0; [ -L "$agy/auditar" ] && link=1
 saida=$(sessao)
@@ -91,13 +93,17 @@ contem 'pasta alheia avisa' 'auditar não copiada' "$saida"
 if [ "$link" = 1 ]; then [ -L "$agy/auditar" ] && ok 'link alheio intocado' || ruim 'link alheio foi substituído'; else echo 'pulado: link alheio (sem symlink neste Windows)'; fi
 existe 'o resto do plugin segue copiado' "$agentes/ponytail-review/SKILL.md"
 rm -rf "$agentes/auditar" "$agy/auditar"
+invalida
 sessao > /dev/null
 igual 'pasta removida volta na sessão seguinte' 'auditoria-pre-subida 1.3.0' "$(cat "$agentes/auditar/SKILL.md")"
 
-# Cópia nossa alterada à mão é refeita.
+# Cópia nossa alterada à mão: mesma assinatura não a refaz; installed_plugins.json alterado refaz.
 echo editado > "$agy/ponytail-review/SKILL.md"
 sessao > /dev/null
-igual 'cópia alterada é refeita' 'ponytail 5.3.2' "$(cat "$agy/ponytail-review/SKILL.md")"
+igual 'mesma assinatura: cópia alterada fica' editado "$(cat "$agy/ponytail-review/SKILL.md")"
+echo ' ' >> "$HOME/.claude/plugins/installed_plugins.json"
+sessao > /dev/null
+igual 'installed_plugins.json alterado recopia' 'ponytail 5.3.2' "$(cat "$agy/ponytail-review/SKILL.md")"
 
 # Versão nova atualiza; versão mais velha não rebaixa.
 pon2=$(falso_plugin ponytail 5.4.0 ponytail ponytail-audit ponytail-review)

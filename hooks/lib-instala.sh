@@ -16,7 +16,7 @@ copia_scripts() { # raiz-do-plugin destino
     mkdir -p "$2"
     while IFS= read -r s || [ -n "$s" ]; do
         case "$s" in '' | '#'*) continue ;; esac
-        cmp -s "$1/$s" "$2/$(basename "$s")" || cp "$1/$s" "$2/"
+        cmp -s "$1/$s" "$2/${s##*/}" || cp "$1/$s" "$2/"
     done < "$1/hooks/scripts.lista"
     # Só os nomes da lista: o agent-pool substitui esses scripts, e nada além deles é tocado.
     while IFS= read -r s || [ -n "$s" ]; do
@@ -52,7 +52,7 @@ copia_skills() { # raiz-do-plugin destino: o cache do plugin muda de caminho a c
     mkdir -p "$2"
     versao_permite "$1" "$2/.fluxo-orca.versao" || { avisa_mais_nova "$1" "$2/.fluxo-orca.versao"; return 0; }
     for d in "$1"/skills/*/; do
-        n=$(basename "$d"); alvo="$2/$n"
+        n=${d%/}; n=${n##*/}; alvo="$2/$n"
         [ ! -L "$alvo" ] && diff -rq "$d" "$alvo" >/dev/null 2>&1 && continue
         rm -rf "$alvo"; cp -r "$d" "$alvo"
     done
@@ -82,13 +82,22 @@ copia_skills_plugins() { # raiz-do-plugin destino [--dry]: --dry só diz, em PLU
     [ -f "$lista" ] || return 0
     while IFS= read -r p || [ -n "$p" ]; do
         p=${p%$'\r'}; case "$p" in '' | '#'*) continue ;; esac
-        r=$(raiz_do_plugin "$p") || continue
+        # raiz_do_plugin lê e filtra o JSON: uma vez por plugin, não por destino.
+        case "$RAIZES_PLUGINS" in
+            *$'
+'"$p="*) r=${RAIZES_PLUGINS#*$'
+'"$p="}; r=${r%%$'
+'*} ;;
+            *) r=$(raiz_do_plugin "$p") || r=; RAIZES_PLUGINS=$RAIZES_PLUGINS$'
+'"$p=$r" ;;
+        esac
+        [ -n "$r" ] || continue
         marc="$2/.fluxo-orca.plugin-$p"
         versao_permite "$r" "$marc" || { avisa_mais_nova "$r" "$marc"; continue; }
         donas=$'\n'$(tail -n +2 "$marc" 2>/dev/null)$'\n'; conteudo=$(versao_do_plugin "$r")
         for d in "$r"/skills/*/; do
             [ -f "$d/SKILL.md" ] || continue
-            n=$(basename "$d"); alvo="$2/$n"
+            n=${d%/}; n=${n##*/}; alvo="$2/$n"
             if [ -e "$alvo" ] || [ -L "$alvo" ]; then
                 if [ -L "$alvo" ] || [[ "$donas" != *$'\n'"$n"$'\n'* ]]; then
                     echo "fluxo-orca: $alvo não é cópia do plugin $p; skill $n não copiada" >&2; continue
@@ -105,6 +114,15 @@ copia_skills_plugins() { # raiz-do-plugin destino [--dry]: --dry só diz, em PLU
         PLUGINS_MUDOU=1
         [ "${3:-}" = --dry ] || printf '%s\n' "$conteudo" > "$marc"
     done < "$lista"
+}
+
+# Assinatura do que o hook copia para um destino: versão do fluxo-orca + soma do installed_plugins.json em uso.
+# Igual à gravada no destino, a cópia (skills do fluxo-orca e dos plugins) é pulada; o reparo de cópia editada à mão espera a assinatura mudar.
+assinatura_skills() { # raiz-do-plugin
+    local c soma
+    soma=$(for c in "${CLAUDE_CONFIG_DIR:-}" "$HOME/.claude"; do [ -n "$c" ] && cat "$c/plugins/installed_plugins.json" 2>/dev/null; done | cksum)
+    printf '%s %s
+' "$(versao_do_plugin "$1")" "$soma"
 }
 
 # Windows: os CLIs chamam o hook por .cmd. Tem de ser o Git\bin\bash.exe, que monta o PATH do Git;
