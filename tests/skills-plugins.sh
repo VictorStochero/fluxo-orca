@@ -151,4 +151,13 @@ nao_contem 'sessão interrompida: a seguinte não avisa' 'não é cópia' "$said
 existe 'sessão interrompida: a seguinte completa (codex)' "$agentes/lw-c/SKILL.md"
 existe 'sessão interrompida: a seguinte completa (agy)' "$agy/lw-c/SKILL.md"
 
+# Skill que sai do plugin: a pasta nossa some nos dois destinos.
+pon3=$(falso_plugin ponytail 5.5.0 ponytail ponytail-review)
+instalados "auditoria-pre-subida=$aud" "ponytail=$pon3" "laravel-worktree=$lw2"
+sessao > /dev/null
+nao_existe 'skill removida do plugin some (codex)' "$agentes/ponytail-audit"
+nao_existe 'skill removida do plugin some (agy)' "$agy/ponytail-audit"
+existe 'as demais do plugin ficam' "$agy/ponytail-review/SKILL.md"
+nao_contem 'marcador sem a skill removida' 'ponytail-audit' "$(cat "$agy/.fluxo-orca.plugin-ponytail")"
+
 [ "$falhas" = 0 ] && echo "tudo ok" || { echo "$falhas falha(s)"; exit 1; }

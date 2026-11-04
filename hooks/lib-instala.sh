@@ -100,6 +100,13 @@ copia_skills_plugins() { # raiz-do-plugin destino [--dry]: --dry só diz, em PLU
             conteudo=$conteudo$'\n'$n
         done
         [[ "$conteudo" == *$'\n'* ]] || continue
+        # Skill que saiu do plugin: apaga a cópia (nossa pelo marcador antigo, que o passo seguinte reescreve); link nunca.
+        if [ "${3:-}" != --dry ]; then
+            while IFS= read -r n; do
+                case "$n" in '' | */* | . | ..) continue ;; esac
+                [[ "$conteudo"$'\n' == *$'\n'"$n"$'\n'* ]] || { [ -L "$2/$n" ] || rm -rf "${2:?}/$n"; }
+            done <<< "$donas"
+        fi
         # Marcador antes da cópia: sessão interrompida no meio não deixa skill copiada fora dele (seria tratada como alheia).
         if [ "$(cat "$marc" 2>/dev/null)" != "$conteudo" ]; then
             PLUGINS_MUDOU=1
