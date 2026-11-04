@@ -35,7 +35,6 @@ while IFS= read -r destino; do
     copia_skills "$CLAUDE_PLUGIN_ROOT" "$destino"
     copia_skills_plugins "$CLAUDE_PLUGIN_ROOT" "$destino"
     # Depois da cópia: sessão interrompida no meio não marca o destino como feito.
-    printf '%s
-' "$assinatura" > "$destino/.fluxo-orca.assinatura"
+    printf '%s\n' "$assinatura" > "$destino/.fluxo-orca.assinatura"
 done <<< "$destinos"
 exit 0

@@ -84,12 +84,8 @@ copia_skills_plugins() { # raiz-do-plugin destino [--dry]: --dry só diz, em PLU
         p=${p%$'\r'}; case "$p" in '' | '#'*) continue ;; esac
         # raiz_do_plugin lê e filtra o JSON: uma vez por plugin, não por destino.
         case "$RAIZES_PLUGINS" in
-            *$'
-'"$p="*) r=${RAIZES_PLUGINS#*$'
-'"$p="}; r=${r%%$'
-'*} ;;
-            *) r=$(raiz_do_plugin "$p") || r=; RAIZES_PLUGINS=$RAIZES_PLUGINS$'
-'"$p=$r" ;;
+            *$'\n'"$p="*) r=${RAIZES_PLUGINS#*$'\n'"$p="}; r=${r%%$'\n'*} ;;
+            *) r=$(raiz_do_plugin "$p") || r=; RAIZES_PLUGINS=$RAIZES_PLUGINS$'\n'"$p=$r" ;;
         esac
         [ -n "$r" ] || continue
         marc="$2/.fluxo-orca.plugin-$p"
@@ -98,21 +94,29 @@ copia_skills_plugins() { # raiz-do-plugin destino [--dry]: --dry só diz, em PLU
         for d in "$r"/skills/*/; do
             [ -f "$d/SKILL.md" ] || continue
             n=${d%/}; n=${n##*/}; alvo="$2/$n"
-            if [ -e "$alvo" ] || [ -L "$alvo" ]; then
-                if [ -L "$alvo" ] || [[ "$donas" != *$'\n'"$n"$'\n'* ]]; then
-                    echo "fluxo-orca: $alvo não é cópia do plugin $p; skill $n não copiada" >&2; continue
-                fi
-                diff -rq "$d" "$alvo" >/dev/null 2>&1 || { PLUGINS_MUDOU=1; [ "${3:-}" = --dry ] || { rm -rf "$alvo"; cp -r "$d" "$alvo"; }; }
-            else
-                PLUGINS_MUDOU=1
-                [ "${3:-}" = --dry ] || { mkdir -p "$2"; cp -r "$d" "$alvo"; }
+            if [ -L "$alvo" ] || { [ -e "$alvo" ] && [[ "$donas" != *$'\n'"$n"$'\n'* ]]; }; then
+                echo "fluxo-orca: $alvo não é cópia do plugin $p; skill $n não copiada" >&2; continue
             fi
             conteudo=$conteudo$'\n'$n
         done
         [[ "$conteudo" == *$'\n'* ]] || continue
-        [ "$(cat "$marc" 2>/dev/null)" = "$conteudo" ] && continue
-        PLUGINS_MUDOU=1
-        [ "${3:-}" = --dry ] || printf '%s\n' "$conteudo" > "$marc"
+        # Marcador antes da cópia: sessão interrompida no meio não deixa skill copiada fora dele (seria tratada como alheia).
+        if [ "$(cat "$marc" 2>/dev/null)" != "$conteudo" ]; then
+            PLUGINS_MUDOU=1
+            [ "${3:-}" = --dry ] || { mkdir -p "$2"; printf '%s\n' "$conteudo" > "$marc"; }
+        fi
+        conteudo=$conteudo$'\n'
+        for d in "$r"/skills/*/; do
+            [ -f "$d/SKILL.md" ] || continue
+            n=${d%/}; n=${n##*/}; alvo="$2/$n"
+            [[ "$conteudo" == *$'\n'"$n"$'\n'* ]] || continue
+            if [ -e "$alvo" ]; then
+                diff -rq "$d" "$alvo" >/dev/null 2>&1 || { PLUGINS_MUDOU=1; [ "${3:-}" = --dry ] || { rm -rf "$alvo"; cp -r "$d" "$alvo"; }; }
+            else
+                PLUGINS_MUDOU=1
+                [ "${3:-}" = --dry ] || cp -r "$d" "$alvo"
+            fi
+        done
     done < "$lista"
 }
 
@@ -121,8 +125,7 @@ copia_skills_plugins() { # raiz-do-plugin destino [--dry]: --dry só diz, em PLU
 assinatura_skills() { # raiz-do-plugin
     local c soma
     soma=$(for c in "${CLAUDE_CONFIG_DIR:-}" "$HOME/.claude"; do [ -n "$c" ] && cat "$c/plugins/installed_plugins.json" 2>/dev/null; done | cksum)
-    printf '%s %s
-' "$(versao_do_plugin "$1")" "$soma"
+    printf '%s %s\n' "$(versao_do_plugin "$1")" "$soma"
 }
 
 # Windows: os CLIs chamam o hook por .cmd. Tem de ser o Git\bin\bash.exe, que monta o PATH do Git;

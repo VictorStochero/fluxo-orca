@@ -138,4 +138,17 @@ nao_contem 'instala-agente: segunda execução não instala' '[instalado]' "$sai
 nao_contem 'instala-agente: segunda execução não planeja' '[instalaria]' "$saida"
 sem_cp 'sessão depois do instala-agente não copia nada'
 
+# Sessão interrompida no meio da cópia (cp falso: copia as duas primeiras skills do plugin e mata o hook na 3ª): a seguinte completa sem aviso.
+lw2=$(falso_plugin laravel-worktree 0.5.0 laravel-worktree lw-b lw-c)
+instalados "auditoria-pre-subida=$aud" "ponytail=$pon2" "laravel-worktree=$lw2"
+echo 0 > "$tmp/cp.n"
+printf '#!/bin/sh\ncase "$*" in *laravel-worktree*) n=$(cat "%s/cp.n"); [ "$n" -ge 2 ] && kill -9 $PPID; echo $((n + 1)) > "%s/cp.n" ;; esac\nexec /usr/bin/cp "$@"\n' "$tmp" "$tmp" > "$tmp/bin/cp"
+chmod +x "$tmp/bin/cp"
+sessao > /dev/null
+rm "$tmp/bin/cp"; invalida
+saida=$(sessao)
+nao_contem 'sessão interrompida: a seguinte não avisa' 'não é cópia' "$saida"
+existe 'sessão interrompida: a seguinte completa (codex)' "$agentes/lw-c/SKILL.md"
+existe 'sessão interrompida: a seguinte completa (agy)' "$agy/lw-c/SKILL.md"
+
 [ "$falhas" = 0 ] && echo "tudo ok" || { echo "$falhas falha(s)"; exit 1; }
