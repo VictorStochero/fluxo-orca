@@ -7,7 +7,7 @@ versao_permite() { # raiz-do-plugin marcador: 0 se a versão instalada não for 
     local v i; v=$(versao_do_plugin "$1"); i=$(head -1 "$2" 2>/dev/null)
     [ -z "$v" ] || [ -z "$i" ] || [ "$(printf '%s\n%s\n' "$i" "$v" | sort -V | tail -1)" = "$v" ]
 }
-avisa_mais_nova() { echo "fluxo-orca: $2 tem a versão $(head -1 "$2"),mais nova que $(versao_do_plugin "$1"); nada copiado (apague o marcador para forçar)" >&2; }
+avisa_mais_nova() { echo "fluxo-orca: $2 tem a versão $(head -1 "$2"), mais nova que $(versao_do_plugin "$1"); nada copiado (apague o marcador para forçar)" >&2; }
 grava_versao() { local v; v=$(versao_do_plugin "$1"); [ -z "$v" ] || printf '%s\n' "$v" > "$2"; }
 
 copia_scripts() { # raiz-do-plugin destino
