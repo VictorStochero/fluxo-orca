@@ -1,6 +1,6 @@
 # fluxo-orca
 
-Plugin do Claude Code (pt-BR), versão **3.0.0**, com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), o merge passa por um gate Opus e os testes, as vagas de worker e a cota das contas vêm do plugin **agent-pool** do Orca (CLI `agent-pool`). Hooks impõem as regras pessoais.
+Plugin do Claude Code (pt-BR), versão **3.1.0**, com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), o merge passa por um gate Opus e os testes, as vagas de worker e a cota das contas vêm do plugin **agent-pool** do Orca (CLI `agent-pool`). Hooks impõem as regras pessoais.
 
 O gate é a auditoria em repositório que versiona `.auditoria-pre-subida` (auditor Opus, verificador só com achado); nos demais, o revisor Opus é obrigatório. O pacote contém pedido/issue original, critério copiado do board, diff e interfaces, sem resumo ou justificativa de quem pede o merge. A sessão principal prova cada teste novo de correção falhando no código do merge-base. Pagamento, autorização/permissão, autenticação e alteração de dado de produção exigem segunda opinião de outra família sobre o diff: “ache o caso que quebra”.
 
@@ -43,12 +43,14 @@ Máquina já instalada: mande para o Claude Code (ou para o agente que coordena)
 | Agentes | `escritor` (Sonnet), `revisor` e `verificador` (Opus, só leitura) |
 | Hooks | `bloqueia-bulk`, `despacho-orca`, `guia-laravel`, `exige-transacao` (SQL de alteração via ssh/forge só em transação, COMMIT após ensaio com ROLLBACK), `instala-scripts` (copia os scripts e avisa quando o agent-pool não está instalado), `fim-worker` (worker do Orca não encerra sem `worker_done`); `guarda-externos` para os agentes externos |
 | Scripts (em `~/.cache`) | `wt-setup.sh`/`wt-archive.sh`/`wt-lib.sh` (worktree pelo Orca), `orca-espera.sh` (vigia em background: mensagem não lida dos workers, cota, início não observado e falta de progresso; rearma a cada 5 min), `orca-tela.sh` (últimas linhas úteis da tela de um terminal), `orca-libera.sh` (workers mantidos abertos, aba criada pelo `--cria` e vaga do pool), `guarda-externos.sh`, `fim-worker.sh` |
-| Agentes externos (opcional) | Codex e agy como workers do Orca, com as mesmas regras (`AGENTS.global.md`), as skills copiadas para `~/.agents/skills` e a trava de comando remoto; segunda conta Claude para escritores. Só entra o que estiver instalado (GUIA, fase 4b) |
+| Agentes externos (opcional) | Codex e agy como workers do Orca, com as mesmas regras (`AGENTS.global.md`), as skills copiadas a cada sessão (as do fluxo e as dos plugins `auditoria-pre-subida`, `ponytail` e `laravel-worktree`, lista em `hooks/skills-de-plugins.lista`) para `~/.agents/skills` e `~/.gemini/config/skills` e a trava de comando remoto; segunda conta Claude para escritores. Só entra o que estiver instalado (GUIA, fase 4b) |
 | Extras | `CLAUDE.global.md` (modelo de `~/.claude/CLAUDE.md`), `AGENTS.global.md` (modelo de `~/.agents/AGENTS.md`), `somente-leitura.json` |
 
 ## Outros agentes: worker e coordenador
 
 `instalar.sh --agente <id> [--aplicar]` instala regras, skills, trava de comando remoto e fim-worker no formato de cada agente, também para quem coordena **sem Claude Code** (GUIA, "Coordenar sem Claude Code"; sem os hooks do plugin, travas só onde o agente tem hook). Quem entra no pool, com que papel e se tem a imposição do agent-pool vem do próprio agent-pool (`agent-pool config get pool.contas`, `agent-pool doctor`); papel de trabalho (escritor, mecânico, revisor, verificador) só em agente com trava de comando remoto instalada e provada (GUIA, fase 4b, passo 7). Claude, Codex e agy (segunda opinião) rodam em uso nesta máquina; gemini, kimi, zcode, opencode e cursor-agent ficam em segunda opinião até a prova de despacho.
+
+Na 3.1.0, as skills dos plugins `auditoria-pre-subida`, `ponytail` e `laravel-worktree` também vão para o Codex (`~/.agents/skills`) e para o Antigravity (`~/.gemini/config/skills`), junto com as do fluxo-orca, copiadas no início da sessão só quando a versão do fluxo-orca ou o `installed_plugins.json` mudam.
 
 Na 3.0.0, o `orca-espera.sh` passa a ser obrigatório em background com worker rodando e sai também na mensagem não lida (`check --peek`): o wake do Orca não acorda sessão parada.
 

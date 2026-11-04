@@ -73,9 +73,11 @@ instala_skills() {
     for d in "$RAIZ"/skills/*/; do
         diff -rq "$d" "$dest/$(basename "$d")" >/dev/null 2>&1 || igual=0
     done
+    copia_skills_plugins "$RAIZ" "$dest" --dry 2>/dev/null
+    [ "$PLUGINS_MUDOU" = 1 ] && igual=0
     if [ $igual = 1 ]; then passo ja "skills em $dest"; return; fi
     passo novo "skills em $dest"
-    [ $APLICAR = 1 ] && copia_skills "$RAIZ" "$dest"
+    if [ $APLICAR = 1 ]; then copia_skills "$RAIZ" "$dest"; copia_skills_plugins "$RAIZ" "$dest"; fi
 }
 
 confia_codex() { # evento n comando timeout: hook novo do Codex só roda se estiver confiável no config.toml
