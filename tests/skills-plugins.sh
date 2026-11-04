@@ -83,6 +83,19 @@ existe 'plugin instalado depois entra (agy)' "$agy/laravel-worktree/SKILL.md"
 sem_cp 'segunda sessão não roda cp nem diff' diff
 # Coordenador sem CLAUDE_CONFIG_DIR e worker com ela apontando para a mesma pasta: mesma assinatura.
 CLAUDE_CONFIG_DIR= sem_cp 'sessão sem CLAUDE_CONFIG_DIR depois de uma com ela não roda cp nem diff' diff
+# Conta com pasta própria e plugins/ ligado à mesma pasta (como ~/.claude-b): só a resolução física dá a mesma assinatura.
+conta="$tmp/conta-b"; mkdir -p "$conta"
+if command -v cygpath >/dev/null 2>&1; then
+    # Junção não pede administrador; sem MSYS_NO_PATHCONV o Git Bash troca o /J por caminho.
+    MSYS_NO_PATHCONV=1 cmd /c mklink /J "$(cygpath -w "$conta/plugins")" "$(cygpath -w "$HOME/.claude/plugins")" > /dev/null 2>&1
+else
+    ln -s "$HOME/.claude/plugins" "$conta/plugins"
+fi
+if [ -f "$conta/plugins/installed_plugins.json" ]; then
+    CLAUDE_CONFIG_DIR="$conta" sem_cp 'conta com plugins ligado à mesma pasta não roda cp nem diff' diff
+else
+    echo 'pulado: conta com plugins ligado (link não criado neste sistema)'
+fi
 
 # Pasta ou link alheio com o mesmo nome (fora do marcador) não é tocado.
 mar=.fluxo-orca.plugin-auditoria-pre-subida
