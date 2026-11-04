@@ -144,10 +144,11 @@ sem_cp 'sessão depois do instala-agente não copia nada'
 lw2=$(falso_plugin laravel-worktree 0.5.0 laravel-worktree lw-b lw-c)
 instalados "auditoria-pre-subida=$aud" "ponytail=$pon2" "laravel-worktree=$lw2"
 echo 0 > "$tmp/cp.n"
-printf '#!/bin/sh\ncase "$*" in *laravel-worktree*) n=$(cat "%s/cp.n"); [ "$n" -ge 2 ] && kill -9 $PPID; echo $((n + 1)) > "%s/cp.n" ;; esac\nexec /usr/bin/cp "$@"\n' "$tmp" "$tmp" > "$tmp/bin/cp"
+printf '#!/bin/sh\ncase "$*" in *laravel-worktree*) n=$(cat "%s/cp.n"); [ "$n" -ge 2 ] && { kill -9 $PPID; exit 1; }; echo $((n + 1)) > "%s/cp.n" ;; esac\nexec /usr/bin/cp "$@"\n' "$tmp" "$tmp" > "$tmp/bin/cp"
 chmod +x "$tmp/bin/cp"
 sessao > /dev/null
-rm "$tmp/bin/cp"; invalida
+# Sem invalidar: a assinatura do destino interrompido é a velha, e a sessão seguinte refaz por ela.
+rm "$tmp/bin/cp"
 saida=$(sessao)
 nao_contem 'sessão interrompida: a seguinte não avisa' 'não é cópia' "$saida"
 existe 'sessão interrompida: a seguinte completa (codex)' "$agentes/lw-c/SKILL.md"
