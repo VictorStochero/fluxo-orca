@@ -9,7 +9,8 @@ for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break
 import json, os, sys
 sys.stdout.reconfigure(encoding="utf-8")
 txt = sys.stdin.buffer.read().decode("utf-8", errors="replace")
-try: t = json.JSONDecoder().raw_decode(txt.lstrip())[0]["result"]["terminal"]["tail"]
+txt = txt[max(txt.find("{"), 0):]  # stderr junto guarda o motivo da falha; o ruído antes do JSON (crashpad do Orca) é pulado
+try: t = json.JSONDecoder().raw_decode(txt)[0]["result"]["terminal"]["tail"]
 except Exception as e:
     print("orca-tela: leitura falhou (%s): %s" % (type(e).__name__, txt.strip()[:300])); sys.exit(1)
 moldura = set("─│╭╮╰╯┌┐└┘├┤┬┴┼ \t")

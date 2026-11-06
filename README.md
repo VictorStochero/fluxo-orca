@@ -1,6 +1,6 @@
 # fluxo-orca
 
-Plugin do Claude Code (pt-BR), versão **3.1.0**, com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), o merge passa por um gate Opus e os testes, as vagas de worker e a cota das contas vêm do plugin **agent-pool** do Orca (CLI `agent-pool`). Hooks impõem as regras pessoais.
+Plugin do Claude Code (pt-BR), versão **3.1.1**, com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), o merge passa por um gate Opus e os testes, as vagas de worker e a cota das contas vêm do plugin **agent-pool** do Orca (CLI `agent-pool`). Hooks impõem as regras pessoais.
 
 O gate é a auditoria em repositório que versiona `.auditoria-pre-subida` (auditor Opus, verificador só com achado); nos demais, o revisor Opus é obrigatório. O pacote contém pedido/issue original, critério copiado do board, diff e interfaces, sem resumo ou justificativa de quem pede o merge. A sessão principal prova cada teste novo de correção falhando no código do merge-base. Pagamento, autorização/permissão, autenticação e alteração de dado de produção exigem segunda opinião de outra família sobre o diff: “ache o caso que quebra”.
 
