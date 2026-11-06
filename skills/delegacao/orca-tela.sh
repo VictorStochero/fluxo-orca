@@ -5,7 +5,8 @@ for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break
 [ -n "$py" ] || { echo "orca-tela: precisa de python." >&2; exit 2; }
 [ -n "$1" ] || { echo "uso: orca-tela.sh <handle> [N=30]" >&2; exit 2; }
 [[ "${2:-30}" =~ ^[1-9][0-9]*$ ]] || { echo "N deve ser um inteiro positivo." >&2; exit 2; }
-"${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" terminal read --terminal "$1" --screen --json 2>&1 | ORCA_N="${2:-30}" "$py" -I -c '
+# stderr descartado: o Orca solta ruído do crashpad nele; os erros reais vêm em JSON no stdout.
+"${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" terminal read --terminal "$1" --screen --json 2>/dev/null | ORCA_N="${2:-30}" "$py" -I -c '
 import json, os, sys
 sys.stdout.reconfigure(encoding="utf-8")
 txt = sys.stdin.buffer.read().decode("utf-8", errors="replace")
