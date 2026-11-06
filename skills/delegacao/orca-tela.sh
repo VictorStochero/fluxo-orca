@@ -5,12 +5,12 @@ for py in python3 python ""; do [ -n "$py" ] && "$py" -c '' 2>/dev/null && break
 [ -n "$py" ] || { echo "orca-tela: precisa de python." >&2; exit 2; }
 [ -n "$1" ] || { echo "uso: orca-tela.sh <handle> [N=30]" >&2; exit 2; }
 [[ "${2:-30}" =~ ^[1-9][0-9]*$ ]] || { echo "N deve ser um inteiro positivo." >&2; exit 2; }
-# stderr descartado: o Orca solta ruído do crashpad nele; os erros reais vêm em JSON no stdout.
-"${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" terminal read --terminal "$1" --screen --json 2>/dev/null | ORCA_N="${2:-30}" "$py" -I -c '
+"${ORCA_CMD:-${ORCA_CLI_COMMAND:-orca}}" terminal read --terminal "$1" --screen --json 2>&1 | ORCA_N="${2:-30}" "$py" -I -c '
 import json, os, sys
 sys.stdout.reconfigure(encoding="utf-8")
 txt = sys.stdin.buffer.read().decode("utf-8", errors="replace")
-try: t = json.JSONDecoder().raw_decode(txt.lstrip())[0]["result"]["terminal"]["tail"]
+txt = txt[max(txt.find("{"), 0):]  # stderr junto guarda o motivo da falha; o ruído antes do JSON (crashpad do Orca) é pulado
+try: t = json.JSONDecoder().raw_decode(txt)[0]["result"]["terminal"]["tail"]
 except Exception as e:
     print("orca-tela: leitura falhou (%s): %s" % (type(e).__name__, txt.strip()[:300])); sys.exit(1)
 moldura = set("─│╭╮╰╯┌┐└┘├┤┬┴┼ \t")

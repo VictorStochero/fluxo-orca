@@ -13,14 +13,18 @@ esac
 EOF
 chmod +x "$h/orca"
 # tr: no Windows o print do Python sai com CRLF.
-tela() { ORCA_CMD="$h/orca" bash "$raiz/skills/delegacao/orca-tela.sh" "$@" 2>&1 | tr -d '\r'; return "${PIPESTATUS[0]}"; }
+tela() { ORCA_CMD="$1" bash "$raiz/skills/delegacao/orca-tela.sh" "${@:2}" 2>&1 | tr -d '\r'; return "${PIPESTATUS[0]}"; }
 
-s=$(tela term_ok 5)
+s=$(tela "$h/orca" term_ok 5)
 if [ "$s" = "$(printf 'pronto\nfim')" ]; then echo "ok   lê a tela com ruído no stderr"
 else echo "FALHA leitura com ruído no stderr"; printf '%s\n' "$s" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 
-s=$(tela term_x 5); rc=$?
+s=$(tela "$h/orca" term_x 5); rc=$?
 if [ $rc = 1 ] && printf '%s' "$s" | grep -q terminal_handle_stale; then echo "ok   erro do Orca aparece e sai com 1"
 else echo "FALHA erro do Orca (rc=$rc)"; printf '%s\n' "$s" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
+
+s=$(tela "$h/nao-existe" term_x 5); rc=$?
+if [ $rc = 1 ] && printf '%s' "$s" | grep -q 'nao-existe'; then echo "ok   comando do Orca ausente mostra o motivo"
+else echo "FALHA comando ausente (rc=$rc)"; printf '%s\n' "$s" | sed 's/^/     /'; falhas=$((falhas + 1)); fi
 
 [ $falhas = 0 ] && echo "TUDO OK" || { echo "$falhas falha(s)"; exit 1; }
