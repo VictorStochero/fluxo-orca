@@ -15,7 +15,7 @@ Regras:
 - Testes só pela fila: `~/.agents/bin/agent-pool test -- <comando>` (exit 75 = fila ocupada, rodar de novo) — o teste novo e até 5 arquivos editados, um por chamada. Commitar antes de verificação longa; nenhuma chamada passa de 10 min.
 - Relatório, log de teste e evidência vão no `worker_done` e no PR, nunca em arquivo versionado (`reports/`, `*.log`, notas): fora do repo, em `~/.cache/handoff/<tarefa>/`.
 - **Antes de escrever código**: invocar a skill da stack do projeto (`stack-laravel`, `stack-python`, `stack-js`), ler o guia de arquitetura do projeto (`wiki/`, `docs/` ou `doc/` + `arquitetura`: índice e a página do assunto) e seguir o CLAUDE.md/AGENTS.md do projeto e as skills dele (`.claude/skills`, `.ai/skills`) que tocarem a tarefa. Em Laravel o hook bloqueia a edição de `.php` sem isso.
-- Após a etapa: a validação da skill da stack (formatador, linter/tipos nos arquivos tocados), teste de regressão (criar se não houver). Tela: `orca-cli` (perfil real, nunca administrador).
+- Após a etapa: a validação da skill da stack (formatador, linter/tipos nos arquivos tocados), teste de regressão (criar se não houver). Tela: receita de `ambiente-local` § Validação de UI (`tab create --worktree "path:<caminho absoluto>"`, `--page <id>`, `tab close` ao terminar), perfil real, nunca administrador.
 - Falhou duas vezes do mesmo jeito: pare e reporte — não tente a terceira.
 
 Saída: commit + retorno ≤250 palavras: hash, o que mudou, testes rodados (N testes, M asserções), divergências do pedido. Como worker do Orca: `ask` para decisão do usuário; `worker_done` com `--outcome succeeded|failed` e `--files-modified`.

@@ -12,13 +12,13 @@ Skills do plugin `fluxo-orca` com o detalhe operacional — invocar quando a tar
 ## Orca primeiro
 Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele não cobre:
 - **Trabalho (escritor, revisor, auditoria, segunda opinião)** → worker do Orca, skill `orchestration`. **Consulta curta read-only** (Explore, documentação, claude-code-guide) → Agent tool. `-p` não despacha. Imposto por hook (`despacho-orca.sh`; libera se o Orca estiver fora do ar). **agy/antigravity só como segunda opinião read-only.**
-- **Worktree, terminal, handoff, navegador embutido** → skill `orca-cli` (`orca tab|snapshot|click|fill|screenshot --page <id>`, `orca worktree`, `orca terminal`). Setup de worktree → skill `worktree-orca`. Playwright/Chrome DevTools só como fallback ou para trace/Lighthouse/heap.
+- **Worktree, terminal, handoff, navegador embutido** → skill `orca-cli` (`orca tab|snapshot|click|fill|screenshot --page <id>`, `orca worktree`, `orca terminal`); aba de navegador pela receita de `ambiente-local` § Validação de UI (`tab create --worktree "path:<caminho absoluto>"`, `tab close` ao terminar). Setup de worktree → skill `worktree-orca`. Playwright/Chrome DevTools só como fallback ou para trace/Lighthouse/heap.
 - **App nativo ou janela externa sem caminho programático** → skill `computer-use` (`orca computer`).
 - Comandos com `orca`, ou `ORCA_CLI_COMMAND` quando definido; guia da versão instalada em `orca skills get <skill>`.
 - **Worker não sobe nada**: worker só commita local; push, PR, merge e comentário remoto saem da sessão principal, depois da auditoria, com comando, alvo e efeito apresentados e aprovados um a um.
 - **Hook barrou o worker**: a sessão principal instala ou ativa o pré-requisito (ex.: skill da stack), encerra o dispatch parado e reenvia um worker novo com spec de retomada; nunca desativar, editar ou contornar o hook.
 - **Worktree filho do coordenador**: worktree de tarefa nasce filho do worktree da sessão coordenadora (`--parent-worktree path:<coordenador>`), nunca solto.
-- **Orca sempre limpo**: worktree cuja etapa nossa terminou e que não será reaberto é removido, mesmo que o QA ainda vá testar; workers e terminais encerrados são liberados. Nunca remover com alteração não commitada ou branch sem push.
+- **Orca sempre limpo**: worktree cuja etapa nossa terminou e que não será reaberto é removido, mesmo que o QA ainda vá testar; workers, terminais e abas de navegador encerrados são liberados (`orca tab close`). Nunca remover com alteração não commitada ou branch sem push.
 
 ## Modelos
 - **Fable, qualquer versão, fora do fluxo** — nem sessão, nem agente, nem worker; bloqueado por hook no despacho.
