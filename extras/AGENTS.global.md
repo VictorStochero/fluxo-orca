@@ -47,7 +47,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 - **Relatório e log fora do repo**: evidência vai no `worker_done` e no PR; arquivo de apoio em `~/.cache/handoff/<tarefa>/`, nunca versionado (`reports/`, `*.log`).
 - Nenhuma chamada passa de 10 min: dividir por arquivo e **commitar antes de verificação longa**. Gravar o relatório em arquivo desde o primeiro achado.
 - Após cada etapa: formatador/linter da stack nos arquivos tocados; teste de regressão (sem teste no caminho, criar um mínimo); falhou → não declarar concluído.
-- Mudança de UI: navegador embutido do Orca (skill `orca-cli`, sempre `--page <id>`), perfil real, nunca administrador.
+- Mudança de UI: navegador embutido do Orca pela receita de `ambiente-local` § Validação de UI (`tab create --worktree "path:<caminho absoluto>"`, sempre `--page <id>`, `tab close` ao terminar), perfil real, nunca administrador.
 
 ## Orca primeiro
 - **Orca sempre limpo**: ao terminar a etapa, fechar abas do navegador e terminais que abriu; o worktree é removido pelo coordenador (worker não remove o próprio worktree).
