@@ -23,7 +23,7 @@ description: Use antes de escrever, revisar ou testar código num projeto JavaSc
 2. Tipos: o script `typecheck` ou `tsc --noEmit` (com `tsconfig.json`).
 3. Teste de regressão pela fila: `~/.agents/bin/agent-pool test -- pnpm vitest run <arquivo>` (o gerenciador vem do lockfile: pnpm, yarn, bun ou npm); sem comando, `~/.agents/bin/agent-pool test` detecta e roda o script `test`.
 4. Listar sem rodar: `vitest list` ou `jest --listTests`.
-5. Front com tela: validar no navegador (skill `orca-cli`), com perfil real.
+5. Front com tela: validar no navegador (skill `ambiente-local` § Validação de UI), com perfil real.
 
 ## Testes
 - Vitest/Jest rodam em watch por padrão em alguns setups: usar `vitest run` / `CI=1` na fila.
