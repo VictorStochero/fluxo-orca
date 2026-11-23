@@ -5,7 +5,7 @@ description: Use antes de despachar uma onda de workers ou quando perguntarem so
 
 # Pool de agentes e cota — pelo CLI `agent-pool`
 
-O pool (contas, cota, vagas, fila de testes) é do plugin **agent-pool** do Orca. Esta skill só usa o CLI `~/.agents/bin/agent-pool` (Windows: o `.cmd` ao lado), sempre pelo caminho do lançador (`~/.agents/bin` não está no PATH). Estado e configuração ficam com ele. Faltou o CLI → instalar o plugin agent-pool no Orca (aprovar o acesso) e conferir com `~/.agents/bin/agent-pool doctor`.
+O pool (contas, cota, vagas, fila de testes) é do plugin **agent-pool** do Orca. Esta skill só usa o CLI `~/.agents/bin/agent-pool` (Windows: o `.cmd` ao lado), sempre pelo caminho do lançador (`~/.agents/bin` não está no PATH). Estado e configuração ficam com ele. Faltou o CLI → instalar o plugin agent-pool no Orca (aprovar o acesso e clicar **Instalar** em cada item da tela Requisitos: lançador, skill e hooks; ativar o plugin sozinho não instala nada) e conferir com `~/.agents/bin/agent-pool doctor`.
 
 Saídas: uma linha legível por padrão e `--json` quando pedido. Códigos: **0** ok, **2** uso inválido, **75** sem vaga ou espera esgotada, **1** erro.
 
@@ -29,10 +29,10 @@ Saídas: uma linha legível por padrão e `--json` quando pedido. Códigos: **0*
 - Fluxo de reserva e liberação no despacho: skill `delegacao`.
 
 ## Configuração
-`~/.agents/bin/agent-pool config get [chave]` (sem chave imprime tudo; `pool.contas` lista as contas com `agente`, `config`, `comando`, `vagas`, `peso`, `papeis`, `ativo`) e `~/.agents/bin/agent-pool config set chave=valor …` — validação única, tudo ou nada.
+`~/.agents/bin/agent-pool config get [chave]` (sem chave imprime tudo; `pool.contas` lista as contas com `agente`, `config`, `comando`, `vagas`, `peso`, `papeis`, `ativo`, `modelo`) e `~/.agents/bin/agent-pool config set chave=valor …` — validação única, tudo ou nada.
 - Pool: `pool.teto`, `pool.ram_min`, `pool.escolha=ritmo|ordem`, `pool.ordem=a,b,c`.
-- Conta: `conta.<nome>.vagas|peso|papeis|ativo|config|comando` e `conta.<nome>.adicionar=<agente|auto>` / `conta.<nome>.remover=1`.
+- Conta: `conta.<nome>.vagas|peso|papeis|ativo|config|comando|modelo` (`modelo` = o `--model` que `writer`/`second` indicam, e a cota segue o limite desse modelo; vazio = padrão do agente) e `conta.<nome>.adicionar=<agente|auto>` / `conta.<nome>.remover=1`.
 - Papéis: `escritor revisor verificador mecanico segunda-opiniao orquestra`. Papel de trabalho (`escritor`, `revisor`, `verificador`, `mecanico`) só em agente com imposição provada; `orquestra` ou lista vazia = conta só medida, nunca escolhida. A conta principal pode revisar/verificar; só `orquestra` fica fora do pool.
 - **`ativo=nao`** ("Não utilizar"): a conta segue na lista e medida, mas sai de `writer` e `second`, `slot take` a recusa; worker que já roda nela segue contando no teto até terminar. Conta detectada pelo Orca e desativada nunca volta sozinha.
-- Contas que o Orca gerencia entram sozinhas, ativas, com os padrões do catálogo; conta cadastrada no Orca que não é a padrão entra só medida (sem papel), porque o despacho e a medida ainda usam a padrão; conta manual (ex.: outra pasta `CLAUDE_CONFIG_DIR`) entra por `conta.<nome>.adicionar=auto` com `comando`/`config`.
+- Contas que o Orca gerencia entram sozinhas, mas desligadas (`ativo=nao`), com os padrões do catálogo: ligar as que vão trabalhar no painel (Configurações → Contas) ou com `conta.<nome>.ativo=sim`, e o painel pede o hook e a skill do agente; conta cadastrada no Orca que não é a padrão entra só medida (sem papel), porque o despacho e a medida ainda usam a padrão; conta manual (ex.: outra pasta `CLAUDE_CONFIG_DIR`) entra por `conta.<nome>.adicionar=auto` com `comando`/`config`.
 - Escritor Claude recebe `--advisor opus`; papéis Claude só leitura sempre com `--settings ~/.claude/agents/somente-leitura.json`, sem MCP de navegador.

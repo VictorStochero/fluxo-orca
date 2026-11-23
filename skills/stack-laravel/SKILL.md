@@ -18,7 +18,7 @@ description: Use antes de escrever, revisar ou testar código PHP num projeto La
 5. Listar a suíte sem rodar: `php artisan test --list-tests` (em suíte grande leva minutos).
 
 ## Testes
-- Banco de teste próprio por worktree (`.env.testing` com `DB_DATABASE=<banco>_test`); `--parallel` cria `<banco>_test_N` (o `~/.agents/bin/agent-pool test` apaga ao terminar).
+- Banco de teste próprio por worktree (`.env.testing` com `DB_DATABASE=<banco>_test`); `--parallel` cria `<banco>_test_N` (o `~/.agents/bin/agent-pool test` só apaga ao terminar com `fila.limpar_bancos=sim`; padrão `nao`).
 - Multi-tenant (`config/tenancy.php`, stancl/tenancy): `TENANCY_DB_PREFIX` exclusivo por worktree e por ambiente de teste, senão os bancos `tenant_<id>` de um worktree são os do outro. Domínios (`CENTRAL_DOMAIN`, `TENANT_BASE_DOMAIN`, `SESSION_DOMAIN`) seguem o host do worktree; subdomínio de tenant precisa de DNS curinga local (DDEV e `*.localhost` do modo nativo resolvem; Laragon exige entrada no `hosts` por subdomínio; nas demais, conferir na referência da ferramenta em `ambiente-local`).
 - DDEV/Sail: sem comando, `~/.agents/bin/agent-pool test` detecta e roda dentro do container; com `-- <comando>`, prefixar `ddev artisan test …` / `./vendor/bin/sail artisan test …`.
 
