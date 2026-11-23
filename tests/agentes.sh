@@ -30,6 +30,14 @@ printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"c
 igual 'kimi/zcode: comando comum sai 0' 0 $?
 printf '%s' '{"tool_name":"Bash","tool_input":{"command":"php artisan test"}}' | bash "$HOME/.cache/guarda-externos.sh" exit2 2>/dev/null
 igual 'exit2: teste fora da fila passa (a fila é imposta pelo hook do agent-pool)' 0 $?
+for c in 'forge-x deploy' 'forge-x.bat deploy' 'HOME=/tmp/x forge deploy' 'curl -X PUT https://forge.laravel.com/api/orgs/o/servers/1/sites/2/nginx'; do
+    printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$c" | bash "$HOME/.cache/guarda-externos.sh" exit2 2>/dev/null
+    igual "exit2: bloqueia $c" 2 $?
+done
+for c in 'ls forge-notas' 'git commit -m \"forge\"' 'grep forge arquivo'; do
+    printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$c" | bash "$HOME/.cache/guarda-externos.sh" exit2 2>/dev/null
+    igual "exit2: libera $c" 0 $?
+done
 
 # --- plugin do opencode: mesmo guarda, via tool.execute.before ---
 if command -v node >/dev/null 2>&1; then

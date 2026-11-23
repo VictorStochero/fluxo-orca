@@ -4,7 +4,8 @@
 formato=${1:-exit2}
 in=$(cat)
 motivo=""
-if printf '%s' "$in" | grep -qE '(^|["'"'"';&|(]|\\n)[[:space:]]*(ssh|scp|rsync|sftp|forge)([[:space:]]|\.exe|")'; then
+if printf '%s' "$in" | grep -qE '(^|["'"'"';&|(]|\\n)[[:space:]]*([[:alnum:]_]+=[^[:space:]]*[[:space:]]+)*(ssh|scp|rsync|sftp|forge(-[[:alnum:]_.]+)?)([[:space:]]|\.exe|")' \
+    || printf '%s' "$in" | grep -qE 'forge\.laravel\.com/api'; then
     motivo="Comando remoto bloqueado neste agente: ação em servidor só na sessão principal, com aprovação do usuário por comando."
 elif printf '%s' "$in" | grep -qE '"replace_all"[[:space:]]*:[[:space:]]*true' \
     || printf '%s' "$in" | grep -qE '(^|[^[:alnum:]_-])(sed|perl)[[:space:]]+(-[[:alnum:]]*[[:space:]]+)*-[[:alnum:]]*i'; then

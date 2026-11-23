@@ -2,7 +2,7 @@
 # PreToolUse (Bash|PowerShell): SQL de alteração via ssh/forge só em transação, e COMMIT só depois do ensaio com ROLLBACK do mesmo SQL.
 in=$(cat)
 cmd=$(printf '%s' "$in" | grep -oE '"(command|cmd)"[[:space:]]*:[[:space:]]*("([^"\\]|\\.)*"|\[[^]]*\])' | head -1)
-printf '%s' "$cmd" | grep -qE '(^|["'"'"';&|(]|\\n)[[:space:]]*(ssh|forge)([[:space:]]|\.exe|")' || exit 0
+printf '%s' "$cmd" | grep -qE '(^|["'"'"';&|(]|\\n)[[:space:]]*([[:alnum:]_]+=[^[:space:]]*[[:space:]]+)*(ssh|forge(-[[:alnum:]_.]+)?)([[:space:]]|\.exe|")' || exit 0
 up=$(printf '%s' "$cmd" | tr '[:lower:]' '[:upper:]')
 s='(^|[^[:alnum:]_])'
 printf '%s' "$up" | grep -qE "${s}(MYSQL|MARIADB|PSQL|SQLITE3)([^[:alnum:]_]|$)" || exit 0

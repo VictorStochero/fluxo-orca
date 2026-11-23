@@ -2,7 +2,7 @@
 
 Instalado pelo `instalar.sh --agente <id>` (ou `skills/limites-cota/instala-agente.sh <id>`) no arquivo global de regras do agente, dentro do bloco `fluxo-orca:inicio … fluxo-orca:fim` (reexecutar atualiza só o bloco). Equivalente ao `~/.claude/CLAUDE.md` do Claude Code.
 
-Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das skills do plugin `fluxo-orca` + `orca-cli`, `orchestration`, `computer-use` do Orca); agente sem diretório de skills recebe o índice com o caminho de cada `SKILL.md` — ler o arquivo sob demanda. Carregar quando a tarefa tocar o assunto: `ambiente-local` (perfil em `~/.claude/ambiente.md`), `board-github` (boards em `~/.claude/boards.md`), `fila-testes` (todo teste pela fila da máquina; estado da fila), `limites-cota` (uso das contas, pool de agentes e escolha do escritor), `worktree-orca`, `stack-*`; metodologia: `systematic-debugging` antes de corrigir bug, `test-driven-development`, `verification-before-completion` antes de declarar pronto, `receiving-code-review`.
+Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das skills do plugin `fluxo-orca` + `orca-cli`, `orchestration`, `computer-use` do Orca); agente sem diretório de skills recebe o índice com o caminho de cada `SKILL.md` — ler o arquivo sob demanda. Carregar quando a tarefa tocar o assunto: `ambiente-local` (perfil em `~/.claude/ambiente.md`), `board-github` (boards em `~/.claude/boards.md`), `forge` (inventário em `~/.claude/forge.md`), `fila-testes` (todo teste pela fila da máquina; estado da fila), `limites-cota` (uso das contas, pool de agentes e escolha do escritor), `worktree-orca`, `stack-*`; metodologia: `systematic-debugging` antes de corrigir bug, `test-driven-development`, `verification-before-completion` antes de declarar pronto, `receiving-code-review`.
 
 ## Idioma
 - **SEMPRE ESCREVER EM ptBR** — respostas, commits, PRs, issues, comentários. Código e nomes técnicos seguem o projeto.
@@ -32,7 +32,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 - Antes de tocar banco, conferir que o setup do worktree terminou com sucesso; se estiver rodando, aguardar. Setup falhou ou sucesso não verificável → `ask` ao coordenador com a saída do setup e aguardar orientação, sem tentar refazer migração por conta própria. O repo no Orca deve estar configurado para aguardar o setup antes de iniciar o agente (`wait-for-setup`).
 
 ## Proibido
-- **Comando remoto** (`ssh`, `scp`, `rsync`, `sftp`, `forge`) — bloqueado por hook (`guarda-externos.sh`). Precisa de servidor → `ask` ao coordenador; a ação roda na sessão principal com aprovação do usuário por comando.
+- **Comando remoto** (`ssh`, `scp`, `rsync`, `sftp`, `forge`, `forge-<conta>`, API `forge.laravel.com/api`) — bloqueado por hook (`guarda-externos.sh`). Precisa de servidor → `ask` ao coordenador; a ação roda na sessão principal com aprovação do usuário por comando.
 - **Atribuição a IA** em commit ou PR (`Co-Authored-By`, "Generated with…", rodapés de sessão).
 - **Bulk replace** (`sed -i`, `perl -i`, regex em vários arquivos, replace_all) — bloqueado por hook. Cada substituição é uma edição única e contextualizada.
 - **Comando em background** e merge.

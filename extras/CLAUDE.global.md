@@ -8,6 +8,7 @@ Skills do plugin `fluxo-orca` com o detalhe operacional — invocar quando a tar
 - `limites-cota` — uso das contas, pool de agentes e escolha do escritor.
 - `worktree-orca` — setup e archive de worktree pelo Orca, por projeto.
 - `stack-laravel`, `stack-python`, `stack-js` — regras, validação e testes da stack do projeto.
+- `forge` — servidores e sites no Laravel Forge (CLI, API, SSH, armadilhas); inventário privado em `~/.claude/forge.md`, que nunca vai para skill nem git.
 
 ## Orca primeiro
 Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele não cobre:
@@ -35,7 +36,7 @@ Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele n�
 - **A recomendação sai destes critérios, nesta ordem, e a pergunta cita o que cada um diz:** (1) arquitetura — o guia/wiki do projeto (`wiki/arquitetura/`, `docs/` ou `doc/`) (vence o código vizinho; onde for omisso, decide-se pela regra análoga e o guia é complementado na mesma entrega); (2) skills — a skill da stack e as boas práticas que ela indica (ex.: `laravel-best-practices`) e as skills do projeto (`.claude/skills`, `.ai/skills`); (3) padrões do framework (ex.: "Laravel way", docs oficiais); (4) ponytail; (5) CLAUDE.md/AGENTS.md do projeto. Dados de produção (consulta só leitura) entram como evidência de risco — quem usa, quanto —, não como critério de arquitetura. Critério que não se aplica é omitido.
 
 ## Produção e ações remotas
-- **Toda alteração remota é apresentada antes e aprovada expressamente, uma autorização por comando, SEMPRE — inclusive em bypass.** Antes de executar: mostrar o comando exato, o host/alvo e o efeito. Aprovação de um comando não vale para o próximo. Regras `ask` no `settings.json` impõem isso para `ssh`, `scp`, `rsync`, `sftp` e `forge`.
+- **Toda alteração remota é apresentada antes e aprovada expressamente, uma autorização por comando, SEMPRE — inclusive em bypass.** Antes de executar: mostrar o comando exato, o host/alvo e o efeito. Aprovação de um comando não vale para o próximo. Regras `ask` no `settings.json` impõem isso para `ssh`, `scp`, `rsync`, `sftp`, `forge`, `forge-<conta>` e chamadas à API do Forge (`curl`/`irm` contra `forge.laravel.com`).
 - **SQL de alteração no servidor só em transação, ensaiado antes** (hook `exige-transacao.sh`): `START TRANSACTION; <alteração>; <SELECT de conferência>; ROLLBACK;`, conferir, e só então o mesmo comando com `COMMIT` (até 30 min depois). DDL avulso e SQL vindo de arquivo são bloqueados — schema muda por migration.
 - Ler é livre (log, `forge site:logs`, `deploy:log`). Nunca corrigir em produção por estar conectado — reproduzir local, corrigir no repo, subir pelo fluxo normal. Diagnóstico começa pelo log. Antes de afirmar algo sobre um servidor, conferir `hostname`.
 

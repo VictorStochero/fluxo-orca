@@ -1,6 +1,6 @@
 # fluxo-orca
 
-Plugin do Claude Code (pt-BR), versão **3.1.4**, com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), o merge passa por um gate Opus e os testes, as vagas de worker e a cota das contas vêm do plugin **agent-pool** do Orca (CLI `agent-pool`). Hooks impõem as regras pessoais.
+Plugin do Claude Code (pt-BR), versão **3.2.0**, com um fluxo de trabalho com o Orca para projetos **Laravel, Python e JS/TS**, em Windows, Linux ou macOS: a sessão principal coordena, o trabalho vai para workers do Orca (um worktree por tarefa, com banco e `.env` próprios), o merge passa por um gate Opus e os testes, as vagas de worker e a cota das contas vêm do plugin **agent-pool** do Orca (CLI `agent-pool`). Hooks impõem as regras pessoais.
 
 O gate é a auditoria em repositório que versiona `.auditoria-pre-subida` (auditor Opus, verificador só com achado); nos demais, o revisor Opus é obrigatório. O pacote contém pedido/issue original, critério copiado do board, diff e interfaces, sem resumo ou justificativa de quem pede o merge. A sessão principal prova cada teste novo de correção falhando no código do merge-base. Pagamento, autorização/permissão, autenticação e alteração de dado de produção exigem segunda opinião de outra família sobre o diff: “ache o caso que quebra”.
 
@@ -37,7 +37,7 @@ Máquina já instalada: mande para o Claude Code (ou para o agente que coordena)
 
 | Tipo | Itens |
 |---|---|
-| Fluxo | `delegacao`, `board-github`, `limites-cota`, `fila-testes`, `worktree-orca`, `ambiente-local` (Herd, Laragon, FlyEnv, Lerd, DDEV/Sail/compose com Docker ou Podman, nativo) |
+| Fluxo | `delegacao`, `board-github`, `limites-cota`, `fila-testes`, `worktree-orca`, `ambiente-local` (Herd, Laragon, FlyEnv, Lerd, DDEV/Sail/compose com Docker ou Podman, nativo), `forge` (Laravel Forge: CLI com várias contas, API nova, armadilhas de servidor; inventário privado em `~/.claude/forge.md`) |
 | Stacks | `stack-laravel`, `stack-python`, `stack-js` |
 | Metodologia | `brainstorming`, `writing-plans`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `receiving-code-review` |
 | Agentes | `escritor` (Sonnet), `revisor` e `verificador` (Opus, só leitura) |
