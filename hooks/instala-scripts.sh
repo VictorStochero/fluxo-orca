@@ -11,7 +11,7 @@ cmp -s "$CLAUDE_PLUGIN_ROOT/extras/somente-leitura.json" "$HOME/.claude/agents/s
 # Uma vez por sessão: resume/compact/clear refazem o SessionStart, mas a sessão já foi avisada na abertura.
 case "$entrada" in *'"source"'*) origem=$(printf '%s' "$entrada" | grep -o '"source"[[:space:]]*:[[:space:]]*"[a-z]*"' | head -1 | cut -d'"' -f4) ;; *) origem=startup ;; esac
 if [ "$origem" = startup ] && [ ! -e "$HOME/.agents/bin/agent-pool" ] && [ ! -e "$HOME/.agents/bin/agent-pool.cmd" ]; then
-    aviso='fluxo-orca: o agent-pool não está instalado (falta ~/.agents/bin/agent-pool). Teste pela fila, pool de agentes e vagas dependem dele: instale o plugin agent-pool no Orca e aprove o acesso; ele importa o agentes.conf e o fila.conf.'
+    aviso='fluxo-orca: o agent-pool não está instalado (falta ~/.agents/bin/agent-pool). Teste pela fila, pool de agentes e vagas dependem dele: instale o plugin agent-pool no Orca, aprove o acesso e clique Instalar em cada item da tela Requisitos; ele importa o agentes.conf e o fila.conf.'
     printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$aviso" "$aviso"
 fi
 
