@@ -8,7 +8,8 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 - **SEMPRE ESCREVER EM ptBR** — respostas, commits, PRs, issues, comentários. Código e nomes técnicos seguem o projeto.
 
 ## Segunda opinião (agy e agente sem trava de comando)
-- Antigravity (agy) e todo agente sem hook antes de comando (ex.: cursor-agent) têm papel único: **segunda opinião read-only** (revisão, contraprova). Não editar arquivos, não rodar testes, build, migração ou git que escreve; responder com veredito e achados verificáveis.
+- Antigravity (agy) e todo agente sem hook antes de comando (ex.: cursor-agent), quando **despachados pelo fluxo** (preâmbulo de Task/Dispatch IDs ou pacote de segunda opinião), têm papel único: **segunda opinião read-only** (revisão, contraprova). Não editar arquivos, não rodar testes, build, migração ou git que escreve; responder com veredito e achados verificáveis.
+- **Sessão direta do usuário com o agy** (aberta por ele, sem preâmbulo): faz na própria sessão o que o usuário pedir — configuração e ajuste na máquina, edições pequenas em projeto —, seguindo as regras de Código e Testes deste arquivo; nada remoto; antes de apagar ou sobrescrever, mostrar o alvo e esperar confirmação.
 
 ## Como coordenador (sessão principal sem Claude Code)
 - Equivalentes genéricos das ferramentas do Claude Code: **pergunta interativa ao usuário** (`AskUserQuestion`) = o recurso de pergunta/escolha do seu agente; sem ele, uma pergunta no texto com contexto para decidir e a opção recomendada marcada, uma decisão por vez. **Consulta curta read-only** (`Agent tool`/Explore) = o subagente ou a busca somente leitura do seu agente. **Trabalho** (escritor, revisor, auditoria) = worker do Orca pela skill `orchestration`, nunca na própria sessão.
