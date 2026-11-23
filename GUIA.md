@@ -7,7 +7,7 @@
 > 4. **Nunca rode `ssh`, `scp`, `rsync`, `sftp` ou `forge` contra servidor** durante a instalação.
 > 5. Ao fim de cada fase, uma linha de status; no fim, a verificação da fase 7 item por item, com o que ficou pendente e por quê.
 
-**O fluxo (3.1.4):** a sessão principal do Claude Code coordena; o trabalho pesado vai para **workers do Orca**, um worktree por tarefa, com banco e `.env` próprios; o gate de merge é a auditoria Opus quando o repositório versiona `.auditoria-pre-subida` (verificador só com achado), ou o revisor Opus obrigatório nos demais, sem duplicar os gates; testes, vagas de worker e cota vêm do plugin **agent-pool** do Orca (CLI `agent-pool`, instalado antes: fase 4b, passo 5); regras pessoais impostas por **hooks**, não pela memória do modelo. Vale para Laravel, Python e JS/TS.
+**O fluxo (3.2.0):** a sessão principal do Claude Code coordena; o trabalho pesado vai para **workers do Orca**, um worktree por tarefa, com banco e `.env` próprios; o gate de merge é a auditoria Opus quando o repositório versiona `.auditoria-pre-subida` (verificador só com achado), ou o revisor Opus obrigatório nos demais, sem duplicar os gates; testes, vagas de worker e cota vêm do plugin **agent-pool** do Orca (CLI `agent-pool`, instalado antes: fase 4b, passo 5); regras pessoais impostas por **hooks**, não pela memória do modelo. Vale para Laravel, Python e JS/TS.
 
 Fila de testes (o CLI vai sempre pelo lançador `~/.agents/bin/agent-pool`, que não está no PATH; abaixo, `agent-pool` abrevia esse caminho): `agent-pool test -- <comando>` (exit 75 = fila ocupada, rodar de novo). Modo (`fila.modo`: `banco`, padrão, `global` ou `projeto`), vagas, teto e processos se configuram com `agent-pool config set`; as mensagens de espera identificam a fila e seus donos (`agent-pool status`).
 
@@ -101,7 +101,9 @@ Se as skills do Orca não aparecerem em `/skills`, ligar `~/.agents/skills/<skil
     "ask": [
       "Bash(ssh *)", "PowerShell(ssh *)", "Bash(scp *)", "PowerShell(scp *)",
       "Bash(rsync *)", "PowerShell(rsync *)", "Bash(sftp *)", "PowerShell(sftp *)",
-      "Bash(forge *)", "PowerShell(forge *)"
+      "Bash(forge *)", "PowerShell(forge *)", "Bash(forge-*)", "PowerShell(forge-*)",
+      "Bash(curl *forge.laravel.com*)", "PowerShell(curl *forge.laravel.com*)",
+      "PowerShell(Invoke-RestMethod *forge.laravel.com*)", "PowerShell(irm *forge.laravel.com*)"
     ]
   },
   "skipDangerousModePermissionPrompt": true,
@@ -126,7 +128,7 @@ Conta cujo CLI não está instalado fica fora da seleção de escritor; o fluxo 
 
 1. **Regras**: por agente instalado, `bash ~/.cache/instala-agente.sh <agente> --aplicar` (atalho gravado pelo SessionStart do plugin, ou pelo `instalar.sh` do clone) — grava `extras/AGENTS.global.md` num bloco `fluxo-orca:inicio…fim` no arquivo global dele (`~/.codex/AGENTS.md`, `~/.gemini/config/AGENTS.md` do agy, `~/.config/opencode/AGENTS.md`…). Arquivo com cópia antiga sem marcador recebe só o aviso `[aviso] cópia antiga sem marcador em <arquivo>: remova-a`; remover a cópia e rodar de novo.
 2. **Skills**: a cada sessão, o hook de SessionStart do plugin copia para os CLIs externos (reabrir o Claude Code uma vez depois de instalar o CLI) as skills do fluxo-orca e as dos plugins de `hooks/skills-de-plugins.lista` (`auditoria-pre-subida`, `ponytail`, `laravel-worktree`; versão ativa de `installed_plugins.json`, plugin não instalado é pulado). Destinos pela coluna de skills do `agentes-catalogo.conf`: `~/.agents/skills` (o Codex lê sozinho) e, com o agy no PATH, `~/.gemini/config/skills`. Só copia o que mudou; pasta ou link alheio de mesmo nome (fora do marcador `.fluxo-orca.plugin-<plugin>`) fica como está, com aviso; versão mais velha não rebaixa a cópia. O `instala-agente.sh <agente> --aplicar` faz o mesmo à mão.
-3. **Trava** (`~/.cache/guarda-externos.sh`, instalado pelo mesmo hook; no Windows também `guarda-externos-codex.cmd` e `guarda-externos-agy.cmd`): bloqueia `ssh`/`scp`/`rsync`/`sftp`/`forge` e bulk replace. Comando do hook: Windows → o `.cmd` com o caminho absoluto (`C:/Users/<u>/.cache/guarda-externos-codex.cmd`); Linux/macOS → `bash ~/.cache/guarda-externos.sh <formato>`.
+3. **Trava** (`~/.cache/guarda-externos.sh`, instalado pelo mesmo hook; no Windows também `guarda-externos-codex.cmd` e `guarda-externos-agy.cmd`): bloqueia `ssh`/`scp`/`rsync`/`sftp`/`forge`/`forge-<conta>` (também com prefixo `VAR=valor`), qualquer chamada a `forge.laravel.com/api` e bulk replace. Comando do hook: Windows → o `.cmd` com o caminho absoluto (`C:/Users/<u>/.cache/guarda-externos-codex.cmd`); Linux/macOS → `bash ~/.cache/guarda-externos.sh <formato>`.
    - **Codex** — em `~/.codex/hooks.json`, um grupo novo em `PreToolUse` (sem `matcher`), depois dos que o Orca gravou: `{"hooks":[{"type":"command","command":"<comando> codex","timeout":10}]}` (no Windows o `.cmd` já leva o formato). Exit 2 o Codex trata como falha e deixa passar; por isso o formato `codex` responde em JSON. **Hook novo só roda se estiver confiável**: abrir `codex` e aprovar em `/hooks`, ou gravar a confiança no `~/.codex/config.toml` (no Windows, nas duas grafias do caminho, `C:\...` e `C:/...`; `<n>` = posição do grupo em `PreToolUse`, começando em 0):
      ```bash
      # <evento>: pre_tool_use ou stop; <timeout>: o do hooks.json

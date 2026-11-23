@@ -32,7 +32,7 @@ Skills em `~/.agents/skills` ou no diretório de skills do agente (cópia das sk
 - Antes de tocar banco, conferir que o setup do worktree terminou com sucesso; se estiver rodando, aguardar. Setup falhou ou sucesso não verificável → `ask` ao coordenador com a saída do setup e aguardar orientação, sem tentar refazer migração por conta própria. O repo no Orca deve estar configurado para aguardar o setup antes de iniciar o agente (`wait-for-setup`).
 
 ## Proibido
-- **Comando remoto** (`ssh`, `scp`, `rsync`, `sftp`, `forge`) — bloqueado por hook (`guarda-externos.sh`). Precisa de servidor → `ask` ao coordenador; a ação roda na sessão principal com aprovação do usuário por comando.
+- **Comando remoto** (`ssh`, `scp`, `rsync`, `sftp`, `forge`, `forge-<conta>`, API `forge.laravel.com/api`) — bloqueado por hook (`guarda-externos.sh`). Precisa de servidor → `ask` ao coordenador; a ação roda na sessão principal com aprovação do usuário por comando.
 - **Atribuição a IA** em commit ou PR (`Co-Authored-By`, "Generated with…", rodapés de sessão).
 - **Bulk replace** (`sed -i`, `perl -i`, regex em vários arquivos, replace_all) — bloqueado por hook. Cada substituição é uma edição única e contextualizada.
 - **Comando em background** e merge.

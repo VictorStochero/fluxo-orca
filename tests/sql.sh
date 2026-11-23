@@ -25,6 +25,12 @@ confere LIVRE 'ssh prod "truncate -s 0 storage/logs/laravel.log"'
 confere LIVRE 'ssh prod "mysql app -e \"select count(*) from users where id < 10\""'
 confere LIVRE 'ssh prod "mysqldump app > /tmp/app.sql"'
 
+# Wrapper forge-<conta> e prefixo VAR= valem como ssh/forge.
+confere BLOQ 'forge-x ssh prod "mysql app -e \"update users set ativo=0 where id=5\""'
+confere BLOQ 'HOME=/tmp/x ssh prod "mysql app -e \"update users set ativo=0 where id=5\""'
+confere LIVRE 'forge-x ssh prod "tail -n 50 storage/logs/laravel.log"'
+confere LIVRE 'HOME=/tmp/x ssh prod "tail -n 50 storage/logs/laravel.log"'
+
 # DML sem transação ou sem fechamento.
 confere BLOQ 'ssh prod "mysql app -e \"update users set ativo=0 where id=5\""'
 confere BLOQ "ssh prod 'psql app -c \"DELETE FROM sessoes WHERE id = 1\"'"
