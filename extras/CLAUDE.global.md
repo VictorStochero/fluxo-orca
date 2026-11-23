@@ -8,6 +8,7 @@ Skills do plugin `fluxo-orca` com o detalhe operacional — invocar quando a tar
 - `limites-cota` — uso das contas, pool de agentes e escolha do escritor.
 - `worktree-orca` — setup e archive de worktree pelo Orca, por projeto.
 - `stack-laravel`, `stack-python`, `stack-js` — regras, validação e testes da stack do projeto.
+- `forge` — servidores e sites no Laravel Forge (CLI, API, SSH, armadilhas); inventário privado em `~/.claude/forge.md`, que nunca vai para skill nem git.
 
 ## Orca primeiro
 Tudo que o Orca oferece é o caminho padrão; outra ferramenta só quando ele não cobre:
