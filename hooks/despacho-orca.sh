@@ -22,6 +22,8 @@ elif printf '%s' "$in" | grep -qE '(^|["'"'"';&|( ])(claude|claude-team|agy)(\.e
     motivo="Despacho por -p bloqueado: use worker do Orca (skill orchestration). agy só como segunda opinião read-only, também via worker."
 fi
 [ -z "$motivo" ] && exit 0
+# Sessão no terminal do PhpStorm roda fora do Orca: subagente liberado.
+[ "$TERMINAL_EMULATOR" = "JetBrains-JediTerm" ] && exit 0
 # Orca fora do ar: não trava o trabalho.
 orca status --json >/dev/null 2>&1 || exit 0
 echo "$motivo" >&2

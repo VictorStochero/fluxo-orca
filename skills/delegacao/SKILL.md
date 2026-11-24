@@ -5,7 +5,7 @@ description: Use antes de despachar qualquer agente (escritor, revisor, levantam
 
 # Delegação — via Orca orchestration
 
-**Trabalho é worker do Orca** (decisão do usuário): escritor, revisor, auditor, verificador e segunda opinião — visível, com `ask` e `worker_done`. **Consulta curta read-only** (Explore, documentação, claude-code-guide, Plan) segue no Agent tool. `claude -p` / `agy -p` não despacham. Imposto pelo hook `despacho-orca.sh` do plugin. Antes do primeiro comando da sessão: invocar o skill `orchestration` e rodar `orca skills get orchestration` (guia da versão instalada); referências sob demanda com `--reference references/<arquivo>.md`.
+**Trabalho é worker do Orca** (decisão do usuário): escritor, revisor, auditor, verificador e segunda opinião — visível, com `ask` e `worker_done`. **Consulta curta read-only** (Explore, documentação, claude-code-guide, Plan) segue no Agent tool. `claude -p` / `agy -p` não despacham. Imposto pelo hook `despacho-orca.sh` do plugin, que libera com o Orca fora do ar e na sessão aberta no terminal do PhpStorm (lá o subagente usa o MCP do PhpStorm). Antes do primeiro comando da sessão: invocar o skill `orchestration` e rodar `orca skills get orchestration` (guia da versão instalada); referências sob demanda com `--reference references/<arquivo>.md`.
 
 ## Loop do coordenador (sessão principal)
 ```text
